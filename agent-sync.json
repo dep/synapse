@@ -1,0 +1,17 @@
+{
+  "source": {
+    "github": { "owner": "dep", "repo": "agent-rules", "branch": "main" },
+    "local": "../agent-rules"
+  },
+  "commands": {
+    "target": ".agents/commands"
+  },
+  "skills": {
+    "target": ".agents/skills"
+  },
+  "protocol": {
+    "shared_section": "AGENTS.md",
+    "local_section": ".agents/REPO_RULES.md",
+    "output": "AGENTS.md"
+  }
+}

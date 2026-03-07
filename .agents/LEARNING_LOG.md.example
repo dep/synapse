@@ -1,0 +1,24 @@
+NOTE TO HUMANS: Copy this file to `.agents/LEARNING_LOG.md` to get started, then delete this line.
+
+# Repo Agent Learning Log
+
+AI agents: update these sections as you discover patterns in this codebase.
+
+- Keep entries concise. If this exceeds 50 entries, suggest the user review and trim.
+- When upstreaming, suggest repo-specific patterns for .agents/REPO_RULES.md or universal patterns for AGENTS.md via PR.
+- Delete conflicting patterns - keep only the most recent/accurate entry.
+
+## Discovered Patterns
+
+<!-- Successful approaches, naming conventions, architectural patterns -->
+-
+
+## Lessons Learned
+
+<!-- Corrections received, things that didn't work, gotchas encountered -->
+-
+
+## Codebase Quirks
+
+<!-- Non-obvious behavior, legacy constraints, "why does it work this way?" -->
+-

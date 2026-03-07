@@ -1,0 +1,15 @@
+NOTE TO HUMANS: Copy this file to `.agents/TEAM_RULES.md` to get started, then delete this line.
+
+# Team Rules
+
+Team conventions that supplement AGENTS.md. This file is gitignored.
+
+## Conventions
+
+- [Add code review guidelines]
+- [Add testing standards]
+- [Add workflow conventions]
+
+## Gotchas
+
+- [Add common issues the team encounters]
