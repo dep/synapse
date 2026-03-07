@@ -1,0 +1,31 @@
+name: Noted
+options:
+  bundleIdPrefix: com.noted
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  xcodeVersion: "16.0"
+
+packages:
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    from: 1.2.0
+
+targets:
+  Noted:
+    type: application
+    platform: macOS
+    sources:
+      - Noted
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.noted.app
+        SWIFT_VERSION: 5.0
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        INFOPLIST_FILE: Noted/Info.plist
+    dependencies:
+      - package: SwiftTerm
+    entitlements:
+      path: Noted/Noted.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
