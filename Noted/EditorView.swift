@@ -285,8 +285,8 @@ class LinkAwareTextView: NSTextView {
 
         // Some NSTextView edit notifications report cursor after a trailing paragraph newline.
         while cursor > 0 {
-            let ch = nsText.character(at: cursor - 1)
-            if ch == 10 || ch == 13 { cursor -= 1 } else { break }
+            let ch = nsText.substring(with: NSRange(location: cursor - 1, length: 1))
+            if ch.rangeOfCharacter(from: .newlines) != nil { cursor -= 1 } else { break }
         }
 
         let startOffset = max(0, cursor - 400)
@@ -299,9 +299,11 @@ class LinkAwareTextView: NSTextView {
             let token = nsText.substring(with: tokenRange)
             guard token.hasPrefix("[[") else { dismissCompletion(); return }
             let query = String(token.dropFirst(2))
+                .trimmingCharacters(in: .newlines)
+                .trimmingCharacters(in: .whitespaces)
             debugLog("query='\(query)' allFiles=\(allFiles.count)")
             // Limit completion to the actively typed token only.
-            if !query.contains("]]") && !query.contains("\n") && !query.contains("\r") && query.count <= 120 {
+            if !query.contains("]]") && query.count <= 120 {
                 linkTypingRange = tokenRange
                 showCompletion(query: query)
                 return
@@ -311,27 +313,41 @@ class LinkAwareTextView: NSTextView {
     }
 
     private func fuzzyScore(query: String, candidate: String) -> Int? {
-        let q = query.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        let separators = CharacterSet(charactersIn: "-_. ")
+        let q = query
+            .components(separatedBy: .newlines).joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let separators = CharacterSet(charactersIn: "-_. /\\:")
         let words = candidate.lowercased().components(separatedBy: separators).filter { !$0.isEmpty }
         let strippedCandidate = words.joined()
         let strippedQuery = q.components(separatedBy: separators).joined()
         guard !strippedQuery.isEmpty else { return 0 }
 
-        var qi = strippedQuery.startIndex
+        func compact(_ value: String) -> String {
+            value.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                .unicodeScalars
+                .filter { CharacterSet.alphanumerics.contains($0) }
+                .map(String.init)
+                .joined()
+        }
+
+        let compactQuery = compact(strippedQuery)
+        let compactCandidate = compact(strippedCandidate)
+        guard !compactQuery.isEmpty else { return 0 }
+
+        var qi = compactQuery.startIndex
         var score = 0
         var lastMatchIdx: String.Index? = nil
 
-        for ci in strippedCandidate.indices {
-            guard qi < strippedQuery.endIndex else { break }
-            if strippedCandidate[ci] == strippedQuery[qi] {
-                if let last = lastMatchIdx, strippedCandidate.index(after: last) == ci { score += 10 }
+        for ci in compactCandidate.indices {
+            guard qi < compactQuery.endIndex else { break }
+            if compactCandidate[ci] == compactQuery[qi] {
+                if let last = lastMatchIdx, compactCandidate.index(after: last) == ci { score += 10 }
                 score += 1
                 lastMatchIdx = ci
-                qi = strippedQuery.index(after: qi)
+                qi = compactQuery.index(after: qi)
             }
         }
-        guard qi == strippedQuery.endIndex else { return nil }
+        guard qi == compactQuery.endIndex else { return nil }
 
         // Bonus for word-level matches
         for word in words {
@@ -340,8 +356,8 @@ class LinkAwareTextView: NSTextView {
         }
 
         // Strongly prefer exact middle-substring matches for fuzzyfinder-like behavior.
-        if let range = strippedCandidate.range(of: strippedQuery) {
-            let start = strippedCandidate.distance(from: strippedCandidate.startIndex, to: range.lowerBound)
+        if let range = compactCandidate.range(of: compactQuery) {
+            let start = compactCandidate.distance(from: compactCandidate.startIndex, to: range.lowerBound)
             score += 40
             score += max(0, 8 - start)
         }
@@ -350,21 +366,7 @@ class LinkAwareTextView: NSTextView {
     }
 
     private func showCompletion(query: String) {
-        let filtered: [URL]
-        if query.isEmpty {
-            filtered = allFiles
-        } else {
-            filtered = allFiles
-                .compactMap { url -> (URL, Int)? in
-                    let name = url.deletingPathExtension().lastPathComponent
-                    guard let score = fuzzyScore(query: query, candidate: name) else { return nil }
-                    return (url, score)
-                }
-                .sorted { $0.1 > $1.1 }
-                .map { $0.0 }
-        }
-        debugLog("filtered=\(filtered.count) for query='\(query)'")
-        if filtered.isEmpty { dismissCompletion(); return }
+        let cleanedQuery = query.components(separatedBy: .newlines).joined().trimmingCharacters(in: .whitespacesAndNewlines)
 
         if completionPopover == nil {
             let vc = CompletionViewController()
@@ -373,7 +375,7 @@ class LinkAwareTextView: NSTextView {
             let popover = NSPopover()
             popover.contentViewController = vc
             popover.behavior = .applicationDefined
-            popover.contentSize = NSSize(width: 280, height: 180)
+            popover.contentSize = NSSize(width: 420, height: 260)
             completionPopover = popover
 
             eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
@@ -382,10 +384,14 @@ class LinkAwareTextView: NSTextView {
             }
         }
 
-        completionVC?.update(files: filtered)
+        let filteredCount = completionVC?.update(files: allFiles, query: cleanedQuery) ?? 0
+        debugLog("filtered=\(filteredCount) for query='\(cleanedQuery)'")
+        if filteredCount == 0 { dismissCompletion(); return }
+
         if completionPopover?.isShown == false {
             guard let rect = rectForCaret() else { return }
             completionPopover?.show(relativeTo: rect, of: self, preferredEdge: .maxY)
+            completionVC?.focusSearchField()
         }
     }
 
@@ -444,11 +450,22 @@ class LinkAwareTextView: NSTextView {
 
 class CompletionViewController: NSViewController {
     var onSelect: ((URL) -> Void)?
+    private let searchField = NSSearchField()
     private let tableView = NSTableView()
     private let scrollView = NSScrollView()
-    private var files: [URL] = []
+    private var allFiles: [URL] = []
+    private var filteredFiles: [URL] = []
 
     override func loadView() {
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 260))
+
+        searchField.placeholderString = "Search files..."
+        searchField.sendsSearchStringImmediately = true
+        searchField.target = self
+        searchField.action = #selector(searchChanged)
+        searchField.delegate = self
+        searchField.font = .systemFont(ofSize: 12)
+
         let col = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
         col.isEditable = false
         tableView.addTableColumn(col)
@@ -463,35 +480,110 @@ class CompletionViewController: NSViewController {
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
-        view = scrollView
+
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        searchField.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(searchField)
+        container.addSubview(scrollView)
+
+        NSLayoutConstraint.activate([
+            searchField.topAnchor.constraint(equalTo: container.topAnchor, constant: 8),
+            searchField.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
+            searchField.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -8),
+            scrollView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 6),
+            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+        view.addSubview(container)
+        NSLayoutConstraint.activate([
+            container.topAnchor.constraint(equalTo: view.topAnchor),
+            container.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            container.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            container.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 160),
+        ])
     }
 
-    func update(files: [URL]) {
-        self.files = files
+    @discardableResult
+    func update(files: [URL], query: String) -> Int {
+        self.allFiles = files
+        if searchField.stringValue != query { searchField.stringValue = query }
+        applyFilter()
+        return filteredFiles.count
+    }
+
+    func focusSearchField() {
+        view.window?.makeFirstResponder(searchField)
+        searchField.currentEditor()?.selectedRange = NSRange(location: searchField.stringValue.count, length: 0)
+    }
+
+    @objc private func searchChanged() {
+        applyFilter()
+    }
+
+    private func normalize(_ value: String) -> String {
+        value
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .components(separatedBy: .newlines).joined()
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func scoreFile(_ url: URL, query: String) -> Int? {
+        if query.isEmpty { return 1 }
+        let name = normalize(url.deletingPathExtension().lastPathComponent)
+        let path = normalize(url.path)
+        if let range = name.range(of: query) {
+            let offset = name.distance(from: name.startIndex, to: range.lowerBound)
+            return 400 - min(offset, 300)
+        }
+        if let range = path.range(of: query) {
+            let offset = path.distance(from: path.startIndex, to: range.lowerBound)
+            return 200 - min(offset, 180)
+        }
+        return nil
+    }
+
+    private func applyFilter() {
+        let query = normalize(searchField.stringValue)
+        filteredFiles = allFiles
+            .compactMap { url -> (URL, Int)? in
+                guard let score = scoreFile(url, query: query) else { return nil }
+                return (url, score)
+            }
+            .sorted { $0.1 > $1.1 }
+            .map { $0.0 }
         tableView.reloadData()
-        if !files.isEmpty { tableView.selectRowIndexes([0], byExtendingSelection: false) }
+        if !filteredFiles.isEmpty {
+            tableView.selectRowIndexes([0], byExtendingSelection: false)
+        }
     }
 
     @objc func selectItem() {
         let row = tableView.selectedRow
-        guard row >= 0, row < files.count else { return }
-        onSelect?(files[row])
+        guard row >= 0, row < filteredFiles.count else { return }
+        onSelect?(filteredFiles[row])
     }
 
     func selectCurrentItem() { selectItem() }
 
     func moveSelection(by delta: Int) {
-        let next = max(0, min(files.count - 1, tableView.selectedRow + delta))
+        guard !filteredFiles.isEmpty else { return }
+        let current = max(0, tableView.selectedRow)
+        let next = max(0, min(filteredFiles.count - 1, current + delta))
         tableView.selectRowIndexes([next], byExtendingSelection: false)
         tableView.scrollRowToVisible(next)
     }
 }
 
 extension CompletionViewController: NSTableViewDataSource, NSTableViewDelegate {
-    func numberOfRows(in tableView: NSTableView) -> Int { files.count }
+    func numberOfRows(in tableView: NSTableView) -> Int { filteredFiles.count }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let name = files[row].deletingPathExtension().lastPathComponent
+        let name = filteredFiles[row].deletingPathExtension().lastPathComponent
         let cell = NSTextField(labelWithString: name)
         cell.font = .systemFont(ofSize: 13)
         cell.lineBreakMode = .byTruncatingMiddle
@@ -499,4 +591,22 @@ extension CompletionViewController: NSTableViewDataSource, NSTableViewDelegate {
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {}
+}
+
+extension CompletionViewController: NSSearchFieldDelegate, NSControlTextEditingDelegate {
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        switch commandSelector {
+        case #selector(NSResponder.moveUp(_:)):
+            moveSelection(by: -1)
+            return true
+        case #selector(NSResponder.moveDown(_:)):
+            moveSelection(by: 1)
+            return true
+        case #selector(NSResponder.insertNewline(_:)):
+            selectCurrentItem()
+            return true
+        default:
+            return false
+        }
+    }
 }
