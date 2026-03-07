@@ -24,11 +24,31 @@ struct NotedApp: App {
         .windowResizability(.contentMinSize)
         .windowStyle(.hiddenTitleBar)
         .commands {
-            CommandGroup(after: .newItem) {
+            CommandGroup(replacing: .newItem) {
+                Button("New Note…") {
+                    appState.presentRootNoteSheet()
+                }
+                .keyboardShortcut("n", modifiers: .command)
+                .disabled(appState.rootURL == nil)
+
                 Button("Open Folder…") {
                     appState.pickFolder()
                 }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
+            }
+
+            CommandGroup(after: .newItem) {
+                Button("Quick Open…") {
+                    appState.presentCommandPalette()
+                }
+                .keyboardShortcut("p", modifiers: .command)
+                .disabled(appState.rootURL == nil)
+
+                Button("Command Palette…") {
+                    appState.presentCommandPalette()
+                }
+                .keyboardShortcut("k", modifiers: .command)
+                .disabled(appState.rootURL == nil)
             }
         }
     }

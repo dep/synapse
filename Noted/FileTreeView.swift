@@ -95,7 +95,8 @@ struct FileTreeView: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        ScrollViewReader { proxy in
+            VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Library")
@@ -139,68 +140,82 @@ struct FileTreeView: View {
                 .fill(NotedTheme.divider)
                 .frame(height: 1)
 
-            ScrollView {
-                if nodes.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("No notes yet")
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
-                            .foregroundStyle(NotedTheme.textPrimary)
-                        Text("Create a note or folder to start organizing your workspace.")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(NotedTheme.textMuted)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 8)
-                } else {
-                    LazyVStack(alignment: .leading, spacing: 6) {
-                        ForEach(nodes) { node in
-                            FileNodeRow(
-                                node: node,
-                                depth: 0,
-                                expandedDirs: $expandedDirs,
-                                onCreateNote: { presentCreateNote(in: $0) },
-                                onCreateFolder: { presentCreateFolder(in: $0) },
-                                onRename: { presentRename(for: $0, isDirectory: $1) },
-                                onDelete: { presentDelete(for: $0, isDirectory: $1) }
-                            )
+                ScrollView {
+                    if nodes.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("No notes yet")
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundStyle(NotedTheme.textPrimary)
+                            Text("Create a note or folder to start organizing your workspace.")
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(NotedTheme.textMuted)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 8)
+                    } else {
+                        LazyVStack(alignment: .leading, spacing: 6) {
+                            ForEach(nodes) { node in
+                                FileNodeRow(
+                                    node: node,
+                                    depth: 0,
+                                    expandedDirs: $expandedDirs,
+                                    onCreateNote: { presentCreateNote(in: $0) },
+                                    onCreateFolder: { presentCreateFolder(in: $0) },
+                                    onRename: { presentRename(for: $0, isDirectory: $1) },
+                                    onDelete: { presentDelete(for: $0, isDirectory: $1) }
+                                )
+                            }
+                        }
+                        .padding(.vertical, 4)
                     }
-                    .padding(.vertical, 4)
                 }
             }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .onAppear(perform: refresh)
-        .onChange(of: appState.rootURL) { refresh() }
-        .onChange(of: appState.allFiles) { _, _ in refresh() }
-        .sheet(item: $editorAction) { action in
-            BrowserItemEditorSheet(action: action) { submittedName in
-                handleEditorSubmit(action: action, submittedName: submittedName)
+            .padding(12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .onAppear {
+                refresh()
+                revealSelection(with: proxy, animated: false)
             }
-        }
-        .alert(
-            deleteTarget?.title ?? "Delete",
-            isPresented: Binding(
-                get: { deleteTarget != nil },
-                set: { if !$0 { deleteTarget = nil } }
-            )
-        ) {
-            Button("Delete", role: .destructive) { confirmDelete() }
-            Button("Cancel", role: .cancel) { deleteTarget = nil }
-        } message: {
-            Text(deleteTarget?.message ?? "")
-        }
-        .alert(
-            "Action Failed",
-            isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) { errorMessage = nil }
-        } message: {
-            Text(errorMessage ?? "")
+            .onChange(of: appState.rootURL) { _, _ in
+                refresh()
+                revealSelection(with: proxy)
+            }
+            .onChange(of: appState.allFiles) { _, _ in
+                refresh()
+                revealSelection(with: proxy)
+            }
+            .onChange(of: appState.selectedFile) { _, newFile in
+                expandPath(to: newFile)
+                revealSelection(with: proxy)
+            }
+            .sheet(item: $editorAction) { action in
+                BrowserItemEditorSheet(action: action) { submittedName in
+                    handleEditorSubmit(action: action, submittedName: submittedName)
+                }
+            }
+            .alert(
+                deleteTarget?.title ?? "Delete",
+                isPresented: Binding(
+                    get: { deleteTarget != nil },
+                    set: { if !$0 { deleteTarget = nil } }
+                )
+            ) {
+                Button("Delete", role: .destructive) { confirmDelete() }
+                Button("Cancel", role: .cancel) { deleteTarget = nil }
+            } message: {
+                Text(deleteTarget?.message ?? "")
+            }
+            .alert(
+                "Action Failed",
+                isPresented: Binding(
+                    get: { errorMessage != nil },
+                    set: { if !$0 { errorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "")
+            }
         }
     }
 
@@ -210,6 +225,34 @@ struct FileTreeView: View {
             return
         }
         nodes = buildFileTree(at: root)
+        expandPath(to: appState.selectedFile)
+    }
+
+    private func expandPath(to file: URL?) {
+        guard let root = appState.rootURL, let file else { return }
+
+        var current = file.deletingLastPathComponent()
+        let rootPath = root.standardizedFileURL.path
+
+        while current.standardizedFileURL.path.hasPrefix(rootPath), current != root {
+            expandedDirs.insert(current)
+            current = current.deletingLastPathComponent()
+        }
+
+        expandedDirs.insert(root)
+    }
+
+    private func revealSelection(with proxy: ScrollViewProxy, animated: Bool = true) {
+        guard let selectedFile = appState.selectedFile else { return }
+        DispatchQueue.main.async {
+            if animated {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    proxy.scrollTo(selectedFile, anchor: .center)
+                }
+            } else {
+                proxy.scrollTo(selectedFile, anchor: .center)
+            }
+        }
     }
 
     private func presentCreateNote(in directory: URL?) {
@@ -351,6 +394,7 @@ struct FileNodeRow: View {
             }
         }
         .padding(.horizontal, 2)
+        .id(node.url)
     }
 
     private func handleTap() {

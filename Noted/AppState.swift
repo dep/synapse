@@ -33,8 +33,11 @@ class AppState: ObservableObject {
     @Published var fileContent: String = ""
     @Published var isDirty: Bool = false
     @Published var allFiles: [URL] = []
+    @Published var allProjectFiles: [URL] = []
     @Published var canGoBack: Bool = false
     @Published var canGoForward: Bool = false
+    @Published var isCommandPalettePresented: Bool = false
+    @Published var isRootNoteSheetPresented: Bool = false
 
     private var history: [URL] = []
     private var historyIndex: Int = -1
@@ -170,6 +173,16 @@ class AppState: ObservableObject {
         url.deletingPathExtension().lastPathComponent
     }
 
+    func relativePath(for url: URL) -> String {
+        guard let rootURL else { return url.lastPathComponent }
+        let rootPath = standardized(rootURL).path
+        let filePath = standardized(url).path
+        guard filePath.hasPrefix(rootPath) else { return url.lastPathComponent }
+
+        let relative = String(filePath.dropFirst(rootPath.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return relative.isEmpty ? url.lastPathComponent : relative
+    }
+
     private func normalizedNoteReference(_ value: String) -> String {
         value
             .split(separator: "|", maxSplits: 1)
@@ -266,6 +279,7 @@ class AppState: ObservableObject {
         selectedFile = nil
         fileContent = ""
         isDirty = false
+        isCommandPalettePresented = false
         history = []
         historyIndex = -1
         updateHistoryState()
@@ -273,17 +287,43 @@ class AppState: ObservableObject {
     }
 
     func refreshAllFiles() {
-        guard let root = rootURL else { allFiles = []; return }
+        guard let root = rootURL else {
+            allFiles = []
+            allProjectFiles = []
+            return
+        }
         let fm = FileManager.default
         guard let enumerator = fm.enumerator(
             at: root,
             includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles]
         ) else { return }
-        allFiles = enumerator.compactMap { $0 as? URL }.filter {
+        let discoveredFiles = enumerator.compactMap { $0 as? URL }
+            .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+
+        allProjectFiles = discoveredFiles
+        allFiles = discoveredFiles.filter {
             let ext = $0.pathExtension.lowercased()
             return ext == "md" || ext == "markdown"
         }
+    }
+
+    func presentCommandPalette() {
+        guard rootURL != nil else { return }
+        isCommandPalettePresented = true
+    }
+
+    func dismissCommandPalette() {
+        isCommandPalettePresented = false
+    }
+
+    func presentRootNoteSheet() {
+        guard rootURL != nil else { return }
+        isRootNoteSheetPresented = true
+    }
+
+    func dismissRootNoteSheet() {
+        isRootNoteSheetPresented = false
     }
 
     @discardableResult
@@ -364,6 +404,8 @@ class AppState: ObservableObject {
 
     func openFile(_ url: URL) {
         if isDirty { saveCurrentFile(content: fileContent) }
+        dismissCommandPalette()
+        dismissRootNoteSheet()
         if !navigatingHistory {
             if historyIndex < history.count - 1 {
                 history = Array(history.prefix(historyIndex + 1))
