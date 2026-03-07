@@ -312,7 +312,17 @@ extension LinkAwareTextView {
             storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: range)
         }
 
+        for match in self.inlineImageMatches() {
+            let paragraphStyle = (storage.attribute(.paragraphStyle, at: match.paragraphRange.location, effectiveRange: nil) as? NSMutableParagraphStyle)
+                ?? NSMutableParagraphStyle()
+            let updatedStyle = paragraphStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+            updatedStyle.paragraphSpacing = max(updatedStyle.paragraphSpacing, self.inlinePreviewHeight(for: match.source))
+            storage.addAttribute(.paragraphStyle, value: updatedStyle, range: match.paragraphRange)
+            storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: match.range)
+        }
+
         storage.endEditing()
+        self.refreshInlineImagePreviews()
     }
 
     private func applyRegex(_ pattern: String, to text: NSString, storage: NSTextStorage, options: NSRegularExpression.Options = [], apply: (NSRange) -> Void) {
@@ -350,11 +360,24 @@ private func debugLog(_ msg: String) {
 class LinkAwareTextView: NSTextView {
     var allFiles: [URL] = []
     var onOpenFile: ((URL) -> Void)?
+    var currentFileURL: URL?
 
     private var completionPopover: NSPopover?
     private var completionVC: CompletionViewController?
     private var linkTypingRange: NSRange?
     private var eventMonitor: Any?
+    private var inlineImageViews: [String: NSImageView] = [:]
+    private var failedInlineImageKeys: Set<String> = []
+
+    private static let inlineImageCache = NSCache<NSString, NSImage>()
+    private static let inlineImageRegex = try? NSRegularExpression(pattern: #"!\[[^\]]*\]\(([^)]+)\)"#)
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        DispatchQueue.main.async { [weak self] in
+            self?.refreshInlineImagePreviews()
+        }
+    }
 
     override func keyDown(with event: NSEvent) {
         if let popover = completionPopover, popover.isShown {
@@ -538,6 +561,149 @@ class LinkAwareTextView: NSTextView {
         rect.origin.y += textContainerOrigin.y
         return rect
     }
+
+    func refreshInlineImagePreviews() {
+        guard let layoutManager, let textContainer else { return }
+
+        let matches = inlineImageMatches()
+        let activeKeys = Set(matches.map(\.id))
+
+        for (key, view) in inlineImageViews where !activeKeys.contains(key) {
+            view.removeFromSuperview()
+            inlineImageViews.removeValue(forKey: key)
+        }
+
+        let availableWidth = max(120, bounds.width - textContainerInset.width * 2 - 20)
+        let maxPreviewWidth = min(availableWidth, 520)
+
+        for match in matches {
+            guard let resolvedURL = resolvedInlineImageURL(for: match.source) else { continue }
+            let cacheKey = resolvedURL.absoluteString as NSString
+
+            if let image = Self.inlineImageCache.object(forKey: cacheKey) {
+                placeInlineImage(image, for: match, layoutManager: layoutManager, textContainer: textContainer, maxWidth: maxPreviewWidth)
+            } else {
+                inlineImageViews[match.id]?.removeFromSuperview()
+                inlineImageViews.removeValue(forKey: match.id)
+                loadInlineImage(from: resolvedURL, cacheKey: cacheKey)
+            }
+        }
+    }
+
+    func inlineImageMatches() -> [InlineImageMatch] {
+        guard let regex = Self.inlineImageRegex else { return [] }
+        let nsText = string as NSString
+        let range = NSRange(location: 0, length: nsText.length)
+
+        return regex.matches(in: string, range: range).compactMap { match in
+            guard match.numberOfRanges > 1 else { return nil }
+            let source = nsText.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let fullRange = match.range(at: 0)
+            let paragraphRange = nsText.paragraphRange(for: fullRange)
+            return InlineImageMatch(id: "\(fullRange.location)-\(source)", range: fullRange, paragraphRange: paragraphRange, source: source)
+        }
+    }
+
+    func inlinePreviewHeight(for source: String) -> CGFloat {
+        guard let resolvedURL = resolvedInlineImageURL(for: source) else { return 0 }
+        let key = resolvedURL.absoluteString
+
+        if failedInlineImageKeys.contains(key) {
+            return 0
+        }
+
+        if let image = Self.inlineImageCache.object(forKey: key as NSString) {
+            let availableWidth = max(120, bounds.width - textContainerInset.width * 2 - 20)
+            let maxPreviewWidth = min(availableWidth, 520)
+            return scaledInlineImageSize(for: image, maxWidth: maxPreviewWidth).height + 12
+        }
+
+        return 140
+    }
+
+    private func placeInlineImage(_ image: NSImage, for match: InlineImageMatch, layoutManager: NSLayoutManager, textContainer: NSTextContainer, maxWidth: CGFloat) {
+        let glyphRange = layoutManager.glyphRange(forCharacterRange: match.paragraphRange, actualCharacterRange: nil)
+        var paragraphRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+        paragraphRect.origin.x += textContainerOrigin.x
+        paragraphRect.origin.y += textContainerOrigin.y
+
+        let size = scaledInlineImageSize(for: image, maxWidth: maxWidth)
+        let frame = NSRect(x: textContainerOrigin.x + 14, y: paragraphRect.maxY + 8, width: size.width, height: size.height)
+
+        let imageView = inlineImageViews[match.id] ?? {
+            let view = NSImageView()
+            view.imageScaling = .scaleProportionallyUpOrDown
+            view.wantsLayer = true
+            view.layer?.cornerRadius = 10
+            view.layer?.masksToBounds = true
+            view.layer?.borderWidth = 1
+            view.layer?.borderColor = NSColor(NotedTheme.border).cgColor
+            view.layer?.backgroundColor = NotedTheme.editorCodeBackground.cgColor
+            addSubview(view)
+            inlineImageViews[match.id] = view
+            return view
+        }()
+
+        imageView.image = image
+        imageView.frame = frame
+    }
+
+    private func loadInlineImage(from url: URL, cacheKey: NSString) {
+        if url.isFileURL {
+            if let image = NSImage(contentsOf: url) {
+                Self.inlineImageCache.setObject(image, forKey: cacheKey)
+            } else {
+                failedInlineImageKeys.insert(cacheKey as String)
+            }
+            applyMarkdownStyling()
+            refreshInlineImagePreviews()
+            return
+        }
+
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            guard let self else { return }
+            DispatchQueue.main.async {
+                if let data, let image = NSImage(data: data) {
+                    Self.inlineImageCache.setObject(image, forKey: cacheKey)
+                } else {
+                    self.failedInlineImageKeys.insert(cacheKey as String)
+                }
+                self.applyMarkdownStyling()
+                self.refreshInlineImagePreviews()
+            }
+        }.resume()
+    }
+
+    private func resolvedInlineImageURL(for source: String) -> URL? {
+        let cleanedSource = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedSource.isEmpty else { return nil }
+
+        if cleanedSource.hasPrefix("http://") || cleanedSource.hasPrefix("https://") || cleanedSource.hasPrefix("file://") {
+            return URL(string: cleanedSource)
+        }
+
+        if cleanedSource.hasPrefix("/") {
+            return URL(fileURLWithPath: cleanedSource)
+        }
+
+        guard let currentFileURL else { return nil }
+        return URL(fileURLWithPath: cleanedSource, relativeTo: currentFileURL.deletingLastPathComponent()).standardizedFileURL
+    }
+
+    private func scaledInlineImageSize(for image: NSImage, maxWidth: CGFloat) -> NSSize {
+        let originalSize = image.size.width > 0 && image.size.height > 0 ? image.size : NSSize(width: maxWidth, height: 180)
+        let width = min(maxWidth, originalSize.width)
+        let scale = width / max(originalSize.width, 1)
+        let height = max(80, min(420, originalSize.height * scale))
+        return NSSize(width: width, height: height)
+    }
+}
+
+struct InlineImageMatch {
+    let id: String
+    let range: NSRange
+    let paragraphRange: NSRange
+    let source: String
 }
 
 // MARK: - Completion popover
