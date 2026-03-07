@@ -320,14 +320,18 @@ extension LinkAwareTextView {
             }
         }
 
-        if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) {
-            detector.enumerateMatches(in: storage.string, options: [], range: fullRange) { match, _, _ in
-                guard let match, let url = match.url else { return }
+        if let bareURLRegex = try? NSRegularExpression(pattern: #"https?://[^"]+?(?=[\s)\]>]|$)"#) {
+            bareURLRegex.enumerateMatches(in: storage.string, options: [], range: fullRange) { match, _, _ in
+                guard let match else { return }
                 let range = match.range
+                guard range.location != NSNotFound, range.length > 0 else { return }
 
                 if storage.attribute(.link, at: range.location, effectiveRange: nil) != nil {
                     return
                 }
+
+                let rawURL = text.substring(with: range)
+                guard let url = URL(string: rawURL) else { return }
 
                 storage.addAttributes([
                     .foregroundColor: MarkdownTheme.linkColor,
@@ -347,16 +351,6 @@ extension LinkAwareTextView {
             updatedStyle.paragraphSpacing = max(updatedStyle.paragraphSpacing, self.inlinePreviewHeight(for: match.source))
             storage.addAttribute(.paragraphStyle, value: updatedStyle, range: match.paragraphRange)
             storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: match.range)
-        }
-
-        let availableWidth = max(120, bounds.width - textContainerInset.width * 2 - 20)
-        let maxPreviewWidth = min(availableWidth, 520)
-        for match in self.inlineYouTubeMatches() {
-            let paragraphStyle = (storage.attribute(.paragraphStyle, at: match.paragraphRange.location, effectiveRange: nil) as? NSMutableParagraphStyle)
-                ?? NSMutableParagraphStyle()
-            let updatedStyle = paragraphStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
-            updatedStyle.paragraphSpacing = max(updatedStyle.paragraphSpacing, self.inlineYouTubePreviewHeight(maxWidth: maxPreviewWidth) + 18)
-            storage.addAttribute(.paragraphStyle, value: updatedStyle, range: match.paragraphRange)
         }
 
         storage.endEditing()
@@ -423,11 +417,16 @@ class LinkAwareTextView: NSTextView {
     private var failedInlineImageKeys: Set<String> = []
     private var loadingInlineImageKeys: Set<String> = []
     private var loadingYouTubeMetadataKeys: Set<String> = []
+    private var cachedYouTubeMatches: [InlineYouTubeMatch] = []
+    private var lastYouTubeScanText: String = ""
 
     private static let inlineImageCache = NSCache<NSString, NSImage>()
     private static let inlineImageRegex = try? NSRegularExpression(pattern: #"!\[[^\]]*\]\(([^)]+)\)"#)
     private static let youtubeThumbnailCache = NSCache<NSString, NSImage>()
     private static var youtubeTitleCache: [String: String] = [:]
+    private static let youtubeDetector: NSDataDetector? = {
+        try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+    }()
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
@@ -629,9 +628,7 @@ class LinkAwareTextView: NSTextView {
         layoutManager.ensureLayout(for: textContainer)
 
         let matches = inlineImageMatches()
-        let youtubeMatches = inlineYouTubeMatches()
         let activeKeys = Set(matches.map(\.id))
-        let activeVideoKeys = Set(youtubeMatches.map(\.id))
 
         for key in Array(inlineImageViews.keys) where !activeKeys.contains(key) {
             guard let view = inlineImageViews[key] else { continue }
@@ -639,7 +636,7 @@ class LinkAwareTextView: NSTextView {
             inlineImageViews.removeValue(forKey: key)
         }
 
-        for key in Array(inlineVideoViews.keys) where !activeVideoKeys.contains(key) {
+        for key in Array(inlineVideoViews.keys) {
             guard let view = inlineVideoViews[key] else { continue }
             view.removeFromSuperview()
             inlineVideoViews.removeValue(forKey: key)
@@ -661,9 +658,6 @@ class LinkAwareTextView: NSTextView {
             }
         }
 
-        for match in youtubeMatches {
-            placeInlineVideo(for: match, layoutManager: layoutManager, textContainer: textContainer, maxWidth: maxPreviewWidth)
-        }
     }
 
     func inlineImageMatches() -> [InlineImageMatch] {
@@ -698,18 +692,9 @@ class LinkAwareTextView: NSTextView {
     }
 
     func inlineYouTubeMatches() -> [InlineYouTubeMatch] {
-        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return [] }
-        let nsText = string as NSString
-        let range = NSRange(location: 0, length: nsText.length)
-        var seenIDs = Set<String>()
-
-        return detector.matches(in: string, options: [], range: range).compactMap { match in
-            guard let url = match.url, let videoID = youtubeVideoID(from: url) else { return nil }
-            let paragraphRange = nsText.paragraphRange(for: match.range)
-            let id = "yt-\(paragraphRange.location)-\(videoID)"
-            guard seenIDs.insert(id).inserted else { return nil }
-            return InlineYouTubeMatch(id: id, paragraphRange: paragraphRange, videoID: videoID, sourceURL: url)
-        }
+        cachedYouTubeMatches = []
+        lastYouTubeScanText = string
+        return []
     }
 
     func inlineYouTubePreviewHeight(maxWidth: CGFloat) -> CGFloat {
@@ -778,7 +763,7 @@ class LinkAwareTextView: NSTextView {
 
     private func loadInlineImage(from url: URL, cacheKey: NSString, maxPixelSize: CGFloat) {
         let key = cacheKey as String
-        guard !loadingInlineImageKeys.contains(key), Self.inlineImageCache.object(forKey: cacheKey) == nil else { return }
+        guard !loadingInlineImageKeys.contains(key), !failedInlineImageKeys.contains(key), Self.inlineImageCache.object(forKey: cacheKey) == nil else { return }
         loadingInlineImageKeys.insert(key)
 
         if url.isFileURL {
