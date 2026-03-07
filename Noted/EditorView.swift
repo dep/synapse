@@ -421,7 +421,7 @@ class LinkAwareTextView: NSTextView {
     private var lastYouTubeScanText: String = ""
 
     private static let inlineImageCache = NSCache<NSString, NSImage>()
-    private static let inlineImageRegex = try? NSRegularExpression(pattern: #"!\[[^\]]*\]\(([^)]+)\)"#)
+    private static let inlineImageRegex = try? NSRegularExpression(pattern: #"!\[[^\]]*\]\((.+?)\)(?=\s|$)"#, options: [.anchorsMatchLines])
     private static let youtubeThumbnailCache = NSCache<NSString, NSImage>()
     private static var youtubeTitleCache: [String: String] = [:]
     private static let youtubeDetector: NSDataDetector? = {
@@ -773,7 +773,7 @@ class LinkAwareTextView: NSTextView {
                 failedInlineImageKeys.insert(key)
             }
             loadingInlineImageKeys.remove(key)
-            refreshInlineImagePreviews()
+            applyMarkdownStyling()
             return
         }
 
@@ -791,7 +791,7 @@ class LinkAwareTextView: NSTextView {
                 } else {
                     self.failedInlineImageKeys.insert(key)
                 }
-                self.refreshInlineImagePreviews()
+                self.applyMarkdownStyling()
             }
         }.resume()
     }
@@ -830,12 +830,15 @@ class LinkAwareTextView: NSTextView {
             return URL(string: cleanedSource)
         }
 
-        if cleanedSource.hasPrefix("/") {
-            return URL(fileURLWithPath: cleanedSource)
+        // Decode percent-encoding so paths like "image%20(32).png" resolve correctly
+        let decodedSource = cleanedSource.removingPercentEncoding ?? cleanedSource
+
+        if decodedSource.hasPrefix("/") {
+            return URL(fileURLWithPath: decodedSource)
         }
 
         guard let currentFileURL else { return nil }
-        return URL(fileURLWithPath: cleanedSource, relativeTo: currentFileURL.deletingLastPathComponent()).standardizedFileURL
+        return URL(fileURLWithPath: decodedSource, relativeTo: currentFileURL.deletingLastPathComponent()).standardizedFileURL
     }
 
     private func youtubeVideoID(from url: URL) -> String? {
