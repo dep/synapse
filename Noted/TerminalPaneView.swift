@@ -35,30 +35,46 @@ struct TerminalPaneView: View {
     @EnvironmentObject var appState: AppState
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Image(systemName: "terminal")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("Terminal")
-                    .font(.caption.bold())
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                Spacer()
-                if let dir = appState.rootURL?.lastPathComponent {
-                    Text(dir)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.bar)
+        VStack(spacing: 10) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Terminal")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .tracking(1.8)
+                        .foregroundStyle(NotedTheme.textMuted)
 
-            Divider()
+                    HStack(spacing: 10) {
+                        Image(systemName: "terminal.fill")
+                            .foregroundStyle(NotedTheme.accent)
+                        Text(appState.rootURL?.lastPathComponent ?? "Shell")
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .foregroundStyle(NotedTheme.textPrimary)
+                    }
+
+                    Text(appState.rootURL?.path ?? NSHomeDirectory())
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(NotedTheme.textSecondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                TinyBadge(text: "Live session")
+            }
+
+            Rectangle()
+                .fill(NotedTheme.divider)
+                .frame(height: 1)
 
             LocalTerminalView(workingDirectory: appState.rootURL?.path ?? NSHomeDirectory())
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(NotedTheme.border, lineWidth: 1)
+                }
         }
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }

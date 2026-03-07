@@ -45,28 +45,41 @@ struct FileTreeView: View {
     @State private var expandedDirs: Set<URL> = []
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(appState.rootURL?.lastPathComponent ?? "Files")
-                    .font(.caption.bold())
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Library")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .tracking(1.8)
+                        .foregroundStyle(NotedTheme.textMuted)
+
+                    Text(appState.rootURL?.lastPathComponent ?? "Files")
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .foregroundStyle(NotedTheme.textPrimary)
+
+                    HStack(spacing: 8) {
+                        TinyBadge(text: "\(appState.allFiles.count) notes")
+                        if !nodes.isEmpty {
+                            TinyBadge(text: "\(nodes.count) root items")
+                        }
+                    }
+                }
+
                 Spacer()
+
                 Button(action: refresh) {
                     Image(systemName: "arrow.clockwise")
-                        .font(.caption)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .buttonStyle(ChromeButtonStyle())
                 .help("Refresh")
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
 
-            Divider()
+            Rectangle()
+                .fill(NotedTheme.divider)
+                .frame(height: 1)
 
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 1) {
+                LazyVStack(alignment: .leading, spacing: 6) {
                     ForEach(nodes) { node in
                         FileNodeRow(node: node, depth: 0, expandedDirs: $expandedDirs)
                     }
@@ -74,7 +87,8 @@ struct FileTreeView: View {
                 .padding(.vertical, 4)
             }
         }
-        .background(.background)
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear(perform: refresh)
         .onChange(of: appState.rootURL) { refresh() }
     }
@@ -105,24 +119,31 @@ struct FileNodeRow: View {
                             .font(.caption2)
                             .frame(width: 10)
                         Image(systemName: isExpanded ? "folder.open" : "folder")
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(NotedTheme.accent)
                     } else {
                         Spacer().frame(width: 10)
                         Image(systemName: node.isMarkdown ? "doc.text" : "doc.plaintext")
-                            .foregroundStyle(node.isMarkdown ? .primary : .secondary)
+                            .foregroundStyle(node.isMarkdown ? NotedTheme.textPrimary : NotedTheme.textSecondary)
                     }
 
                     Text(node.name)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                        .foregroundStyle(isSelected ? .white : .primary)
+                        .font(.system(size: 13, weight: isSelected ? .semibold : .medium, design: .rounded))
+                        .foregroundStyle(isSelected ? Color.white : NotedTheme.textPrimary)
 
                     Spacer()
                 }
-                .padding(.vertical, 3)
+                .padding(.vertical, 6)
                 .padding(.horizontal, 8)
-                .background(isSelected ? Color.accentColor : Color.clear)
-                .cornerRadius(4)
+                .background {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(isSelected ? NotedTheme.accentSoft : NotedTheme.row)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(isSelected ? NotedTheme.accent : NotedTheme.rowBorder, lineWidth: 1)
+                        }
+                }
             }
             .buttonStyle(.plain)
 
@@ -132,7 +153,7 @@ struct FileNodeRow: View {
                 }
             }
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, 2)
     }
 
     private func handleTap() {

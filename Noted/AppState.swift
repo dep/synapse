@@ -1,6 +1,12 @@
 import SwiftUI
 import Combine
 
+struct NoteLinkRelationships {
+    let outbound: [URL]
+    let inbound: [URL]
+    let unresolved: [String]
+}
+
 class AppState: ObservableObject {
     @Published var rootURL: URL?
     @Published var selectedFile: URL?
@@ -13,9 +19,11 @@ class AppState: ObservableObject {
     private var history: [URL] = []
     private var historyIndex: Int = -1
     private var navigatingHistory = false
+    private var lastObservedModificationDate: Date?
 
     private var saveCancellable: AnyCancellable?
     private var fileWatcher: DispatchSourceFileSystemObject?
+    private var filePollCancellable: AnyCancellable?
     private var watchedFD: Int32 = -1
 
     init() {
@@ -23,37 +31,128 @@ class AppState: ObservableObject {
             .dropFirst()
             .debounce(for: .seconds(1), scheduler: RunLoop.main)
             .sink { [weak self] content in
-                self?.saveCurrentFile(content: content)
+                guard let self, self.isDirty else { return }
+                self.saveCurrentFile(content: content)
             }
     }
 
     private func startWatching(_ url: URL) {
         stopWatching()
+        lastObservedModificationDate = fileModificationDate(for: url)
+
         let dirPath = url.deletingLastPathComponent().path
         let fd = open(dirPath, O_EVTONLY)
-        guard fd >= 0 else { return }
-        watchedFD = fd
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: [.write, .rename],
-            queue: .main
-        )
-        source.setEventHandler { [weak self] in
-            guard let self, !self.isDirty, let url = self.selectedFile else { return }
-            let fresh = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-            if fresh != self.fileContent {
-                self.fileContent = fresh
+        if fd >= 0 {
+            watchedFD = fd
+            let source = DispatchSource.makeFileSystemObjectSource(
+                fileDescriptor: fd,
+                eventMask: [.write, .rename, .delete, .extend, .attrib],
+                queue: .main
+            )
+            source.setEventHandler { [weak self] in
+                guard let self else { return }
+                self.refreshAllFiles()
+                self.reloadSelectedFileFromDiskIfNeeded(force: true)
             }
+            source.setCancelHandler { close(fd) }
+            source.resume()
+            fileWatcher = source
         }
-        source.setCancelHandler { close(fd) }
-        source.resume()
-        fileWatcher = source
+
+        filePollCancellable = Timer.publish(every: 0.75, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.reloadSelectedFileFromDiskIfNeeded()
+            }
     }
 
     private func stopWatching() {
         fileWatcher?.cancel()
         fileWatcher = nil
+        filePollCancellable?.cancel()
+        filePollCancellable = nil
+        lastObservedModificationDate = nil
         watchedFD = -1
+    }
+
+    private func fileModificationDate(for url: URL) -> Date? {
+        try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+    }
+
+    private func noteTitle(for url: URL) -> String {
+        url.deletingPathExtension().lastPathComponent
+    }
+
+    private func normalizedNoteReference(_ value: String) -> String {
+        value
+            .split(separator: "|", maxSplits: 1)
+            .first
+            .map(String.init)?
+            .split(separator: "#", maxSplits: 1)
+            .first
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+    }
+
+    private func wikiLinks(in text: String) -> [String] {
+        guard let regex = try? NSRegularExpression(pattern: #"\[\[([^\]]+)\]\]"#) else { return [] }
+        let nsText = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
+        return matches.compactMap { match in
+            guard match.numberOfRanges > 1 else { return nil }
+            let raw = nsText.substring(with: match.range(at: 1))
+            let normalized = normalizedNoteReference(raw)
+            return normalized.isEmpty ? nil : normalized
+        }
+    }
+
+    private func noteIndex() -> [String: URL] {
+        Dictionary(uniqueKeysWithValues: allFiles.map { (normalizedNoteReference(noteTitle(for: $0)), $0) })
+    }
+
+    func relationshipsForSelectedFile() -> NoteLinkRelationships? {
+        guard let selectedFile else { return nil }
+
+        let index = noteIndex()
+        var seenOutbound = Set<URL>()
+        var outbound: [URL] = []
+        var unresolved: [String] = []
+        var seenMissing = Set<String>()
+
+        for link in wikiLinks(in: fileContent) {
+            if let url = index[link] {
+                if seenOutbound.insert(url).inserted {
+                    outbound.append(url)
+                }
+            } else if seenMissing.insert(link).inserted {
+                unresolved.append(link)
+            }
+        }
+
+        let selectedTitle = normalizedNoteReference(noteTitle(for: selectedFile))
+        var inbound: [URL] = []
+        for url in allFiles where url != selectedFile {
+            guard let content = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            if wikiLinks(in: content).contains(selectedTitle) {
+                inbound.append(url)
+            }
+        }
+
+        return NoteLinkRelationships(outbound: outbound, inbound: inbound, unresolved: unresolved)
+    }
+
+    private func reloadSelectedFileFromDiskIfNeeded(force: Bool = false) {
+        guard !isDirty, let url = selectedFile else { return }
+        guard let fresh = try? String(contentsOf: url, encoding: .utf8) else { return }
+
+        let currentModificationDate = fileModificationDate(for: url)
+        let didChangeOnDisk = currentModificationDate != lastObservedModificationDate || fresh != fileContent
+        guard force || didChangeOnDisk else { return }
+
+        fileContent = fresh
+        isDirty = false
+        lastObservedModificationDate = currentModificationDate
     }
 
     func pickFolder() {
@@ -135,5 +234,6 @@ class AppState: ObservableObject {
         guard let url = selectedFile else { return }
         try? content.write(to: url, atomically: true, encoding: .utf8)
         isDirty = false
+        lastObservedModificationDate = fileModificationDate(for: url)
     }
 }

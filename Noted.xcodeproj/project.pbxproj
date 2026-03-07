@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		176429857B534B116295B882 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA991681C049F5B9232E8AD /* Theme.swift */; };
 		3F80F8E1B9FC707EA01334FA /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8E43EF1E8A2E10F1E9B970C /* EditorView.swift */; };
 		89B0DD02BE38F860CA4DA9F5 /* TerminalPaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6E776DDA97E544C924703CD /* TerminalPaneView.swift */; };
 		8EA422E9ED2F49954345DB60 /* FileTreeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91225417549CE4B6454C2BB3 /* FileTreeView.swift */; };
@@ -15,6 +16,7 @@
 		C47B40FD4775977503E93CB8 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CA6E810541C500FD0E733DE /* AppState.swift */; };
 		DB24729741EDC5E632213C2D /* NotedApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 152582446E9AC0B1343551D2 /* NotedApp.swift */; };
 		F38FF3252D2543213B02D7A4 /* FolderPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D03209C4FF3A5BE985FE616F /* FolderPickerView.swift */; };
+		F89A87A8418BCB48A81249EE /* RelatedLinksPaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76DF35339CD613B627D01D61 /* RelatedLinksPaneView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -22,7 +24,9 @@
 		1736A971B7173F018108BF51 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		1D1590A70DA7E63DD33AF5B6 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		2F6EE2C4CE0C9D0460958407 /* Noted.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Noted.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3DA991681C049F5B9232E8AD /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		6CA6E810541C500FD0E733DE /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		76DF35339CD613B627D01D61 /* RelatedLinksPaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelatedLinksPaneView.swift; sourceTree = "<group>"; };
 		91225417549CE4B6454C2BB3 /* FileTreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTreeView.swift; sourceTree = "<group>"; };
 		AF237272C5B4C7411B6A3917 /* Noted.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Noted.entitlements; sourceTree = "<group>"; };
 		C6E776DDA97E544C924703CD /* TerminalPaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalPaneView.swift; sourceTree = "<group>"; };
@@ -53,7 +57,9 @@
 				1D1590A70DA7E63DD33AF5B6 /* Info.plist */,
 				AF237272C5B4C7411B6A3917 /* Noted.entitlements */,
 				152582446E9AC0B1343551D2 /* NotedApp.swift */,
+				76DF35339CD613B627D01D61 /* RelatedLinksPaneView.swift */,
 				C6E776DDA97E544C924703CD /* TerminalPaneView.swift */,
+				3DA991681C049F5B9232E8AD /* Theme.swift */,
 			);
 			path = Noted;
 			sourceTree = "<group>";
@@ -140,7 +146,9 @@
 				8EA422E9ED2F49954345DB60 /* FileTreeView.swift in Sources */,
 				F38FF3252D2543213B02D7A4 /* FolderPickerView.swift in Sources */,
 				DB24729741EDC5E632213C2D /* NotedApp.swift in Sources */,
+				F89A87A8418BCB48A81249EE /* RelatedLinksPaneView.swift in Sources */,
 				89B0DD02BE38F860CA4DA9F5 /* TerminalPaneView.swift in Sources */,
+				176429857B534B116295B882 /* Theme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

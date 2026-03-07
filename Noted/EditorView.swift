@@ -5,24 +5,104 @@ struct EditorView: View {
     @EnvironmentObject var appState: AppState
 
     var body: some View {
-        VStack(spacing: 0) {
-            if appState.selectedFile == nil {
-                emptyState
-            } else {
+        VStack(spacing: 12) {
+            if let file = appState.selectedFile {
+                editorHeader(for: file)
+
                 RawEditor(text: $appState.fileContent)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(NotedTheme.border, lineWidth: 1)
+                    }
+
+                HStack {
+                    Text("Autosaves after a short pause")
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(NotedTheme.textMuted)
+                    Spacer()
+                    TinyBadge(text: file.pathExtension.uppercased().isEmpty ? "TEXT" : file.pathExtension.uppercased())
+                }
+            } else {
+                emptyState
             }
         }
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "doc.text")
-                .font(.system(size: 48))
-                .foregroundStyle(.quaternary)
-            Text("Select a file to edit")
-                .foregroundStyle(.tertiary)
+        VStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(NotedTheme.accent.opacity(0.12))
+                    .frame(width: 92, height: 92)
+                    .blur(radius: 4)
+
+                Image(systemName: "sparkles.rectangle.stack")
+                    .font(.system(size: 34, weight: .medium))
+                    .foregroundStyle(NotedTheme.textPrimary)
+            }
+
+            VStack(spacing: 10) {
+                Text("Choose a note to begin")
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .foregroundStyle(NotedTheme.textPrimary)
+                Text("Your editor is ready with live markdown styling, clean spacing, and a distraction-free canvas.")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(NotedTheme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 380)
+            }
+
+            TinyBadge(text: "Select a file from the library")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [NotedTheme.panelElevated.opacity(0.85), NotedTheme.editorShell.opacity(0.75)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(NotedTheme.border, lineWidth: 1)
+                }
+        }
+    }
+
+    private func editorHeader(for file: URL) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(NotedTheme.accent.opacity(0.14))
+                    .frame(width: 36, height: 36)
+                Image(systemName: "doc.text")
+                    .foregroundStyle(NotedTheme.accent)
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(file.deletingPathExtension().lastPathComponent)
+                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                    .foregroundStyle(NotedTheme.textPrimary)
+                Text(file.path)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(NotedTheme.textMuted)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            if appState.isDirty {
+                TinyBadge(text: "Editing", color: NotedTheme.success)
+            } else {
+                TinyBadge(text: "Synced")
+            }
+        }
     }
 }
 
@@ -46,9 +126,20 @@ struct RawEditor: NSViewRepresentable {
         textView.textContainerInset = NSSize(width: 24, height: 24)
         textView.textContainer?.widthTracksTextView = true
         textView.allowsUndo = true
-        textView.backgroundColor = .textBackgroundColor
+        textView.drawsBackground = true
+        textView.backgroundColor = NotedTheme.editorBackground
+        textView.textColor = NotedTheme.editorForeground
+        textView.insertionPointColor = NSColor(NotedTheme.accent)
+        textView.selectedTextAttributes = [
+            .backgroundColor: NotedTheme.editorSelection,
+            .foregroundColor: NotedTheme.editorForeground,
+        ]
         textView.usesFontPanel = false
         textView.usesRuler = false
+        textView.typingAttributes = [
+            .font: MarkdownTheme.body,
+            .foregroundColor: NotedTheme.editorForeground,
+        ]
 
         // Use NSTextStorageDelegate to detect ALL text changes reliably
         textView.textStorage?.delegate = context.coordinator
@@ -59,6 +150,9 @@ struct RawEditor: NSViewRepresentable {
         scroll.documentView = textView
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
+        scroll.borderType = .noBorder
+        scroll.drawsBackground = true
+        scroll.backgroundColor = NotedTheme.editorBackground
         return scroll
     }
 
@@ -128,9 +222,9 @@ private enum MarkdownTheme {
     static let h2   = NSFont.systemFont(ofSize: 22, weight: .bold)
     static let h3   = NSFont.systemFont(ofSize: 18, weight: .semibold)
     static let h4   = NSFont.systemFont(ofSize: 16, weight: .semibold)
-    static let dimColor       = NSColor.secondaryLabelColor
-    static let linkColor      = NSColor.linkColor
-    static let codeBackground = NSColor.quaternaryLabelColor.withAlphaComponent(0.15)
+    static let dimColor       = NotedTheme.editorMuted
+    static let linkColor      = NotedTheme.editorLink
+    static let codeBackground = NotedTheme.editorCodeBackground
 }
 
 // MARK: - Markdown styling extension
@@ -154,7 +248,7 @@ extension LinkAwareTextView {
 
         storage.setAttributes([
             .font: MarkdownTheme.body,
-            .foregroundColor: NSColor.labelColor,
+            .foregroundColor: NotedTheme.editorForeground,
         ], range: fullRange)
 
         let headerPatterns: [(String, NSFont)] = [
@@ -170,7 +264,7 @@ extension LinkAwareTextView {
                 storage.addAttributes([.font: font], range: range)
                 if let hashEnd = (storage.string as NSString).substring(with: range).range(of: "^#{1,6} ", options: .regularExpression),
                    let sub = Range(range, in: storage.string) {
-                    let nsHashRange = NSRange(hashEnd, in: storage.string.substring(with: sub))
+                    let nsHashRange = NSRange(hashEnd, in: String(storage.string[sub]))
                     let absRange = NSRange(location: range.location + nsHashRange.location, length: nsHashRange.length)
                     storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: absRange)
                 }
@@ -196,7 +290,7 @@ extension LinkAwareTextView {
             storage.addAttributes([.font: MarkdownTheme.mono, .backgroundColor: MarkdownTheme.codeBackground], range: range)
         }
         applyRegex("```[\\s\\S]*?```", to: text, storage: storage) { range in
-            storage.addAttributes([.font: MarkdownTheme.mono, .backgroundColor: MarkdownTheme.codeBackground, .foregroundColor: NSColor.labelColor], range: range)
+            storage.addAttributes([.font: MarkdownTheme.mono, .backgroundColor: MarkdownTheme.codeBackground, .foregroundColor: NotedTheme.editorForeground], range: range)
         }
         applyRegex("^> .+$", to: text, storage: storage, options: [.anchorsMatchLines]) { range in
             storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: range)
