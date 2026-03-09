@@ -12,7 +12,7 @@ enum SortCriterion: String, CaseIterable {
     case modified = "Date"
 }
 
-enum FileBrowserError: LocalizedError {
+enum FileBrowserError: LocalizedError, Equatable {
     case noWorkspace
     case invalidName
     case itemAlreadyExists(String)
