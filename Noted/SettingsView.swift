@@ -152,10 +152,10 @@ struct SettingsView: View {
             // MARK: - Auto-Save Section
             Section {
                 VStack(alignment: .leading, spacing: 10) {
-                    Toggle("Auto-commit on file save", isOn: $settings.autoSave)
+                    Toggle("Stage changes on file save", isOn: $settings.autoSave)
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
 
-                    Text("Automatically create a git commit whenever a file is saved. The commit message includes the filename and timestamp.")
+                    Text("Automatically stage git changes whenever a file is saved. Changes are committed when you push (Cmd+S, file switch, or quit).")
                         .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -172,7 +172,7 @@ struct SettingsView: View {
                     Toggle("Auto-push commits", isOn: $settings.autoPush)
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
 
-                    Text("When enabled, unpushed commits are squashed and pushed when you press Cmd+S, switch files, or quit the app. Requires a remote repository.")
+                    Text("When enabled, staged changes are committed and pushed when you press Cmd+S, switch files, or quit the app. Requires a remote repository.")
                         .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

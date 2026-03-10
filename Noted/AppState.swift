@@ -329,6 +329,40 @@ class AppState: ObservableObject {
         setupGit(for: url)
     }
 
+    /// Exits the current vault/folder and returns to the splash screen
+    func exitVault() {
+        // Try auto-push if enabled before exiting
+        autoPushIfEnabled()
+
+        // Clean up git service
+        gitService = nil
+        gitBranch = "main"
+        gitAheadCount = 0
+        gitSyncStatus = .notGitRepo
+
+        // Clean up file watching
+        stopWatching()
+
+        // Reset file state
+        selectedFile = nil
+        fileContent = ""
+        isDirty = false
+
+        // Reset history
+        history = []
+        historyIndex = -1
+        navigatingHistory = false
+        canGoBack = false
+        canGoForward = false
+
+        // Clear all files
+        allFiles = []
+        allProjectFiles = []
+
+        // Finally, clear the root URL to show the splash screen
+        rootURL = nil
+    }
+
     private func setupGit(for url: URL) {
         pushTimer?.invalidate()
         pushTimer = nil
@@ -587,68 +621,57 @@ class AppState: ObservableObject {
         try? content.write(to: url, atomically: true, encoding: .utf8)
         isDirty = false
         lastObservedModificationDate = fileModificationDate(for: url)
-        scheduleGitCommit(for: url)
+        stageGitChanges()
     }
 
-    private func scheduleGitCommit(for url: URL) {
-        // Only auto-commit if enabled in settings
-        guard settings.autoSave, let git = gitService else { return }
-        
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm"
-        let timestamp = dateFormatter.string(from: Date())
-        let message = "auto: update \(url.lastPathComponent) [\(timestamp)]"
+    /// Stages changes for git (used by auto-save to stage without committing)
+    private func stageGitChanges() {
+        // Only stage if auto-save or auto-push is enabled
+        guard (settings.autoSave || settings.autoPush), let git = gitService else { return }
 
-        gitSyncStatus = .committing
         gitQueue.async { [weak self] in
             guard let self else { return }
             do {
                 if git.hasChanges() {
                     try git.stageAll()
-                    try git.commit(message: message)
-                }
-                let ahead = git.aheadCount()
-                DispatchQueue.main.async {
-                    self.gitAheadCount = ahead
-                    self.gitSyncStatus = .idle
                 }
             } catch {
-                DispatchQueue.main.async {
-                    self.gitSyncStatus = .error(error.localizedDescription)
-                }
+                // Silently fail - staging isn't critical, will be retried on push
             }
         }
     }
 
-    /// Performs auto-push if enabled: squashes all unpushed commits and pushes
+    /// Performs auto-push if enabled: commits staged changes and pushes
     func autoPushIfEnabled() {
         guard settings.autoPush, let git = gitService, git.hasRemote() else { return }
-        
+
         gitSyncStatus = .pushing
         gitQueue.async { [weak self] in
             guard let self else { return }
             do {
                 // Pull first to avoid conflicts
                 try git.pullRebase()
-                
+
                 guard !git.hasConflicts() else {
                     DispatchQueue.main.async {
                         self.gitSyncStatus = .conflict("Merge conflicts detected. Resolve manually.")
                     }
                     return
                 }
-                
-                // Check if there are unpushed commits
-                let ahead = git.aheadCount()
-                if ahead > 0 {
-                    // Squash all unpushed commits into one
-                    // This is done interactively via git rebase
-                    try self.squashUnpushedCommits(git: git)
-                    
-                    // Push the squashed commit
-                    try git.push()
+
+                // Stage any uncommitted changes and commit them
+                if git.hasChanges() {
+                    try git.stageAll()
+                    let dateFormatter = DateFormatter()
+                    dateFormatter.dateFormat = "yyyy-MM-dd HH:mm"
+                    let timestamp = dateFormatter.string(from: Date())
+                    let message = "auto: update notes [\(timestamp)]"
+                    try git.commit(message: message)
                 }
-                
+
+                // Push all commits
+                try git.push()
+
                 let newAhead = git.aheadCount()
                 DispatchQueue.main.async {
                     self.gitAheadCount = newAhead
@@ -660,23 +683,5 @@ class AppState: ObservableObject {
                 }
             }
         }
-    }
-    
-    /// Squashes all unpushed commits into a single commit
-    private func squashUnpushedCommits(git: GitService) throws {
-        // Use git reset --soft to squash all unpushed commits
-        // This keeps the changes staged but resets the commit history
-        let ahead = git.aheadCount()
-        guard ahead > 0 else { return }
-        
-        // Get the commit message from the most recent commit
-        let latestMessage = (try? git.run(["log", "-1", "--format=%B", "HEAD"]))?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "auto: update notes"
-        
-        // Soft reset to the remote state
-        try git.run(["reset", "--soft", "HEAD~\(ahead)"])
-        
-        // Commit with the latest message (squashing all changes)
-        try git.commit(message: latestMessage)
     }
 }
