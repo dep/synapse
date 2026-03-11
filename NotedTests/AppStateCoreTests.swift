@@ -99,22 +99,38 @@ final class AppStateCoreTests: XCTestCase {
         XCTAssertFalse(sut.isCommandPalettePresented)
     }
 
-    // MARK: - Root-note sheet
+    // MARK: - New note workflow
 
     func test_presentRootNoteSheet_requiresWorkspace() {
         sut.presentRootNoteSheet()
-        XCTAssertFalse(sut.isRootNoteSheetPresented, "Must not present without a workspace")
+        XCTAssertFalse(sut.isCommandPalettePresented, "Must not present without a workspace")
+        XCTAssertNil(sut.selectedFile)
     }
 
-    func test_presentRootNoteSheet_withWorkspace_presents() {
+    func test_presentRootNoteSheet_withWorkspaceAndNoTemplates_createsUntitledNote() {
         sut.openFolder(tempDir)
         sut.presentRootNoteSheet()
-        XCTAssertTrue(sut.isRootNoteSheetPresented)
+        XCTAssertNotNil(sut.selectedFile)
+        XCTAssertFalse(sut.isCommandPalettePresented)
+    }
+
+    func test_presentRootNoteSheet_withTemplates_presentsCommandPalette() {
+        sut.openFolder(tempDir)
+        let templatesDirectory = tempDir.appendingPathComponent("templates", isDirectory: true)
+        try! FileManager.default.createDirectory(at: templatesDirectory, withIntermediateDirectories: true)
+        let template = templatesDirectory.appendingPathComponent("Meeting.md")
+        FileManager.default.createFile(atPath: template.path, contents: "# Meeting".data(using: .utf8))
+        sut.refreshAllFiles()
+
+        sut.presentRootNoteSheet()
+
+        XCTAssertTrue(sut.isCommandPalettePresented)
+        XCTAssertNil(sut.selectedFile)
     }
 
     func test_dismissRootNoteSheet_hides() {
         sut.openFolder(tempDir)
-        sut.presentRootNoteSheet()
+        sut.isRootNoteSheetPresented = true
         sut.dismissRootNoteSheet()
         XCTAssertFalse(sut.isRootNoteSheetPresented)
     }

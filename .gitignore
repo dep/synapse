@@ -1,3 +1,4 @@
+.DS_Store
 
 # AI custom context (personal/team preferences, gitignored)
 .agents/USER_RULES.md

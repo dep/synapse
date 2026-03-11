@@ -9,18 +9,18 @@ struct CommandPaletteView: View {
     @FocusState private var isSearchFocused: Bool
 
     private var results: [URL] {
-        let files = appState.allProjectFiles
+        let files = sourceFiles
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !trimmedQuery.isEmpty else {
-            let recent = appState.recentFiles
+            let recent = appState.commandPaletteMode == .files ? appState.recentFiles : []
             if !recent.isEmpty { return recent }
             return Array(files.prefix(40))
         }
 
         let needle = trimmedQuery.lowercased()
 
-        let scoredResults = files
+        let scoredResults: [(url: URL, score: Int)] = files
             .compactMap { url -> (url: URL, score: Int)? in
                 let name = url.lastPathComponent.lowercased()
                 let relativePath = appState.relativePath(for: url).lowercased()
@@ -71,6 +71,51 @@ struct CommandPaletteView: View {
             .map { $0 }
     }
 
+    private var sourceFiles: [URL] {
+        switch appState.commandPaletteMode {
+        case .files:
+            return appState.allProjectFiles
+        case .templates:
+            return appState.availableTemplates()
+        }
+    }
+
+    private var searchPlaceholder: String {
+        switch appState.commandPaletteMode {
+        case .files:
+            return "Open any file in the workspace"
+        case .templates:
+            return "Choose a template for the new note"
+        }
+    }
+
+    private var resultsBadgeText: String {
+        switch appState.commandPaletteMode {
+        case .files:
+            return "\(results.count) matches"
+        case .templates:
+            return "\(results.count) templates"
+        }
+    }
+
+    private var emptyTitle: String {
+        switch appState.commandPaletteMode {
+        case .files:
+            return "No matching files"
+        case .templates:
+            return "No matching templates"
+        }
+    }
+
+    private var emptyMessage: String {
+        switch appState.commandPaletteMode {
+        case .files:
+            return "Try a file name, path fragment, or extension."
+        case .templates:
+            return "Try a template name or path fragment."
+        }
+    }
+
     var body: some View {
         ZStack {
             Color.black.opacity(0.40)
@@ -82,14 +127,14 @@ struct CommandPaletteView: View {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(NotedTheme.textMuted)
 
-                    TextField("Open any file in the workspace", text: $query)
+                    TextField(searchPlaceholder, text: $query)
                         .textFieldStyle(.plain)
                         .font(.system(size: 16, weight: .medium, design: .rounded))
                         .foregroundStyle(NotedTheme.textPrimary)
                         .focused($isSearchFocused)
                         .onSubmit(openTopResult)
 
-                    TinyBadge(text: "\(results.count) matches")
+                    TinyBadge(text: resultsBadgeText)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
@@ -149,10 +194,10 @@ struct CommandPaletteView: View {
                 LazyVStack(alignment: .leading, spacing: 6) {
                     if results.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("No matching files")
+                            Text(emptyTitle)
                                 .font(.system(size: 13, weight: .semibold, design: .rounded))
                                 .foregroundStyle(NotedTheme.textPrimary)
-                            Text("Try a file name, path fragment, or extension.")
+                            Text(emptyMessage)
                                 .font(.system(size: 12, weight: .medium, design: .rounded))
                                 .foregroundStyle(NotedTheme.textMuted)
                         }
@@ -162,7 +207,7 @@ struct CommandPaletteView: View {
                         ForEach(Array(results.enumerated()), id: \.offset) { index, url in
                             Button {
                                 selectedIndex = index
-                                appState.openFile(url)
+                                openResult(url)
                             } label: {
                                 HStack(spacing: 10) {
                                     Image(systemName: fileIcon(for: url))
@@ -197,7 +242,7 @@ struct CommandPaletteView: View {
 
     private func openTopResult() {
         guard let result = selectedResult else { return }
-        appState.openFile(result)
+        openResult(result)
     }
 
     private var selectedResult: URL? {
@@ -240,12 +285,24 @@ struct CommandPaletteView: View {
     }
 
     private func fileIcon(for url: URL) -> String {
+        if appState.commandPaletteMode == .templates {
+            return "doc.badge.plus"
+        }
         switch url.pathExtension.lowercased() {
         case "md", "markdown": return "doc.text"
         case "txt": return "doc.plaintext"
         case "swift": return "swift"
         case "json", "yml", "yaml", "toml": return "curlybraces"
         default: return "doc"
+        }
+    }
+
+    private func openResult(_ url: URL) {
+        switch appState.commandPaletteMode {
+        case .files:
+            appState.openFile(url)
+        case .templates:
+            _ = try? appState.createNoteFromTemplate(url)
         }
     }
 }

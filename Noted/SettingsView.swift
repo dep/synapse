@@ -87,6 +87,22 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.vertical, 4)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Templates Folder")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.secondary)
+
+                    TextField("templates", text: $settings.templatesDirectory)
+                        .font(.system(.body, design: .monospaced))
+                        .textFieldStyle(.roundedBorder)
+
+                    Text("Markdown files inside this folder are offered as templates when you trigger New Note. Use a path relative to the open workspace.")
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 4)
             } header: {
                 Text("File Browser")
                     .font(.system(size: 13, weight: .semibold, design: .rounded))

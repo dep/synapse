@@ -82,6 +82,10 @@ struct ContentView: View {
             RootNoteSheet()
                 .environmentObject(appState)
         }
+        .sheet(item: $appState.pendingTemplateRename) { (request: TemplateRenameRequest) in
+            TemplateRenameSheet(request: request)
+                .environmentObject(appState)
+        }
     }
 
     @ViewBuilder
@@ -397,6 +401,64 @@ private struct GitSyncPopover: View {
         Circle()
             .fill(color)
             .frame(width: 7, height: 7)
+    }
+}
+
+private struct TemplateRenameSheet: View {
+    @EnvironmentObject var appState: AppState
+    let request: TemplateRenameRequest
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var errorMessage: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Name New Note")
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundStyle(NotedTheme.textPrimary)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Filename")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(NotedTheme.textSecondary)
+
+                TextField("Meeting Notes", text: $name)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(confirmRename)
+
+                Text("The note already contains the selected template content. Give it a final name to keep working.")
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(NotedTheme.textMuted)
+            }
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(.red)
+            }
+
+            HStack {
+                Spacer()
+                Button("Later") {
+                    appState.dismissTemplateRenamePrompt()
+                    dismiss()
+                }
+                Button("Rename", action: confirmRename)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 380)
+    }
+
+    private func confirmRename() {
+        do {
+            try appState.confirmTemplateRename(name)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }
 

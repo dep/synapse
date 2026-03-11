@@ -30,6 +30,7 @@ final class SettingsManagerTests: XCTestCase {
     func test_initialState_defaultValues() {
         XCTAssertEqual(sut.onBootCommand, "", "On-boot command should default to empty")
         XCTAssertEqual(sut.fileExtensionFilter, "*.md, *.txt", "File extension filter should default to *.md, *.txt")
+        XCTAssertEqual(sut.templatesDirectory, "templates", "Templates directory should default to templates")
     }
 
     // MARK: - On-Boot Command
@@ -77,6 +78,20 @@ final class SettingsManagerTests: XCTestCase {
         let defaultFilter = sut.fileExtensionFilter
         XCTAssertTrue(defaultFilter.contains("*.md"), "Default filter should include *.md")
         XCTAssertTrue(defaultFilter.contains("*.txt"), "Default filter should include *.txt")
+    }
+
+    // MARK: - Templates Directory
+
+    func test_templatesDirectory_canBeSet() {
+        sut.templatesDirectory = "snippets"
+        XCTAssertEqual(sut.templatesDirectory, "snippets")
+    }
+
+    func test_templatesDirectory_persistsToDisk() {
+        sut.templatesDirectory = "snippets"
+
+        let newManager = SettingsManager(configPath: configFilePath)
+        XCTAssertEqual(newManager.templatesDirectory, "snippets")
     }
 
     // MARK: - Extension Parsing
@@ -170,6 +185,7 @@ final class SettingsManagerTests: XCTestCase {
 
         XCTAssertEqual(json["onBootCommand"] as? String, "opencode")
         XCTAssertEqual(json["fileExtensionFilter"] as? String, "*.md")
+        XCTAssertEqual(json["templatesDirectory"] as? String, "templates")
     }
 
     func test_load_readsFromDisk() {
@@ -177,6 +193,7 @@ final class SettingsManagerTests: XCTestCase {
         let config: [String: Any] = [
             "onBootCommand": "npm start",
             "fileExtensionFilter": "*.swift",
+            "templatesDirectory": "snippets",
             "autoSave": false,
             "autoPush": false
         ]
@@ -188,6 +205,24 @@ final class SettingsManagerTests: XCTestCase {
 
         XCTAssertEqual(newManager.onBootCommand, "npm start")
         XCTAssertEqual(newManager.fileExtensionFilter, "*.swift")
+        XCTAssertEqual(newManager.templatesDirectory, "snippets")
+    }
+
+    func test_load_missingTemplatesDirectoryUsesDefaultAndPreservesOtherSettings() {
+        let config: [String: Any] = [
+            "onBootCommand": "npm start",
+            "fileExtensionFilter": "*.swift",
+            "autoSave": true,
+            "autoPush": false
+        ]
+        let data = try! JSONSerialization.data(withJSONObject: config)
+        try! data.write(to: URL(fileURLWithPath: configFilePath))
+
+        let newManager = SettingsManager(configPath: configFilePath)
+
+        XCTAssertEqual(newManager.templatesDirectory, "templates")
+        XCTAssertTrue(newManager.autoSave)
+        XCTAssertFalse(newManager.autoPush)
     }
 
     func test_load_missingFileUsesDefaults() {
@@ -199,6 +234,7 @@ final class SettingsManagerTests: XCTestCase {
 
         XCTAssertEqual(newManager.onBootCommand, "")
         XCTAssertEqual(newManager.fileExtensionFilter, "*.md, *.txt")
+        XCTAssertEqual(newManager.templatesDirectory, "templates")
     }
 
     func test_load_invalidJsonUsesDefaults() {
@@ -211,6 +247,7 @@ final class SettingsManagerTests: XCTestCase {
 
         XCTAssertEqual(newManager.onBootCommand, "")
         XCTAssertEqual(newManager.fileExtensionFilter, "*.md, *.txt")
+        XCTAssertEqual(newManager.templatesDirectory, "templates")
     }
 
     // MARK: - Changes Notification

@@ -9,6 +9,9 @@ class SettingsManager: ObservableObject {
     @Published var fileExtensionFilter: String {
         didSet { save() }
     }
+    @Published var templatesDirectory: String {
+        didSet { save() }
+    }
     @Published var autoSave: Bool {
         didSet { save() }
     }
@@ -21,8 +24,32 @@ class SettingsManager: ObservableObject {
     private struct Config: Codable {
         var onBootCommand: String
         var fileExtensionFilter: String
-        var autoSave: Bool = false
-        var autoPush: Bool = false
+        var templatesDirectory: String
+        var autoSave: Bool
+        var autoPush: Bool
+
+        init(
+            onBootCommand: String,
+            fileExtensionFilter: String,
+            templatesDirectory: String = "templates",
+            autoSave: Bool = false,
+            autoPush: Bool = false
+        ) {
+            self.onBootCommand = onBootCommand
+            self.fileExtensionFilter = fileExtensionFilter
+            self.templatesDirectory = templatesDirectory
+            self.autoSave = autoSave
+            self.autoPush = autoPush
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            onBootCommand = try container.decode(String.self, forKey: .onBootCommand)
+            fileExtensionFilter = try container.decode(String.self, forKey: .fileExtensionFilter)
+            templatesDirectory = try container.decodeIfPresent(String.self, forKey: .templatesDirectory) ?? "templates"
+            autoSave = try container.decodeIfPresent(Bool.self, forKey: .autoSave) ?? false
+            autoPush = try container.decodeIfPresent(Bool.self, forKey: .autoPush) ?? false
+        }
     }
 
     /// Initialize with default config path in Application Support
@@ -42,11 +69,13 @@ class SettingsManager: ObservableObject {
         if let config = Self.loadConfig(from: configPath) {
             self.onBootCommand = config.onBootCommand
             self.fileExtensionFilter = config.fileExtensionFilter
+            self.templatesDirectory = config.templatesDirectory
             self.autoSave = config.autoSave
             self.autoPush = config.autoPush
         } else {
             self.onBootCommand = ""
             self.fileExtensionFilter = "*.md, *.txt"
+            self.templatesDirectory = "templates"
             self.autoSave = false
             self.autoPush = false
         }
@@ -94,6 +123,7 @@ class SettingsManager: ObservableObject {
         let config = Config(
             onBootCommand: onBootCommand,
             fileExtensionFilter: fileExtensionFilter,
+            templatesDirectory: templatesDirectory,
             autoSave: autoSave,
             autoPush: autoPush
         )
