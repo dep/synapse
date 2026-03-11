@@ -1,10 +1,19 @@
 ### Important Repo Rules:
 
-1. Always kill, rebuild, and restart the app after making changes to the codebase.
+1. <critical_workflow>
+**MANDATORY BUILD & RELAUNCH**
+Whenever you modify `.swift` files, you MUST rebuild and relaunch the app BEFORE you ask the user for feedback or perform git operations. 
 
+Do not skip this step, even if unit tests pass. This overrides the "Minimize Verification Loops" rule.
+
+Execute this exact command using the bash tool:
+```bash
+pkill -9 "Noted" || true && sleep 1 && xcodegen generate && xcodebuild -project "Noted.xcodeproj" -scheme "Noted" -destination "platform=macOS" build && open ~/Library/Developer/Xcode/DerivedData/Noted-*/Build/Products/Debug/Noted.app
 ```
-xcodegen generate && xcodebuild -project "Noted.xcodeproj" -scheme "Noted" -destination "platform=macOS" build && open ~/Library/Developer/Xcode/DerivedData/Noted-*/Build/Products/Debug/Noted.app
-```
+
+When you do this, you MUST include this exact text in your response to the user:
+"🚀 **Rebuilt and relaunched the Noted app.**"
+</critical_workflow>
 
 2. Release/distribution changes must be reflected in `project.yml`, not only in Xcode UI. This repo uses `xcodegen`, so signing or hardened runtime changes made only in Xcode will be overwritten the next time the project is generated.
 
