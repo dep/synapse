@@ -21,9 +21,14 @@ struct ContentView: View {
                             .background(NotedTheme.panel)
                     }
 
-                    EditorView()
-                        .frame(minWidth: 420)
-                        .background(NotedTheme.editorShell)
+                    VStack(spacing: 0) {
+                        TabBarView()
+                            .environmentObject(appState)
+                        
+                        EditorView()
+                            .frame(minWidth: 420)
+                            .background(NotedTheme.editorShell)
+                    }
 
                     if isRightSidebarVisible {
                         TerminalPaneView()
@@ -69,6 +74,13 @@ struct ContentView: View {
                     NotificationCenter.default.post(name: .advanceSearchMatch, object: nil, userInfo: [SearchMatchKey.delta: -1])
                 }
                 .keyboardShortcut("g", modifiers: [.command, .shift])
+                .hidden()
+                Button("") {
+                    if let index = appState.activeTabIndex {
+                        appState.closeTab(at: index)
+                    }
+                }
+                .keyboardShortcut("w", modifiers: .command)
                 .hidden()
             }
         }

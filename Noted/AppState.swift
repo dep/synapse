@@ -41,6 +41,10 @@ class AppState: ObservableObject {
     @Published var allFiles: [URL] = []
     @Published var allProjectFiles: [URL] = []
     @Published var recentFiles: [URL] = []
+    
+    // Tabs
+    @Published var tabs: [URL] = []
+    @Published var activeTabIndex: Int? = nil
     @Published var canGoBack: Bool = false
     @Published var canGoForward: Bool = false
     @Published var isCommandPalettePresented: Bool = false
@@ -597,6 +601,87 @@ class AppState: ObservableObject {
         recentFiles.removeAll { $0 == url }
         recentFiles.insert(url, at: 0)
         if recentFiles.count > 40 { recentFiles = Array(recentFiles.prefix(40)) }
+        
+        // Tab management: replace current tab (default behavior)
+        if let activeIndex = activeTabIndex {
+            tabs[activeIndex] = url
+        } else {
+            tabs.append(url)
+            activeTabIndex = tabs.count - 1
+        }
+    }
+
+    func openFileInNewTab(_ url: URL) {
+        // If file already open in a tab, just switch to it
+        if let existingIndex = tabs.firstIndex(of: url) {
+            activeTabIndex = existingIndex
+            // Still need to actually open the file content
+            openFile(url)
+            // Restore the tab selection (openFile replaces)
+            activeTabIndex = existingIndex
+        } else {
+            // Add new tab and open file
+            tabs.append(url)
+            activeTabIndex = tabs.count - 1
+            openFile(url)
+            // Restore the tab selection (openFile replaces)
+            activeTabIndex = tabs.count - 1
+        }
+    }
+
+    func closeTab(at index: Int) {
+        guard index >= 0 && index < tabs.count else { return }
+        
+        let wasActive = (index == activeTabIndex)
+        
+        // Auto-save if dirty
+        if isDirty {
+            saveCurrentFile(content: fileContent)
+        }
+        
+        tabs.remove(at: index)
+        
+        if tabs.isEmpty {
+            activeTabIndex = nil
+            selectedFile = nil
+            fileContent = ""
+            isDirty = false
+            return
+        }
+        
+        // Update active tab index
+        if wasActive {
+            // Focus left tab, or right if no left
+            activeTabIndex = min(index, tabs.count - 1)
+        } else if let currentActive = activeTabIndex, index < currentActive {
+            // Closed tab was left of active, adjust index
+            activeTabIndex = currentActive - 1
+        }
+        
+        // Load the new active tab's content
+        if let newIndex = activeTabIndex {
+            let newFile = tabs[newIndex]
+            selectedFile = newFile
+            fileContent = (try? String(contentsOf: newFile, encoding: .utf8)) ?? ""
+            isDirty = false
+            startWatching(newFile)
+        }
+    }
+
+    func switchTab(to index: Int) {
+        guard index >= 0 && index < tabs.count else { return }
+        
+        // Save current file if dirty before switching
+        if isDirty {
+            saveCurrentFile(content: fileContent)
+        }
+        
+        activeTabIndex = index
+        let newFile = tabs[index]
+        selectedFile = newFile
+        fileContent = (try? String(contentsOf: newFile, encoding: .utf8)) ?? ""
+        isDirty = false
+        startWatching(newFile)
     }
 
     func goBack() {
