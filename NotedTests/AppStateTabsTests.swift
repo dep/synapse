@@ -8,10 +8,12 @@ final class AppStateTabsTests: XCTestCase {
     var fileA: URL!
     var fileB: URL!
     var fileC: URL!
+    var currentTime: Date!
     
     override func setUp() {
         super.setUp()
-        sut = AppState()
+        currentTime = Date(timeIntervalSince1970: 1_700_000_000)
+        sut = AppState(now: { [weak self] in self?.currentTime ?? Date() })
         
         // Create temp directory with test files
         tempDir = FileManager.default.temporaryDirectory
@@ -282,5 +284,61 @@ final class AppStateTabsTests: XCTestCase {
 
         XCTAssertEqual(sut.activeTabIndex, 1)
         XCTAssertEqual(sut.selectedFile, fileB)
+    }
+
+    func test_closeOtherTabs_keepsOnlyActiveTab() {
+        sut.openFile(fileA)
+        sut.openFileInNewTab(fileB)
+        sut.openFileInNewTab(fileC)
+        sut.switchTab(to: 1)
+
+        sut.closeOtherTabs()
+
+        XCTAssertEqual(sut.tabs, [fileB])
+        XCTAssertEqual(sut.activeTabIndex, 0)
+        XCTAssertEqual(sut.selectedFile, fileB)
+    }
+
+    func test_closeOtherTabs_reopenRestoresClosedTabsInReverseOrder() {
+        sut.openFile(fileA)
+        sut.openFileInNewTab(fileB)
+        sut.openFileInNewTab(fileC)
+        sut.switchTab(to: 1)
+
+        sut.closeOtherTabs()
+
+        sut.reopenLastClosedTab()
+        XCTAssertEqual(sut.tabs, [fileB, fileC])
+        XCTAssertEqual(sut.selectedFile, fileC)
+
+        sut.reopenLastClosedTab()
+        XCTAssertEqual(sut.tabs, [fileA, fileB, fileC])
+        XCTAssertEqual(sut.selectedFile, fileA)
+    }
+
+    func test_cycleMostRecentTabs_togglesBetweenTwoMostRecentTabs() {
+        sut.openFile(fileA)
+        sut.openFileInNewTab(fileB)
+        sut.openFileInNewTab(fileC)
+        sut.switchTab(to: 0)
+
+        sut.cycleMostRecentTabs()
+        XCTAssertEqual(sut.selectedFile, fileC)
+
+        sut.cycleMostRecentTabs()
+        XCTAssertEqual(sut.selectedFile, fileA)
+    }
+
+    func test_cycleMostRecentTabs_ignoresLessRecentTabsWhenToggling() {
+        sut.openFile(fileA)
+        sut.openFileInNewTab(fileB)
+        sut.openFileInNewTab(fileC)
+        sut.switchTab(to: 0)
+
+        sut.cycleMostRecentTabs()
+        XCTAssertEqual(sut.selectedFile, fileC)
+
+        sut.cycleMostRecentTabs()
+        XCTAssertEqual(sut.selectedFile, fileA)
     }
 }

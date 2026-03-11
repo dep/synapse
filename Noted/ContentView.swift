@@ -1,10 +1,12 @@
 import SwiftUI
+import AppKit
 
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @State private var isLeftSidebarVisible = true
     @State private var isRightSidebarVisible = true
     @State private var isRelatedPaneVisible = true
+    @State private var keyEventMonitor: Any?
 
     var body: some View {
         ZStack {
@@ -82,6 +84,9 @@ struct ContentView: View {
                 }
                 .keyboardShortcut("w", modifiers: .command)
                 .hidden()
+                Button("") { appState.closeOtherTabs() }
+                    .keyboardShortcut("w", modifiers: [.command, .shift])
+                    .hidden()
                 Button("") {
                     appState.createNewUntitledNote()
                 }
@@ -128,6 +133,31 @@ struct ContentView: View {
         ) {
             RootNoteSheet()
                 .environmentObject(appState)
+        }
+        .onAppear(perform: installEventMonitor)
+        .onDisappear(perform: removeEventMonitor)
+    }
+
+    private func installEventMonitor() {
+        removeEventMonitor()
+        keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard !appState.isCommandPalettePresented,
+                  !appState.isSearchPresented,
+                  event.keyCode == 48,
+                  event.modifierFlags.contains(.control),
+                  !event.modifierFlags.contains(.command) else {
+                return event
+            }
+
+            appState.cycleMostRecentTabs()
+            return nil
+        }
+    }
+
+    private func removeEventMonitor() {
+        if let keyEventMonitor {
+            NSEvent.removeMonitor(keyEventMonitor)
+            self.keyEventMonitor = nil
         }
     }
 

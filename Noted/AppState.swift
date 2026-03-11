@@ -74,6 +74,8 @@ class AppState: ObservableObject {
     private var navigatingHistory = false
     private var lastObservedModificationDate: Date?
     private var closedTabs: [(url: URL, index: Int)] = []
+    private var tabMRU: [URL] = []
+    private let now: () -> Date
 
     private var saveCancellable: AnyCancellable?
     private var fileWatcher: DispatchSourceFileSystemObject?
@@ -85,7 +87,8 @@ class AppState: ObservableObject {
     private let gitQueue = DispatchQueue(label: "com.noted.git", qos: .background)
     private let machineName: String = Host.current().localizedName ?? ProcessInfo.processInfo.hostName
 
-    init() {
+    init(now: @escaping () -> Date = Date.init) {
+        self.now = now
         saveCancellable = $fileContent
             .dropFirst()
             .debounce(for: .seconds(1), scheduler: RunLoop.main)
@@ -169,6 +172,31 @@ class AppState: ObservableObject {
         return suffix.reduce(standardized(newBase)) { partialResult, component in
             partialResult.appendingPathComponent(component)
         }
+    }
+
+    private func recordTabRecency(for url: URL) {
+        tabMRU.removeAll { $0 == url }
+        tabMRU.insert(url, at: 0)
+    }
+
+    private func activateTab(at index: Int, updateRecency: Bool = true, resetCycle: Bool = true) {
+        guard index >= 0 && index < tabs.count else { return }
+
+        if isDirty {
+            saveCurrentFile(content: fileContent)
+        }
+
+        activeTabIndex = index
+        let newFile = tabs[index]
+        selectedFile = newFile
+        fileContent = (try? String(contentsOf: newFile, encoding: .utf8)) ?? ""
+        isDirty = false
+        startWatching(newFile)
+
+        if updateRecency {
+            recordTabRecency(for: newFile)
+        }
+
     }
 
     private func refreshedHistoryIndex() -> Int {
@@ -672,6 +700,7 @@ class AppState: ObservableObject {
         recentFiles.removeAll { $0 == url }
         recentFiles.insert(url, at: 0)
         if recentFiles.count > 40 { recentFiles = Array(recentFiles.prefix(40)) }
+        recordTabRecency(for: url)
     }
 
     func closeTab(at index: Int) {
@@ -686,6 +715,7 @@ class AppState: ObservableObject {
         
         let closedURL = tabs[index]
         closedTabs.append((url: closedURL, index: index))
+        tabMRU.removeAll { $0 == closedURL }
         tabs.remove(at: index)
         
         if tabs.isEmpty {
@@ -693,6 +723,7 @@ class AppState: ObservableObject {
             selectedFile = nil
             fileContent = ""
             isDirty = false
+            tabMRU = []
             return
         }
         
@@ -712,23 +743,12 @@ class AppState: ObservableObject {
             fileContent = (try? String(contentsOf: newFile, encoding: .utf8)) ?? ""
             isDirty = false
             startWatching(newFile)
+            recordTabRecency(for: newFile)
         }
     }
 
     func switchTab(to index: Int) {
-        guard index >= 0 && index < tabs.count else { return }
-        
-        // Save current file if dirty before switching
-        if isDirty {
-            saveCurrentFile(content: fileContent)
-        }
-        
-        activeTabIndex = index
-        let newFile = tabs[index]
-        selectedFile = newFile
-        fileContent = (try? String(contentsOf: newFile, encoding: .utf8)) ?? ""
-        isDirty = false
-        startWatching(newFile)
+        activateTab(at: index)
     }
 
     func switchToTabShortcut(_ shortcutNumber: Int) {
@@ -769,6 +789,36 @@ class AppState: ObservableObject {
     func switchToNextTab() {
         guard let activeTabIndex, activeTabIndex < tabs.count - 1 else { return }
         switchTab(to: activeTabIndex + 1)
+    }
+
+    func closeOtherTabs() {
+        guard let activeTabIndex else { return }
+
+        let activeURL = tabs[activeTabIndex]
+        for (index, url) in tabs.enumerated() where index != activeTabIndex {
+            closedTabs.append((url: url, index: index))
+        }
+
+        tabs = [activeURL]
+        self.activeTabIndex = 0
+        selectedFile = activeURL
+        fileContent = (try? String(contentsOf: activeURL, encoding: .utf8)) ?? ""
+        isDirty = false
+        startWatching(activeURL)
+        tabMRU = [activeURL]
+    }
+
+    func cycleMostRecentTabs() {
+        guard tabs.count > 1 else { return }
+
+        if let selectedFile {
+            recordTabRecency(for: selectedFile)
+        }
+
+        guard tabMRU.count > 1,
+              let index = tabs.firstIndex(of: tabMRU[1]) else { return }
+
+        activateTab(at: index)
     }
 
     func goBack() {
