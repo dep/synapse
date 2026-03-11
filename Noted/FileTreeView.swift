@@ -74,6 +74,7 @@ func buildFileTree(at url: URL, sortCriterion: SortCriterion, ascending: Bool, s
         let isDir = (try? childURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
         let modificationDate = (try? childURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
         let name = childURL.lastPathComponent
+        if isDir && name == ".git" { continue }
         if !isDir && name.hasPrefix(".") { continue }
         items.append((childURL, isDir, name, modificationDate))
     }
