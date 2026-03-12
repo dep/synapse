@@ -42,6 +42,14 @@ class SettingsManager: ObservableObject {
     @Published var rightSidebarPanes: [SidebarPane] {
         didSet { save() }
     }
+    /// Persisted pane heights keyed by SidebarPane rawValue, for the left sidebar
+    @Published var leftPaneHeights: [String: CGFloat] {
+        didSet { save() }
+    }
+    /// Persisted pane heights keyed by SidebarPane rawValue, for the right sidebar
+    @Published var rightPaneHeights: [String: CGFloat] {
+        didSet { save() }
+    }
 
     let configPath: String
 
@@ -53,15 +61,19 @@ class SettingsManager: ObservableObject {
         var autoPush: Bool
         var leftSidebarPanes: [SidebarPane]?
         var rightSidebarPanes: [SidebarPane]?
+        var leftPaneHeights: [String: CGFloat]?
+        var rightPaneHeights: [String: CGFloat]?
 
         init(
             onBootCommand: String,
             fileExtensionFilter: String,
-            templatesDirectory: String = "templates",
-            autoSave: Bool = false,
-            autoPush: Bool = false,
-            leftSidebarPanes: [SidebarPane]? = nil,
-            rightSidebarPanes: [SidebarPane]? = nil
+            templatesDirectory: String,
+            autoSave: Bool,
+            autoPush: Bool,
+            leftSidebarPanes: [SidebarPane]?,
+            rightSidebarPanes: [SidebarPane]?,
+            leftPaneHeights: [String: CGFloat]?,
+            rightPaneHeights: [String: CGFloat]?
         ) {
             self.onBootCommand = onBootCommand
             self.fileExtensionFilter = fileExtensionFilter
@@ -70,6 +82,8 @@ class SettingsManager: ObservableObject {
             self.autoPush = autoPush
             self.leftSidebarPanes = leftSidebarPanes
             self.rightSidebarPanes = rightSidebarPanes
+            self.leftPaneHeights = leftPaneHeights
+            self.rightPaneHeights = rightPaneHeights
         }
 
         init(from decoder: Decoder) throws {
@@ -81,6 +95,8 @@ class SettingsManager: ObservableObject {
             autoPush = try container.decodeIfPresent(Bool.self, forKey: .autoPush) ?? false
             leftSidebarPanes = try container.decodeIfPresent([SidebarPane].self, forKey: .leftSidebarPanes)
             rightSidebarPanes = try container.decodeIfPresent([SidebarPane].self, forKey: .rightSidebarPanes)
+            leftPaneHeights = try container.decodeIfPresent([String: CGFloat].self, forKey: .leftPaneHeights)
+            rightPaneHeights = try container.decodeIfPresent([String: CGFloat].self, forKey: .rightPaneHeights)
         }
     }
 
@@ -106,6 +122,8 @@ class SettingsManager: ObservableObject {
             self.autoPush = config.autoPush
             self.leftSidebarPanes = config.leftSidebarPanes ?? [.files, .tags, .links]
             self.rightSidebarPanes = config.rightSidebarPanes ?? [.terminal]
+            self.leftPaneHeights = config.leftPaneHeights ?? [:]
+            self.rightPaneHeights = config.rightPaneHeights ?? [:]
         } else {
             self.onBootCommand = ""
             self.fileExtensionFilter = "*.md, *.txt"
@@ -114,6 +132,8 @@ class SettingsManager: ObservableObject {
             self.autoPush = false
             self.leftSidebarPanes = [.files, .tags, .links]
             self.rightSidebarPanes = [.terminal]
+            self.leftPaneHeights = [:]
+            self.rightPaneHeights = [:]
         }
     }
 
@@ -163,16 +183,14 @@ class SettingsManager: ObservableObject {
             autoSave: autoSave,
             autoPush: autoPush,
             leftSidebarPanes: leftSidebarPanes,
-            rightSidebarPanes: rightSidebarPanes
+            rightSidebarPanes: rightSidebarPanes,
+            leftPaneHeights: leftPaneHeights,
+            rightPaneHeights: rightPaneHeights
         )
-
         guard let data = try? JSONEncoder().encode(config) else { return }
-
-        // Ensure parent directory exists
         let configURL = URL(fileURLWithPath: configPath)
         let parentDir = configURL.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: parentDir, withIntermediateDirectories: true)
-
         try? data.write(to: configURL)
     }
 

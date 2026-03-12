@@ -276,6 +276,64 @@ final class SettingsManagerTests: XCTestCase {
         cancellable.cancel()
     }
 
+    // MARK: - Sidebar Panes
+
+    func test_initialState_defaultSidebarPanes() {
+        XCTAssertEqual(sut.leftSidebarPanes, [.files, .tags, .links])
+        XCTAssertEqual(sut.rightSidebarPanes, [.terminal])
+    }
+
+    func test_leftSidebarPanes_canBeModified() {
+        sut.leftSidebarPanes = [.files]
+        XCTAssertEqual(sut.leftSidebarPanes, [.files])
+    }
+
+    func test_rightSidebarPanes_canBeModified() {
+        sut.rightSidebarPanes = [.links, .tags]
+        XCTAssertEqual(sut.rightSidebarPanes, [.links, .tags])
+    }
+
+    func test_sidebarPanes_persistToDisk() {
+        sut.leftSidebarPanes = [.tags, .files]
+        sut.rightSidebarPanes = [.links]
+
+        let newManager = SettingsManager(configPath: configFilePath)
+        XCTAssertEqual(newManager.leftSidebarPanes, [.tags, .files])
+        XCTAssertEqual(newManager.rightSidebarPanes, [.links])
+    }
+
+    func test_sidebarPanes_movingPaneFromLeftToRight() {
+        // Start: left=[files, tags, links], right=[terminal]
+        sut.leftSidebarPanes.removeAll { $0 == .links }
+        sut.rightSidebarPanes.append(.links)
+
+        XCTAssertFalse(sut.leftSidebarPanes.contains(.links))
+        XCTAssertTrue(sut.rightSidebarPanes.contains(.links))
+    }
+
+    func test_sidebarPanes_emptyLeftPanes_persistAndLoad() {
+        sut.leftSidebarPanes = []
+
+        let newManager = SettingsManager(configPath: configFilePath)
+        XCTAssertEqual(newManager.leftSidebarPanes, [])
+    }
+
+    func test_load_missingSidebarPanesUsesDefaults() {
+        let config: [String: Any] = [
+            "onBootCommand": "",
+            "fileExtensionFilter": "*.md, *.txt",
+            "templatesDirectory": "templates",
+            "autoSave": false,
+            "autoPush": false
+        ]
+        let data = try! JSONSerialization.data(withJSONObject: config)
+        try! data.write(to: URL(fileURLWithPath: configFilePath))
+
+        let newManager = SettingsManager(configPath: configFilePath)
+        XCTAssertEqual(newManager.leftSidebarPanes, [.files, .tags, .links])
+        XCTAssertEqual(newManager.rightSidebarPanes, [.terminal])
+    }
+
     // MARK: - Default Config Path
 
     func test_defaultConfigPath_inApplicationSupport() {

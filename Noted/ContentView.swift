@@ -39,7 +39,7 @@ struct ContentView: View {
                     }
 
                     if isRightSidebarVisible {
-                        SidebarContainerView(isLeft: false)
+                        SidebarContainerView(settings: appState.settings, isLeft: false)
                             .frame(minWidth: 280, idealWidth: 340, maxWidth: 620)
                             .background(NotedTheme.panel)
                     }
@@ -173,7 +173,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private var leftSidebar: some View {
-        SidebarContainerView(isLeft: true)
+        SidebarContainerView(settings: appState.settings, isLeft: true)
     }
 
     private var headerBar: some View {
@@ -603,60 +603,151 @@ private struct RootNoteSheet: View {
 
 struct SidebarContainerView: View {
     @EnvironmentObject var appState: AppState
+    @ObservedObject private var settings: SettingsManager
     let isLeft: Bool
-    
+
+    init(settings: SettingsManager, isLeft: Bool) {
+        self.settings = settings
+        self.isLeft = isLeft
+    }
+
     var panes: [SidebarPane] {
-        let allPanes = isLeft ? appState.settings.leftSidebarPanes : appState.settings.rightSidebarPanes
-        return allPanes.filter { pane in
-            if pane == .links {
-                return true // Always show, we'll remove the toggle
-            }
-            return true
+        isLeft ? settings.leftSidebarPanes : settings.rightSidebarPanes
+    }
+
+    private var heights: [String: CGFloat] {
+        get { isLeft ? settings.leftPaneHeights : settings.rightPaneHeights }
+        nonmutating set {
+            if isLeft { settings.leftPaneHeights = newValue }
+            else { settings.rightPaneHeights = newValue }
         }
     }
-    
+
     var body: some View {
-        if panes.isEmpty {
-            VStack {
-                Spacer()
-                Text("Drag panels here")
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(NotedTheme.textMuted)
-                Spacer()
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(NotedTheme.panel)
-            .onDrop(of: [.plainText], isTargeted: nil) { providers in
-                handleDrop(providers: providers, at: 0)
-            }
-        } else {
-            VSplitView {
-                ForEach(panes) { pane in
-                    SidebarPaneWrapper(pane: pane, isLeft: isLeft)
+        GeometryReader { geo in
+            if panes.isEmpty {
+                EmptyDropZone(settings: settings, isLeft: isLeft)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(panes.enumerated()), id: \.element.id) { index, pane in
+                        let h = heights[pane.rawValue] ?? defaultHeight(for: pane, total: geo.size.height)
+
+                        SidebarPaneWrapper(pane: pane, settings: settings, isLeft: isLeft)
+                            .frame(height: h)
+
+                        if index < panes.count - 1 {
+                            ResizeDivider { delta in
+                                let nextPane = panes[index + 1]
+                                let currentH = heights[pane.rawValue] ?? defaultHeight(for: pane, total: geo.size.height)
+                                let nextH = heights[nextPane.rawValue] ?? defaultHeight(for: nextPane, total: geo.size.height)
+                                let minH: CGFloat = 80
+                                let newCurrent = currentH + delta
+                                let newNext = nextH - delta
+                                guard newCurrent >= minH && newNext >= minH else { return }
+                                heights[pane.rawValue] = newCurrent
+                                heights[nextPane.rawValue] = newNext
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .onChange(of: panes) { _ in
+                    // Clear stored heights when layout changes so panes get a fresh equal split
+                    if isLeft { settings.leftPaneHeights = [:] }
+                    else { settings.rightPaneHeights = [:] }
                 }
             }
         }
+        .background(NotedTheme.panel)
     }
-    
-    private func handleDrop(providers: [NSItemProvider], at index: Int) -> Bool {
-        guard let provider = providers.first else { return false }
-        
-        provider.loadObject(ofClass: NSString.self) { string, _ in
-            guard let id = string as? String, let draggedPane = SidebarPane(rawValue: id) else { return }
-            
-            DispatchQueue.main.async {
-                appState.settings.leftSidebarPanes.removeAll { $0 == draggedPane }
-                appState.settings.rightSidebarPanes.removeAll { $0 == draggedPane }
-                
-                var targetArray = isLeft ? appState.settings.leftSidebarPanes : appState.settings.rightSidebarPanes
-                let safeIndex = min(max(0, index), targetArray.count)
-                targetArray.insert(draggedPane, at: safeIndex)
-                
-                if isLeft {
-                    appState.settings.leftSidebarPanes = targetArray
-                } else {
-                    appState.settings.rightSidebarPanes = targetArray
+
+    private func defaultHeight(for pane: SidebarPane, total: CGFloat) -> CGFloat {
+        let dividerSpace = CGFloat(max(0, panes.count - 1)) * 6
+        return max(80, (total - dividerSpace) / CGFloat(panes.count))
+    }
+}
+
+struct ResizeDivider: View {
+    let onDrag: (CGFloat) -> Void
+
+    @State private var isDragging = false
+    @State private var lastY: CGFloat = 0
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(isDragging ? NotedTheme.accent.opacity(0.6) : NotedTheme.border)
+                .frame(height: isDragging ? 3 : 1)
+
+            // Wider invisible hit area
+            Color.clear
+                .frame(height: 6)
+                .contentShape(Rectangle())
+        }
+        .frame(height: 6)
+        .onHover { inside in
+            if inside { NSCursor.resizeUpDown.push() }
+            else { NSCursor.pop() }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { value in
+                    if !isDragging {
+                        isDragging = true
+                        lastY = 0
+                    }
+                    let delta = value.translation.height - lastY
+                    lastY = value.translation.height
+                    onDrag(delta)
                 }
+                .onEnded { _ in
+                    isDragging = false
+                    lastY = 0
+                    NSCursor.pop()
+                }
+        )
+    }
+}
+
+// Empty sidebar drop target
+struct EmptyDropZone: View {
+    @ObservedObject var settings: SettingsManager
+    let isLeft: Bool
+    @State private var isTargeted = false
+
+    var body: some View {
+        VStack {
+            Spacer()
+            Text("Drop panels here")
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(isTargeted ? NotedTheme.accent : NotedTheme.textMuted)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, minHeight: 200)
+        .background(isTargeted ? NotedTheme.accent.opacity(0.08) : Color.clear)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(isTargeted ? NotedTheme.accent.opacity(0.5) : Color.clear, lineWidth: 1)
+                .padding(4)
+        )
+        .onDrop(of: [.utf8PlainText], isTargeted: $isTargeted) { providers in
+            loadAndMove(providers: providers, insertIndex: 0)
+        }
+    }
+
+    private func loadAndMove(providers: [NSItemProvider], insertIndex: Int) -> Bool {
+        guard let provider = providers.first else { return false }
+        provider.loadItem(forTypeIdentifier: "public.utf8-plain-text", options: nil) { item, _ in
+            guard let data = item as? Data,
+                  let id = String(data: data, encoding: .utf8),
+                  let draggedPane = SidebarPane(rawValue: id) else { return }
+            DispatchQueue.main.async {
+                settings.leftSidebarPanes.removeAll { $0 == draggedPane }
+                settings.rightSidebarPanes.removeAll { $0 == draggedPane }
+                var target = isLeft ? settings.leftSidebarPanes : settings.rightSidebarPanes
+                target.insert(draggedPane, at: min(insertIndex, target.count))
+                if isLeft { settings.leftSidebarPanes = target }
+                else { settings.rightSidebarPanes = target }
             }
         }
         return true
@@ -664,37 +755,70 @@ struct SidebarContainerView: View {
 }
 
 struct SidebarPaneWrapper: View {
-    @EnvironmentObject var appState: AppState
+    @ObservedObject var settings: SettingsManager
     let pane: SidebarPane
     let isLeft: Bool
-    
+
+    @State private var headerTargeted = false
+    @State private var contentTargeted = false
+    @State private var headerHovered = false
+    @State private var isDraggingHeader = false
+
     var body: some View {
         VStack(spacing: 0) {
-            // Header with drag handle
+            // Drop indicator above — visible while hovering over header
+            Rectangle()
+                .fill(NotedTheme.accent)
+                .frame(height: 2)
+                .opacity(headerTargeted ? 1 : 0)
+
+            // Header — this is the drag handle
             HStack(spacing: 6) {
                 Image(systemName: "line.3.horizontal")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(NotedTheme.textMuted)
                     .frame(width: 14)
-                
+
                 Text(pane.title)
                     .font(.system(size: 11, weight: .bold, design: .rounded))
                     .tracking(1.8)
                     .foregroundStyle(NotedTheme.textMuted)
                     .textCase(.uppercase)
-                
+
                 Spacer()
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(NotedTheme.panelElevated)
+            .onHover { hovering in
+                headerHovered = hovering
+                if hovering {
+                    NSCursor.openHand.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
             .onDrag {
-                NSItemProvider(object: pane.rawValue as NSString)
+                NSCursor.closedHand.push()
+                return NSItemProvider(object: pane.rawValue as NSString)
+            } preview: {
+                HStack(spacing: 8) {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 10, weight: .bold))
+                    Text(pane.title)
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .tracking(1.2)
+                        .textCase(.uppercase)
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(NotedTheme.accent, in: RoundedRectangle(cornerRadius: 6))
             }
-            .onDrop(of: [.plainText], isTargeted: nil) { providers in
-                handleDrop(providers: providers, before: true)
+            .onDrop(of: [.utf8PlainText], isTargeted: $headerTargeted) { providers, _ in
+                return loadAndMove(providers: providers, before: true)
             }
-            
+
             // Content
             Group {
                 switch pane {
@@ -713,42 +837,43 @@ struct SidebarPaneWrapper: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .onDrop(of: [.plainText], isTargeted: nil) { providers in
-                handleDrop(providers: providers, before: false)
+            .onDrop(of: [.utf8PlainText], isTargeted: $contentTargeted) { providers, _ in
+                return loadAndMove(providers: providers, before: false)
             }
+
+            // Drop indicator below — visible while hovering over content
+            Rectangle()
+                .fill(NotedTheme.accent)
+                .frame(height: 2)
+                .opacity(contentTargeted ? 1 : 0)
         }
         .background(NotedTheme.panel)
     }
-    
-    private func handleDrop(providers: [NSItemProvider], before: Bool) -> Bool {
+
+    init(pane: SidebarPane, settings: SettingsManager, isLeft: Bool) {
+        self.pane = pane
+        self.settings = settings
+        self.isLeft = isLeft
+    }
+
+    private func loadAndMove(providers: [NSItemProvider], before: Bool) -> Bool {
         guard let provider = providers.first else { return false }
-        
-        provider.loadObject(ofClass: NSString.self) { string, _ in
-            guard let id = string as? String, let draggedPane = SidebarPane(rawValue: id) else { return }
-            
+        provider.loadItem(forTypeIdentifier: "public.utf8-plain-text", options: nil) { item, _ in
+            guard let data = item as? Data,
+                  let id = String(data: data, encoding: .utf8),
+                  let draggedPane = SidebarPane(rawValue: id),
+                  draggedPane != pane else { return }
             DispatchQueue.main.async {
-                var targetArray = isLeft ? appState.settings.leftSidebarPanes : appState.settings.rightSidebarPanes
-                
-                // If dropping on itself, do nothing
-                if draggedPane == pane { return }
-                
-                appState.settings.leftSidebarPanes.removeAll { $0 == draggedPane }
-                appState.settings.rightSidebarPanes.removeAll { $0 == draggedPane }
-                
-                targetArray = isLeft ? appState.settings.leftSidebarPanes : appState.settings.rightSidebarPanes
-                
-                if let currentIndex = targetArray.firstIndex(of: pane) {
-                    let insertIndex = before ? currentIndex : currentIndex + 1
-                    targetArray.insert(draggedPane, at: insertIndex)
+                settings.leftSidebarPanes.removeAll { $0 == draggedPane }
+                settings.rightSidebarPanes.removeAll { $0 == draggedPane }
+                var target = isLeft ? settings.leftSidebarPanes : settings.rightSidebarPanes
+                if let idx = target.firstIndex(of: pane) {
+                    target.insert(draggedPane, at: before ? idx : idx + 1)
                 } else {
-                    targetArray.append(draggedPane)
+                    target.append(draggedPane)
                 }
-                
-                if isLeft {
-                    appState.settings.leftSidebarPanes = targetArray
-                } else {
-                    appState.settings.rightSidebarPanes = targetArray
-                }
+                if isLeft { settings.leftSidebarPanes = target }
+                else { settings.rightSidebarPanes = target }
             }
         }
         return true

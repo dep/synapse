@@ -2,54 +2,69 @@ import SwiftUI
 
 struct TagsPaneView: View {
     @EnvironmentObject var appState: AppState
+    @State private var query = ""
+
+    var filteredTags: [(key: String, value: Int)] {
+        let all = appState.allTags().sorted { $0.key < $1.key }
+        guard !query.isEmpty else { return all }
+        return all.filter { $0.key.localizedCaseInsensitiveContains(query) }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Tags")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .tracking(1.8)
-                        .foregroundStyle(NotedTheme.textMuted)
-
-                    Text("All Tags")
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
-                        .foregroundStyle(NotedTheme.textPrimary)
-
-                    let tagCount = appState.allTags().count
-                    if tagCount > 0 {
-                        TinyBadge(text: "\(tagCount) tags")
+        VStack(alignment: .leading, spacing: 0) {
+            // Search bar
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(NotedTheme.textMuted)
+                TextField("Filter tags…", text: $query)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(NotedTheme.textPrimary)
+                if !query.isEmpty {
+                    Button(action: { query = "" }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(NotedTheme.textMuted)
                     }
+                    .buttonStyle(.plain)
                 }
-
-                Spacer()
             }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(NotedTheme.row)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(NotedTheme.rowBorder, lineWidth: 1)
+            )
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
 
             Rectangle()
                 .fill(NotedTheme.divider)
                 .frame(height: 1)
 
             ScrollView {
-                let tags = appState.allTags().sorted { $0.key < $1.key }
-                if tags.isEmpty {
+                if filteredTags.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("No tags yet")
+                        Text(query.isEmpty ? "No tags yet" : "No matching tags")
                             .font(.system(size: 13, weight: .semibold, design: .rounded))
                             .foregroundStyle(NotedTheme.textPrimary)
-                        Text("Add tags to your notes using #hashtag syntax.")
+                        Text(query.isEmpty ? "Add tags to your notes using #hashtag syntax." : "Try a different search term.")
                             .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundStyle(NotedTheme.textMuted)
                     }
-                    .padding(.vertical, 4)
+                    .padding(12)
                 } else {
                     VStack(alignment: .leading, spacing: 6) {
-                        ForEach(tags, id: \.key) { tag, count in
+                        ForEach(filteredTags, id: \.key) { tag, count in
                             Button(action: { appState.openTagInNewTab(tag) }) {
                                 HStack(spacing: 8) {
                                     Image(systemName: "number")
                                         .foregroundStyle(NotedTheme.accent)
                                         .frame(width: 16)
-                                    
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(tag)
                                             .font(.system(size: 13, weight: .semibold, design: .rounded))
@@ -60,7 +75,6 @@ struct TagsPaneView: View {
                                             .foregroundStyle(NotedTheme.textMuted)
                                             .lineLimit(1)
                                     }
-                                    
                                     Spacer()
                                 }
                                 .padding(.horizontal, 8)
@@ -77,10 +91,10 @@ struct TagsPaneView: View {
                             .buttonStyle(.plain)
                         }
                     }
+                    .padding(12)
                 }
             }
         }
-        .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
