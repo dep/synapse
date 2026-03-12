@@ -676,16 +676,20 @@ struct SidebarContainerView: View {
                     }
 
                     ForEach(Array(panes.enumerated()), id: \.element.id) { index, pane in
-                        let h = heights[pane.rawValue] ?? defaultHeight(for: pane, total: geo.size.height)
+                        let collapsed = settings.collapsedPanes.contains(pane.rawValue)
+                        let h = collapsed
+                            ? SidebarPaneWrapper.headerHeight
+                            : expandedHeight(for: pane, total: geo.size.height)
 
                         SidebarPaneWrapper(pane: pane, settings: settings, isLeft: isLeft)
                             .frame(height: h)
 
                         if index < panes.count - 1 {
-                            ResizeDivider { delta in
-                                let nextPane = panes[index + 1]
-                                let currentH = heights[pane.rawValue] ?? defaultHeight(for: pane, total: geo.size.height)
-                                let nextH = heights[nextPane.rawValue] ?? defaultHeight(for: nextPane, total: geo.size.height)
+                            let nextPane = panes[index + 1]
+                            let eitherCollapsed = collapsed || settings.collapsedPanes.contains(nextPane.rawValue)
+                            ResizeDivider(disabled: eitherCollapsed) { delta in
+                                let currentH = expandedHeight(for: pane, total: geo.size.height)
+                                let nextH = expandedHeight(for: nextPane, total: geo.size.height)
                                 let minH: CGFloat = 80
                                 let newCurrent = currentH + delta
                                 let newNext = nextH - delta
@@ -707,13 +711,26 @@ struct SidebarContainerView: View {
         .background(NotedTheme.panel)
     }
 
-    private func defaultHeight(for pane: SidebarPane, total: CGFloat) -> CGFloat {
+    private func expandedHeight(for pane: SidebarPane, total: CGFloat) -> CGFloat {
+        let expandedPanes = panes.filter { !settings.collapsedPanes.contains($0.rawValue) }
+        let collapsedCount = panes.count - expandedPanes.count
         let dividerSpace = CGFloat(max(0, panes.count - 1)) * 6
-        return max(80, (total - dividerSpace) / CGFloat(panes.count))
+        let collapsedSpace = CGFloat(collapsedCount) * SidebarPaneWrapper.headerHeight
+        let available = max(0, total - dividerSpace - collapsedSpace)
+
+        guard !expandedPanes.isEmpty else { return SidebarPaneWrapper.headerHeight }
+
+        // Distribute available space proportionally using stored ratios, or equally as default
+        let totalStoredHeight = expandedPanes.compactMap { heights[$0.rawValue] }.reduce(0, +)
+        if totalStoredHeight > 0, let stored = heights[pane.rawValue] {
+            return max(80, available * (stored / totalStoredHeight))
+        }
+        return max(80, available / CGFloat(expandedPanes.count))
     }
 }
 
 struct ResizeDivider: View {
+    var disabled: Bool = false
     let onDrag: (CGFloat) -> Void
 
     @State private var isDragging = false
@@ -732,12 +749,13 @@ struct ResizeDivider: View {
         }
         .frame(height: 6)
         .onHover { inside in
-            if inside { NSCursor.resizeUpDown.push() }
+            if inside && !disabled { NSCursor.resizeUpDown.push() }
             else { NSCursor.pop() }
         }
         .gesture(
             DragGesture(minimumDistance: 1)
                 .onChanged { value in
+                    guard !disabled else { return }
                     if !isDragging {
                         isDragging = true
                         lastY = 0
@@ -805,10 +823,24 @@ struct SidebarPaneWrapper: View {
     let pane: SidebarPane
     let isLeft: Bool
 
+    static let headerHeight: CGFloat = 33
+
     @State private var headerTargeted = false
     @State private var contentTargeted = false
     @State private var headerHovered = false
     @State private var isDraggingHeader = false
+
+    private var isCollapsed: Bool {
+        settings.collapsedPanes.contains(pane.rawValue)
+    }
+
+    private func toggleCollapsed() {
+        if settings.collapsedPanes.contains(pane.rawValue) {
+            settings.collapsedPanes.remove(pane.rawValue)
+        } else {
+            settings.collapsedPanes.insert(pane.rawValue)
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -818,7 +850,7 @@ struct SidebarPaneWrapper: View {
                 .frame(height: 2)
                 .opacity(headerTargeted ? 1 : 0)
 
-            // Header — this is the drag handle
+            // Header — drag handle + collapse toggle
             HStack(spacing: 6) {
                 Image(systemName: "line.3.horizontal")
                     .font(.system(size: 10, weight: .bold))
@@ -832,10 +864,17 @@ struct SidebarPaneWrapper: View {
                     .textCase(.uppercase)
 
                 Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(NotedTheme.textMuted)
+                    .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                    .animation(.easeInOut(duration: 0.18), value: isCollapsed)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(NotedTheme.panelElevated)
+            .contentShape(Rectangle())
             .onHover { hovering in
                 headerHovered = hovering
                 if hovering {
@@ -844,6 +883,9 @@ struct SidebarPaneWrapper: View {
                     NSCursor.pop()
                 }
             }
+            .simultaneousGesture(TapGesture().onEnded {
+                toggleCollapsed()
+            })
             .onDrag {
                 NSCursor.closedHand.push()
                 return NSItemProvider(object: pane.rawValue as NSString)
@@ -865,7 +907,7 @@ struct SidebarPaneWrapper: View {
                 return loadAndMove(providers: providers, before: true)
             }
 
-            // Content
+            // Content — always in the tree to preserve state; clipped to zero height when collapsed
             Group {
                 switch pane {
                 case .files:
@@ -885,7 +927,8 @@ struct SidebarPaneWrapper: View {
                         .frame(minHeight: 150)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: isCollapsed ? 0 : .infinity)
+            .clipped()
             .onDrop(of: [.utf8PlainText], isTargeted: $contentTargeted) { providers, _ in
                 return loadAndMove(providers: providers, before: false)
             }

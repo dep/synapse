@@ -52,6 +52,10 @@ class SettingsManager: ObservableObject {
     @Published var rightPaneHeights: [String: CGFloat] {
         didSet { save() }
     }
+    /// Set of pane rawValues that are currently collapsed
+    @Published var collapsedPanes: Set<String> {
+        didSet { save() }
+    }
 
     let configPath: String
 
@@ -65,6 +69,7 @@ class SettingsManager: ObservableObject {
         var rightSidebarPanes: [SidebarPane]?
         var leftPaneHeights: [String: CGFloat]?
         var rightPaneHeights: [String: CGFloat]?
+        var collapsedPanes: [String]?
 
         init(
             onBootCommand: String,
@@ -75,7 +80,8 @@ class SettingsManager: ObservableObject {
             leftSidebarPanes: [SidebarPane]?,
             rightSidebarPanes: [SidebarPane]?,
             leftPaneHeights: [String: CGFloat]?,
-            rightPaneHeights: [String: CGFloat]?
+            rightPaneHeights: [String: CGFloat]?,
+            collapsedPanes: [String]?
         ) {
             self.onBootCommand = onBootCommand
             self.fileExtensionFilter = fileExtensionFilter
@@ -86,6 +92,7 @@ class SettingsManager: ObservableObject {
             self.rightSidebarPanes = rightSidebarPanes
             self.leftPaneHeights = leftPaneHeights
             self.rightPaneHeights = rightPaneHeights
+            self.collapsedPanes = collapsedPanes
         }
 
         init(from decoder: Decoder) throws {
@@ -99,6 +106,7 @@ class SettingsManager: ObservableObject {
             rightSidebarPanes = try container.decodeIfPresent([SidebarPane].self, forKey: .rightSidebarPanes)
             leftPaneHeights = try container.decodeIfPresent([String: CGFloat].self, forKey: .leftPaneHeights)
             rightPaneHeights = try container.decodeIfPresent([String: CGFloat].self, forKey: .rightPaneHeights)
+            collapsedPanes = try container.decodeIfPresent([String].self, forKey: .collapsedPanes)
         }
     }
 
@@ -126,6 +134,7 @@ class SettingsManager: ObservableObject {
             self.rightSidebarPanes = config.rightSidebarPanes ?? [.terminal]
             self.leftPaneHeights = config.leftPaneHeights ?? [:]
             self.rightPaneHeights = config.rightPaneHeights ?? [:]
+            self.collapsedPanes = Set(config.collapsedPanes ?? [])
         } else {
             self.onBootCommand = ""
             self.fileExtensionFilter = "*.md, *.txt"
@@ -136,6 +145,7 @@ class SettingsManager: ObservableObject {
             self.rightSidebarPanes = [.terminal]
             self.leftPaneHeights = [:]
             self.rightPaneHeights = [:]
+            self.collapsedPanes = []
         }
     }
 
@@ -187,7 +197,8 @@ class SettingsManager: ObservableObject {
             leftSidebarPanes: leftSidebarPanes,
             rightSidebarPanes: rightSidebarPanes,
             leftPaneHeights: leftPaneHeights,
-            rightPaneHeights: rightPaneHeights
+            rightPaneHeights: rightPaneHeights,
+            collapsedPanes: Array(collapsedPanes)
         )
         guard let data = try? JSONEncoder().encode(config) else { return }
         let configURL = URL(fileURLWithPath: configPath)
