@@ -8,6 +8,28 @@ struct NoteLinkRelationships {
     let unresolved: [String]
 }
 
+/// A node in the vault graph.
+/// Real notes have a non-nil `url`; ghost nodes (unresolved link targets) have `url == nil`.
+struct NoteGraphNode: Identifiable, Equatable {
+    let id: String       // stable identifier: normalized note title or ghost key
+    let title: String    // display name (filename without extension, or ghost link text)
+    let url: URL?        // nil for ghost nodes
+    let isGhost: Bool
+}
+
+/// A directed edge in the vault graph (from → to via [[wikilink]]).
+struct NoteGraphEdge: Identifiable {
+    let id: String
+    let fromID: String
+    let toID: String
+}
+
+/// Full or partial vault graph suitable for Grape rendering.
+struct NoteGraph {
+    let nodes: [NoteGraphNode]
+    let edges: [NoteGraphEdge]
+}
+
 enum SortCriterion: String, CaseIterable {
     case name = "Name"
     case modified = "Date"
@@ -43,6 +65,7 @@ struct TemplateRenameRequest: Identifiable {
 enum TabItem: Hashable {
     case file(URL)
     case tag(String)
+    case graph
     
     var displayName: String {
         switch self {
@@ -50,6 +73,8 @@ enum TabItem: Hashable {
             return url.lastPathComponent
         case .tag(let tagName):
             return "#\(tagName)"
+        case .graph:
+            return "Graph"
         }
     }
     
@@ -60,6 +85,11 @@ enum TabItem: Hashable {
     
     var isTag: Bool {
         if case .tag = self { return true }
+        return false
+    }
+
+    var isGraph: Bool {
+        if case .graph = self { return true }
         return false
     }
     
@@ -133,7 +163,6 @@ class AppState: ObservableObject {
     private var tabMRU: [TabItem] = []
     private let now: () -> Date
 
-    private var saveCancellable: AnyCancellable?
     private var fileWatcher: DispatchSourceFileSystemObject?
     private var filePollCancellable: AnyCancellable?
     private var watchedFD: Int32 = -1
@@ -145,14 +174,6 @@ class AppState: ObservableObject {
 
     init(now: @escaping () -> Date = Date.init) {
         self.now = now
-        saveCancellable = $fileContent
-            .dropFirst()
-            .debounce(for: .seconds(1), scheduler: RunLoop.main)
-            .sink { [weak self] content in
-                guard let self, self.isDirty else { return }
-                self.saveCurrentFile(content: content)
-            }
-
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleAppTermination),
@@ -260,8 +281,14 @@ class AppState: ObservableObject {
             if updateRecency {
                 recordTabRecency(for: tab)
             }
-        case .tag(let tagName):
+        case .tag:
             // Tag tab - clear file state
+            selectedFile = nil
+            fileContent = ""
+            isDirty = false
+            stopWatching()
+        case .graph:
+            // Graph tab - clear file state
             selectedFile = nil
             fileContent = ""
             isDirty = false
@@ -404,8 +431,10 @@ class AppState: ObservableObject {
             .lowercased() ?? ""
     }
 
+    private static let wikiLinkRegex = try? NSRegularExpression(pattern: #"\[\[([^\]]+)\]\]"#)
+
     private func wikiLinks(in text: String) -> [String] {
-        guard let regex = try? NSRegularExpression(pattern: #"\[\[([^\]]+)\]\]"#) else { return [] }
+        guard let regex = AppState.wikiLinkRegex else { return [] }
         let nsText = text as NSString
         let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
         return matches.compactMap { match in
@@ -418,9 +447,11 @@ class AppState: ObservableObject {
 
     // MARK: - Tags
 
+    private static let extractTagsRegex = try? NSRegularExpression(pattern: #"#([a-zA-Z][a-zA-Z0-9_\-\.]*)"#)
+
     /// Extracts all hashtags from text, normalizes to lowercase, removes duplicates
     func extractTags(from text: String) -> [String] {
-        guard let regex = try? NSRegularExpression(pattern: #"#([a-zA-Z][a-zA-Z0-9_\-\.]*)"#) else { return [] }
+        guard let regex = AppState.extractTagsRegex else { return [] }
         let nsText = text as NSString
         let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
         var uniqueTags = Set<String>()
@@ -496,6 +527,88 @@ class AppState: ObservableObject {
         }
 
         return NoteLinkRelationships(outbound: outbound, inbound: inbound, unresolved: unresolved)
+    }
+
+    // MARK: - Vault Graph
+
+    /// Builds the full vault graph: every note is a node, every [[wikilink]] is a directed edge.
+    /// Unresolved links produce "ghost" nodes (no URL) so the edge graph stays complete.
+    /// Builds the full vault graph.
+    /// - Parameter includeGhosts: When `false` (default), unresolved wikilink targets are
+    ///   omitted — only files matching the current `fileExtensionFilter` appear as nodes.
+    ///   The local graph passes `true` so nearby ghost neighbours are still visible.
+    /// - Parameter includeOrphans: When `false` (default), notes with no edges (no inbound
+    ///   or outbound links) are excluded. Pass `true` to include all notes regardless.
+    func vaultGraph(includeGhosts: Bool = false, includeOrphans: Bool = false) -> NoteGraph {
+        let index = noteIndex()
+        var nodes: [String: NoteGraphNode] = [:]
+        var edges: [NoteGraphEdge] = []
+
+        // Create a real node for every file in the vault
+        for url in allFiles {
+            let title = noteTitle(for: url)
+            let nodeID = normalizedNoteReference(title)
+            guard !nodeID.isEmpty else { continue }
+            nodes[nodeID] = NoteGraphNode(id: nodeID, title: title, url: url, isGhost: false)
+        }
+
+        // Walk every file's links to create edges (and ghost nodes for unresolved links)
+        for url in allFiles {
+            guard let content = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            let fromTitle = noteTitle(for: url)
+            let fromID = normalizedNoteReference(fromTitle)
+            guard !fromID.isEmpty else { continue }
+
+            var seenTargets = Set<String>()
+            for link in wikiLinks(in: content) {
+                guard seenTargets.insert(link).inserted else { continue }
+
+                if index[link] != nil {
+                    // Resolved link — always include
+                    let edgeID = "\(fromID)->\(link)"
+                    edges.append(NoteGraphEdge(id: edgeID, fromID: fromID, toID: link))
+                } else if includeGhosts {
+                    // Unresolved link — only include when ghost nodes are requested
+                    if nodes[link] == nil {
+                        nodes[link] = NoteGraphNode(id: link, title: link, url: nil, isGhost: true)
+                    }
+                    let edgeID = "\(fromID)->\(link)"
+                    edges.append(NoteGraphEdge(id: edgeID, fromID: fromID, toID: link))
+                }
+            }
+        }
+
+        // Drop orphan nodes (no edges at all) unless caller wants them
+        if !includeOrphans {
+            let connectedIDs = Set(edges.flatMap { [$0.fromID, $0.toID] })
+            nodes = nodes.filter { connectedIDs.contains($0.key) }
+        }
+
+        return NoteGraph(nodes: Array(nodes.values), edges: edges)
+    }
+
+    /// Builds a local graph: the selected note plus its direct (1-hop) neighbors.
+    /// Returns nil when no file is selected.
+    func localGraph() -> NoteGraph? {
+        guard let selectedFile else { return nil }
+
+        let fullGraph = vaultGraph(includeGhosts: true, includeOrphans: true)
+        let selectedTitle = noteTitle(for: selectedFile)
+        let selectedID = normalizedNoteReference(selectedTitle)
+
+        // Find all node IDs that are directly connected to the selected node
+        var neighborIDs = Set<String>([selectedID])
+        for edge in fullGraph.edges {
+            if edge.fromID == selectedID { neighborIDs.insert(edge.toID) }
+            if edge.toID == selectedID { neighborIDs.insert(edge.fromID) }
+        }
+
+        let filteredNodes = fullGraph.nodes.filter { neighborIDs.contains($0.id) }
+        let filteredEdges = fullGraph.edges.filter {
+            neighborIDs.contains($0.fromID) && neighborIDs.contains($0.toID)
+        }
+
+        return NoteGraph(nodes: filteredNodes, edges: filteredEdges)
     }
 
     private func reloadSelectedFileFromDiskIfNeeded(force: Bool = false) {
@@ -927,6 +1040,20 @@ class AppState: ObservableObject {
         recordTabRecency(for: .file(url))
     }
     
+    func openGraphTab() {
+        // If graph tab already open, switch to it
+        if let existingIndex = tabs.firstIndex(of: .graph) {
+            switchTab(to: existingIndex)
+            return
+        }
+        tabs.append(.graph)
+        activeTabIndex = tabs.count - 1
+        selectedFile = nil
+        fileContent = ""
+        isDirty = false
+        stopWatching()
+    }
+
     func openTagInNewTab(_ tag: String) {
         // If tag already open in a tab, just switch to it
         if let existingIndex = tabs.firstIndex(of: .tag(tag)) {

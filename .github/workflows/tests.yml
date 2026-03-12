@@ -28,6 +28,14 @@ jobs:
           fi
           xcodebuild -version
 
+      - name: Generate Xcode project
+        run: |
+          # Install xcodegen if not present
+          if ! command -v xcodegen &> /dev/null; then
+            brew install xcodegen
+          fi
+          xcodegen generate
+
       - name: Resolve Swift packages
         run: |
           xcodebuild -resolvePackageDependencies \

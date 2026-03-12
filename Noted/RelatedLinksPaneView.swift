@@ -3,9 +3,8 @@ import SwiftUI
 struct RelatedLinksPaneView: View {
     @EnvironmentObject var appState: AppState
 
-    private var relationships: NoteLinkRelationships? {
-        appState.relationshipsForSelectedFile()
-    }
+    // Cached result — only recomputed when selectedFile changes, not on every keystroke
+    @State private var relationships: NoteLinkRelationships? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -75,6 +74,13 @@ struct RelatedLinksPaneView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onAppear { refresh() }
+        .onChange(of: appState.selectedFile) { _ in refresh() }
+        .onChange(of: appState.allFiles) { _ in refresh() }
+    }
+
+    private func refresh() {
+        relationships = appState.relationshipsForSelectedFile()
     }
 
     private var titleText: String {

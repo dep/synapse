@@ -192,7 +192,9 @@ struct RawEditor: NSViewRepresentable {
             guard let tv = textView else { return }
             let newText = tv.string
             if parent.text != newText {
-                parent.text = newText
+                // Fire objectWillChange once for both mutations to collapse two SwiftUI render passes into one
+                parent.appState.objectWillChange.send()
+                parent.appState.fileContent = newText  // same storage as parent.text binding
                 parent.appState.isDirty = true
             }
             if !linkCheckScheduled {
@@ -317,7 +319,7 @@ extension LinkAwareTextView {
                 .link: inner,
             ], range: range)
         }
-        if let markdownLinkRegex = try? NSRegularExpression(pattern: "(?<!!)\\[([^\\]]+)\\]\\(([^)]+)\\)") {
+        if let markdownLinkRegex = LinkAwareTextView.markdownLinkRegex {
             markdownLinkRegex.enumerateMatches(in: storage.string, range: fullRange) { match, _, _ in
                 guard let match, match.numberOfRanges >= 3 else { return }
                 let full = match.range(at: 0)
@@ -337,7 +339,7 @@ extension LinkAwareTextView {
             }
         }
 
-        if let bareURLRegex = try? NSRegularExpression(pattern: #"https?://[^"]+?(?=[\s)\]>]|$)"#) {
+        if let bareURLRegex = LinkAwareTextView.bareURLRegex {
             bareURLRegex.enumerateMatches(in: storage.string, options: [], range: fullRange) { match, _, _ in
                 guard let match else { return }
                 let range = match.range
@@ -399,8 +401,22 @@ extension LinkAwareTextView {
         }
     }
 
+    // Compiled-once regex cache keyed by "pattern|options.rawValue"
+    private static var regexCache: [String: NSRegularExpression] = [:]
+    private static let markdownLinkRegex = try? NSRegularExpression(pattern: "(?<!!)\\[([^\\]]+)\\]\\(([^)]+)\\)")
+    private static let bareURLRegex = try? NSRegularExpression(pattern: #"https?://[^"]+?(?=[\s)\]>]|$)"#)
+
     private func applyRegex(_ pattern: String, to text: NSString, storage: NSTextStorage, options: NSRegularExpression.Options = [], apply: (NSRange) -> Void) {
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else { return }
+        let cacheKey = "\(pattern)|\(options.rawValue)"
+        let regex: NSRegularExpression
+        if let cached = LinkAwareTextView.regexCache[cacheKey] {
+            regex = cached
+        } else if let compiled = try? NSRegularExpression(pattern: pattern, options: options) {
+            LinkAwareTextView.regexCache[cacheKey] = compiled
+            regex = compiled
+        } else {
+            return
+        }
         regex.enumerateMatches(in: text as String, options: [], range: NSRange(location: 0, length: text.length)) { match, _, _ in
             guard let range = match?.range else { return }
             apply(range)

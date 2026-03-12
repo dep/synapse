@@ -63,8 +63,11 @@ xcodebuild -exportArchive \
 
 ### 3. Submit, wait, and staple
 
+> **Note:** `notarytool` requires a zip/pkg/dmg — it rejects a bare `.app`. Zip first, submit the zip, then staple the `.app`.
+
 ```bash
-xcrun notarytool submit /tmp/Noted-export/Noted.app \
+ditto -c -k --keepParent /tmp/Noted-export/Noted.app /tmp/Noted-export/Noted.zip && \
+xcrun notarytool submit /tmp/Noted-export/Noted.zip \
   --keychain-profile "notarytool" \
   --wait && \
 xcrun stapler staple /tmp/Noted-export/Noted.app && \
@@ -106,7 +109,8 @@ cat > /tmp/export-options.plist << 'EOF'
 </plist>
 EOF
 xcodebuild -exportArchive -archivePath /tmp/Noted.xcarchive -exportPath /tmp/Noted-export -exportOptionsPlist /tmp/export-options.plist && \
-xcrun notarytool submit /tmp/Noted-export/Noted.app --keychain-profile "notarytool" --wait && \
+ditto -c -k --keepParent /tmp/Noted-export/Noted.app /tmp/Noted-export/Noted.zip && \
+xcrun notarytool submit /tmp/Noted-export/Noted.zip --keychain-profile "notarytool" --wait && \
 xcrun stapler staple /tmp/Noted-export/Noted.app && \
 spctl --assess --type execute --verbose /tmp/Noted-export/Noted.app && \
 cd /tmp/Noted-export && zip -r --symlinks ~/Desktop/Noted-1.0.zip Noted.app
