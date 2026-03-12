@@ -165,6 +165,7 @@ struct RawEditor: NSViewRepresentable {
 
         context.coordinator.textView = textView
         textView.installSearchObservers()
+        textView.installFocusObserver()
 
         let scroll = NSScrollView()
         scroll.documentView = textView
@@ -505,6 +506,22 @@ class LinkAwareTextView: NSTextView {
     private static let youtubeDetector: NSDataDetector? = {
         try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
     }()
+
+    // MARK: - Focus support
+
+    private var focusObserver: Any?
+
+    func installFocusObserver() {
+        guard focusObserver == nil else { return }
+        focusObserver = NotificationCenter.default.addObserver(
+            forName: .focusEditor,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, self.isEditable else { return }
+            self.window?.makeFirstResponder(self)
+        }
+    }
 
     // MARK: - Search highlight support
 

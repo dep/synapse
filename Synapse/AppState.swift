@@ -1476,11 +1476,21 @@ class AppState: ObservableObject {
     func focusPane(_ index: Int) {
         guard splitOrientation != nil, index == 0 || index == 1 else { return }
         activePaneIndex = index
+        postFocusEditor()
     }
 
     func switchToOtherPane() {
         guard splitOrientation != nil else { return }
         activePaneIndex = activePaneIndex == 0 ? 1 : 0
+        postFocusEditor()
+    }
+
+    private func postFocusEditor() {
+        // Defer one run-loop pass so SwiftUI has swapped in the active EditorView
+        // before we ask the NSTextView to become first responder.
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .focusEditor, object: nil)
+        }
     }
 
     func closePane(_ index: Int) {
