@@ -5,7 +5,6 @@ struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @State private var isLeftSidebarVisible = true
     @State private var isRightSidebarVisible = true
-    @State private var isGlobalGraphPresented = false
     @State private var keyEventMonitor: Any?
 
     var body: some View {
@@ -27,7 +26,11 @@ struct ContentView: View {
                         TabBarView()
                             .environmentObject(appState)
                         
-                        if let activeTab = appState.activeTab,
+                        if let activeTab = appState.activeTab, activeTab.isGraph {
+                            GlobalGraphView()
+                                .environmentObject(appState)
+                                .frame(minWidth: 420)
+                        } else if let activeTab = appState.activeTab,
                            let tagName = activeTab.tagName {
                             TagPageView(tag: tagName)
                                 .frame(minWidth: 420)
@@ -145,10 +148,6 @@ struct ContentView: View {
             TemplateRenameSheet(request: request)
                 .environmentObject(appState)
         }
-        .sheet(isPresented: $isGlobalGraphPresented) {
-            GlobalGraphView(isPresented: $isGlobalGraphPresented)
-                .environmentObject(appState)
-        }
         .onAppear(perform: installEventMonitor)
         .onDisappear(perform: removeEventMonitor)
     }
@@ -264,13 +263,12 @@ struct ContentView: View {
                     help: isRightSidebarVisible ? "Hide Right Sidebar" : "Show Right Sidebar"
                 )
 
-                headerToggleButton(
-                    systemName: "circle.grid.2x2",
-                    isActive: isGlobalGraphPresented,
-                    action: { isGlobalGraphPresented.toggle() },
-                    help: "Open Graph View (⌘⇧G)"
-                )
+                Button(action: { appState.openGraphTab() }) {
+                    Image(systemName: "circle.grid.2x2")
+                }
+                .buttonStyle(ChromeButtonStyle())
                 .keyboardShortcut("g", modifiers: [.command, .shift])
+                .help("Open Graph View (⌘⇧G)")
 
                 Button(action: appState.pickFolder) {
                     Image(systemName: "folder.badge.plus")
