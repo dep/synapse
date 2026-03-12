@@ -63,10 +63,15 @@ struct GlobalGraphView: View {
                         .fill(Color.clear)
                         .contentShape(Rectangle())
                         .withGraphDragGesture(proxy, of: String.self)
-                        .withGraphMagnifyGesture(proxy)
                         .withGraphTapGesture(proxy, of: String.self) { nodeID in
                             openNode(id: nodeID)
                         }
+                        .background(
+                            ScrollWheelZoomView { delta in
+                                let factor = pow(1.0015, -delta)
+                                graphState.modelTransform.scaling(by: factor)
+                            }
+                        )
                 }
                 .ignoresSafeArea()
             }

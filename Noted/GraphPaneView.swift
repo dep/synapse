@@ -1,5 +1,6 @@
 import SwiftUI
 import Grape
+import AppKit
 
 /// Local Graph pane — renders the selected note and its direct (1-hop) neighbors
 /// using a Grape force-directed layout. Shown as a sidebar pane.
@@ -99,10 +100,15 @@ private struct GraphCanvas: View {
                     .fill(Color.clear)
                     .contentShape(Rectangle())
                     .withGraphDragGesture(proxy, of: String.self)
-                    .withGraphMagnifyGesture(proxy)
                     .withGraphTapGesture(proxy, of: String.self) { nodeID in
                         onOpen(nodeID)
                     }
+                    .background(
+                        ScrollWheelZoomView { delta in
+                            let factor = pow(1.0015, -delta)
+                            graphState.modelTransform.scaling(by: factor)
+                        }
+                    )
             }
 
             // Zoom controls
@@ -158,5 +164,37 @@ private struct GraphZoomButtonStyle: ButtonStyle {
                 NotedTheme.panelElevated.opacity(configuration.isPressed ? 1 : 0.85),
                 in: RoundedRectangle(cornerRadius: 4)
             )
+    }
+}
+
+/// Transparent NSView that captures two-finger scroll events and forwards the
+/// vertical scroll delta to a Swift closure, used for scroll-to-zoom on the graph.
+struct ScrollWheelZoomView: NSViewRepresentable {
+    let onScroll: (Double) -> Void
+
+    func makeNSView(context: Context) -> _ScrollWheelCaptureView {
+        let view = _ScrollWheelCaptureView()
+        view.onScroll = onScroll
+        return view
+    }
+
+    func updateNSView(_ nsView: _ScrollWheelCaptureView, context: Context) {
+        nsView.onScroll = onScroll
+    }
+}
+
+final class _ScrollWheelCaptureView: NSView {
+    var onScroll: ((Double) -> Void)?
+
+    override var acceptsFirstResponder: Bool { false }
+
+    override func scrollWheel(with event: NSEvent) {
+        // scrollingDeltaY is positive when scrolling down (fingers moving down).
+        // Ignore momentum phase to avoid over-zooming after a flick.
+        guard event.phase != .mayBegin, event.momentumPhase == .none || event.momentumPhase == [] else {
+            super.scrollWheel(with: event)
+            return
+        }
+        onScroll?(event.scrollingDeltaY)
     }
 }
