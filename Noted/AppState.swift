@@ -431,8 +431,10 @@ class AppState: ObservableObject {
             .lowercased() ?? ""
     }
 
+    private static let wikiLinkRegex = try? NSRegularExpression(pattern: #"\[\[([^\]]+)\]\]"#)
+
     private func wikiLinks(in text: String) -> [String] {
-        guard let regex = try? NSRegularExpression(pattern: #"\[\[([^\]]+)\]\]"#) else { return [] }
+        guard let regex = AppState.wikiLinkRegex else { return [] }
         let nsText = text as NSString
         let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
         return matches.compactMap { match in
@@ -445,9 +447,11 @@ class AppState: ObservableObject {
 
     // MARK: - Tags
 
+    private static let extractTagsRegex = try? NSRegularExpression(pattern: #"#([a-zA-Z][a-zA-Z0-9_\-\.]*)"#)
+
     /// Extracts all hashtags from text, normalizes to lowercase, removes duplicates
     func extractTags(from text: String) -> [String] {
-        guard let regex = try? NSRegularExpression(pattern: #"#([a-zA-Z][a-zA-Z0-9_\-\.]*)"#) else { return [] }
+        guard let regex = AppState.extractTagsRegex else { return [] }
         let nsText = text as NSString
         let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
         var uniqueTags = Set<String>()

@@ -7,9 +7,8 @@ import AppKit
 struct GraphPaneView: View {
     @EnvironmentObject var appState: AppState
 
-    private var graph: NoteGraph {
-        appState.localGraph() ?? NoteGraph(nodes: [], edges: [])
-    }
+    // Cached graph — only recomputed when selectedFile or vault contents change, not on every keystroke
+    @State private var graph: NoteGraph = NoteGraph(nodes: [], edges: [])
 
     private var selectedID: String? {
         guard let file = appState.selectedFile else { return nil }
@@ -28,6 +27,13 @@ struct GraphPaneView: View {
                     .background(NotedTheme.panel)
             }
         }
+        .onAppear { refresh() }
+        .onChange(of: appState.selectedFile) { _ in refresh() }
+        .onChange(of: appState.allFiles) { _ in refresh() }
+    }
+
+    private func refresh() {
+        graph = appState.localGraph() ?? NoteGraph(nodes: [], edges: [])
     }
 
     private var emptyState: some View {

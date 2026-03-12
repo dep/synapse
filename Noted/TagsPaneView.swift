@@ -4,8 +4,11 @@ struct TagsPaneView: View {
     @EnvironmentObject var appState: AppState
     @State private var query = ""
 
+    // Cached tag counts — only recomputed when the vault file list changes, not on every keystroke
+    @State private var cachedTags: [String: Int] = [:]
+
     var filteredTags: [(key: String, value: Int)] {
-        let all = appState.allTags().sorted { $0.key < $1.key }
+        let all = cachedTags.sorted { $0.key < $1.key }
         guard !query.isEmpty else { return all }
         return all.filter { $0.key.localizedCaseInsensitiveContains(query) }
     }
@@ -96,6 +99,8 @@ struct TagsPaneView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onAppear { cachedTags = appState.allTags() }
+        .onChange(of: appState.allFiles) { _ in cachedTags = appState.allTags() }
     }
 }
 
