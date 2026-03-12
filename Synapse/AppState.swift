@@ -133,6 +133,7 @@ class AppState: ObservableObject {
     @Published var isCommandPalettePresented: Bool = false
     @Published var isNewNotePromptRequested: Bool = false
     @Published var pendingTemplateURL: URL? = nil
+    @Published var pendingCursorPosition: Int? = nil
     @Published var commandPaletteMode: CommandPaletteMode = .files
     @Published var targetDirectoryForTemplate: URL?
     @Published var isRootNoteSheetPresented: Bool = false
@@ -897,7 +898,7 @@ class AppState: ObservableObject {
         }
 
         let raw = try String(contentsOf: templateURL, encoding: .utf8)
-        let processed = applyTemplateVariables(to: raw)
+        let (processed, cursorPosition) = applyTemplateVariables(to: raw)
         guard FileManager.default.createFile(atPath: url.path, contents: processed.data(using: .utf8), attributes: nil) else {
             throw FileBrowserError.operationFailed("Could not create the note from the selected template.")
         }
@@ -905,6 +906,7 @@ class AppState: ObservableObject {
         refreshAllFiles()
         targetDirectoryForTemplate = nil
         openFileInNewTab(url)
+        pendingCursorPosition = cursorPosition
         return url
     }
 
@@ -937,7 +939,7 @@ class AppState: ObservableObject {
 
     // MARK: - Template Variables
 
-    func applyTemplateVariables(to content: String, date: Date? = nil) -> String {
+    func applyTemplateVariables(to content: String, date: Date? = nil) -> (content: String, cursorPosition: Int?) {
         let d = date ?? now()
         let calendar = Calendar.current
         let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: d)
@@ -949,14 +951,16 @@ class AppState: ObservableObject {
         let hourStr = String(format: "%02d", hour12)
         let minuteStr = String(format: "%02d", components.minute ?? 0)
         let ampm = hour24 < 12 ? "AM" : "PM"
-        return content
+        var result = content
             .replacingOccurrences(of: "{{year}}", with: year)
             .replacingOccurrences(of: "{{month}}", with: month)
             .replacingOccurrences(of: "{{day}}", with: day)
             .replacingOccurrences(of: "{{hour}}", with: hourStr)
             .replacingOccurrences(of: "{{minute}}", with: minuteStr)
             .replacingOccurrences(of: "{{ampm}}", with: ampm)
-            .replacingOccurrences(of: "{{cursor}}", with: "")
+        let cursorPosition = result.range(of: "{{cursor}}").map { result.distance(from: result.startIndex, to: $0.lowerBound) }
+        result = result.replacingOccurrences(of: "{{cursor}}", with: "")
+        return (result, cursorPosition)
     }
 
     // MARK: - Daily Notes
@@ -981,6 +985,8 @@ class AppState: ObservableObject {
 
         let noteURL = standardized(dailyFolderURL.appendingPathComponent(fileName))
 
+        var cursorPosition: Int? = nil
+
         if !fm.fileExists(atPath: noteURL.path) {
             var content = ""
 
@@ -988,7 +994,9 @@ class AppState: ObservableObject {
             if !templateName.isEmpty, let templatesDir = templatesDirectoryURL() {
                 let templateURL = templatesDir.appendingPathComponent(templateName)
                 if let raw = try? String(contentsOf: templateURL, encoding: .utf8) {
-                    content = applyTemplateVariables(to: raw, date: date)
+                    let result = applyTemplateVariables(to: raw, date: date)
+                    content = result.content
+                    cursorPosition = result.cursorPosition
                 }
             }
 
@@ -997,6 +1005,7 @@ class AppState: ObservableObject {
         }
 
         openFileInNewTab(noteURL)
+        pendingCursorPosition = cursorPosition
         return noteURL
     }
 

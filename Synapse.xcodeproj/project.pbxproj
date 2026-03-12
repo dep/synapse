@@ -44,6 +44,7 @@
 		C9FF200E8A6D943707610F1E /* AppStateTemplatesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26C7B58403081D448E5999D8 /* AppStateTemplatesTests.swift */; };
 		CEC89756C5CC8F759BD67615 /* AppStateTabsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A96D01FE3D3F9C3438D9E4A /* AppStateTabsTests.swift */; };
 		D1DF0C68FA69ABC62DB00659 /* GitServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C665A271CAB4E35735B89A9 /* GitServiceTests.swift */; };
+		D5787BB6EF12171216FBBEB4 /* AppStateNewNoteFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4632EB6F4E70945C784CC180 /* AppStateNewNoteFlowTests.swift */; };
 		F03FCDD03015035E226FE7CD /* GitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF3182DCA96C9518DC154E22 /* GitService.swift */; };
 		F0CC31A93376DEA4A2F12A95 /* SynapseApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48E13069F2D634A684FAE713 /* SynapseApp.swift */; };
 		F130A3AE3317CD34B8419BAA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CB8BA24E7E55C8EF0A3530F0 /* Assets.xcassets */; };
@@ -74,6 +75,7 @@
 		413A5866D2A2397710DDFDE5 /* GitErrorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitErrorTests.swift; sourceTree = "<group>"; };
 		4369EAAC935F20E2DDEE7692 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		45E413806B3F56C9791BDD79 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		4632EB6F4E70945C784CC180 /* AppStateNewNoteFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateNewNoteFlowTests.swift; sourceTree = "<group>"; };
 		466921F2CFCBF80C26417D68 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		48E13069F2D634A684FAE713 /* SynapseApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynapseApp.swift; sourceTree = "<group>"; };
 		56691DF2CDDFA2DF5F263CF3 /* AppStateCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateCoreTests.swift; sourceTree = "<group>"; };
@@ -165,6 +167,7 @@
 				581F07CA2599C2ED63315D92 /* AppStateFolderOperationsTests.swift */,
 				FBF1B8B03D6E5299A4700177 /* AppStateGraphTests.swift */,
 				B6076EE60ED15C4BA9011BE7 /* AppStateNavigationTests.swift */,
+				4632EB6F4E70945C784CC180 /* AppStateNewNoteFlowTests.swift */,
 				D688EED08E44E1A4DAD82C72 /* AppStateRefreshFilesTests.swift */,
 				1609E933DF539DAC00406023 /* AppStateRelativePathTests.swift */,
 				D4482EC8C9915BC9A0022159 /* AppStateSaveTests.swift */,
@@ -289,6 +292,7 @@
 				8777D23DB72BE7ADC588DB22 /* AppStateFolderOperationsTests.swift in Sources */,
 				6044649992300375F1BDB874 /* AppStateGraphTests.swift in Sources */,
 				899061DD86BA4E4A6719C95B /* AppStateNavigationTests.swift in Sources */,
+				D5787BB6EF12171216FBBEB4 /* AppStateNewNoteFlowTests.swift in Sources */,
 				967AA2B1562D2EC1150730A2 /* AppStateRefreshFilesTests.swift in Sources */,
 				97EFC86461BB19D45F94FEED /* AppStateRelativePathTests.swift in Sources */,
 				99481587A828F0DD68358B09 /* AppStateSaveTests.swift in Sources */,
