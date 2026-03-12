@@ -81,4 +81,44 @@ final class SplitPaneKeyboardAndCursorTests: XCTestCase {
         XCTAssertEqual(appState.pendingCursorRange, NSRange(location: 6, length: 0))
         XCTAssertEqual(appState.pendingCursorTargetPaneIndex, 0)
     }
+
+    func test_saveCursorObserver_tracksEditableScrollOffset() {
+        let appState = AppState()
+        let editableView = RawEditor.configuredTextView(isEditable: true)
+        let scrollView = NSScrollView()
+        scrollView.documentView = editableView
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: 42))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+        editableView.installSaveCursorObserver(appState: appState)
+
+        NotificationCenter.default.post(name: .saveCursorPosition, object: nil)
+
+        XCTAssertEqual(appState.pendingScrollOffsetY, 42)
+    }
+
+    func test_preserveScrollOffset_restoresPreviousOffsetAfterAction() {
+        let textView = RawEditor.configuredTextView(isEditable: true)
+        let scrollView = NSScrollView()
+        scrollView.documentView = textView
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: 42))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+
+        preserveScrollOffset(for: textView) {
+            scrollView.contentView.scroll(to: NSPoint(x: 0, y: 0))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+
+        XCTAssertEqual(scrollView.contentView.bounds.origin.y, 42)
+    }
+
+    func test_activatePaneOnReadOnlyInteraction_triggersPaneActivation() {
+        var activated = false
+
+        let consumed = activatePaneOnReadOnlyInteraction(isEditable: false) {
+            activated = true
+        }
+
+        XCTAssertTrue(consumed)
+        XCTAssertTrue(activated)
+    }
 }

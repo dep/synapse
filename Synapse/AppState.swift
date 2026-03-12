@@ -122,6 +122,7 @@ struct PaneState {
     var history: [URL] = []
     var historyIndex: Int = -1
     var cursorRange: NSRange? = nil
+    var scrollOffsetY: CGFloat? = nil
 }
 
 class AppState: ObservableObject {
@@ -167,6 +168,7 @@ class AppState: ObservableObject {
     @Published var pendingCursorPosition: Int? = nil
     @Published var pendingCursorRange: NSRange? = nil
     @Published var pendingCursorTargetPaneIndex: Int? = nil
+    @Published var pendingScrollOffsetY: CGFloat? = nil
     @Published var commandPaletteMode: CommandPaletteMode = .files
     @Published var targetDirectoryForTemplate: URL?
     @Published var isRootNoteSheetPresented: Bool = false
@@ -1432,7 +1434,9 @@ class AppState: ObservableObject {
         paneStates[index].fileContent = fileContent
         paneStates[index].isDirty = isDirty
         paneStates[index].cursorRange = pendingCursorRange
+        paneStates[index].scrollOffsetY = pendingScrollOffsetY
         pendingCursorRange = nil
+        pendingScrollOffsetY = nil
         pendingCursorTargetPaneIndex = nil
     }
 
@@ -1445,6 +1449,7 @@ class AppState: ObservableObject {
         fileContent = pane.fileContent
         isDirty = pane.isDirty
         pendingCursorRange = pane.cursorRange
+        pendingScrollOffsetY = pane.scrollOffsetY
         pendingCursorTargetPaneIndex = index
         if let file = pane.selectedFile {
             startWatching(file)

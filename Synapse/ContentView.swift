@@ -354,7 +354,7 @@ struct ContentView: View {
                         appState.saveCurrentFile(content: appState.fileContent)
                         appState.autoPushIfEnabled()
                     }) {
-                        Image(systemName: "square.and.arrow.down")
+                        Image(systemName: "externaldrive.fill")
                     }
                     .buttonStyle(PrimaryChromeButtonStyle())
                     .keyboardShortcut("s", modifiers: .command)
