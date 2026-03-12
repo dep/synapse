@@ -1238,6 +1238,9 @@ class AppState: ObservableObject {
             fileContent = ""
             isDirty = false
             tabMRU = []
+            if splitOrientation != nil {
+                closePane(activePaneIndex)
+            }
             return
         }
 

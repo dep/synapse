@@ -206,6 +206,41 @@ final class AppStateSplitPaneTests: XCTestCase {
         XCTAssertEqual(sut.selectedFile, fileC, "Pane 1 should now show fileC")
     }
 
+    // MARK: - Auto-close Split on Last Tab
+
+    func test_closingLastTabInSplitPane_closesThatPane() {
+        sut.openFile(fileA)
+        sut.splitVertically()
+        sut.openFile(fileB) // pane 1 has fileB as its only tab
+
+        sut.closeTab(at: 0) // close the only tab in pane 1
+
+        XCTAssertNil(sut.splitOrientation, "Split should be closed when last tab in a pane is closed")
+    }
+
+    func test_closingLastTabInPane1_keepsPane0Content() {
+        sut.openFile(fileA) // pane 0 has fileA
+        sut.splitVertically()
+        sut.openFile(fileB) // pane 1 has fileB
+
+        sut.closeTab(at: 0) // close pane 1's only tab
+
+        XCTAssertEqual(sut.selectedFile, fileA, "After closing pane 1, pane 0's file should be active")
+        XCTAssertEqual(sut.activePaneIndex, 0)
+    }
+
+    func test_closingLastTabInPane0_keepsPane1Content() {
+        sut.openFile(fileA) // pane 0 has fileA
+        sut.splitVertically()
+        sut.openFile(fileB) // pane 1 has fileB
+
+        sut.activePaneIndex = 0
+        sut.closeTab(at: 0) // close pane 0's only tab
+
+        XCTAssertNil(sut.splitOrientation, "Split should close")
+        XCTAssertEqual(sut.selectedFile, fileB, "Former pane 1's file should survive")
+    }
+
     // MARK: - Existing Behavior Preserved
 
     func test_singlePane_tabBehaviorUnchanged() {
