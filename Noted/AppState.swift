@@ -65,6 +65,7 @@ struct TemplateRenameRequest: Identifiable {
 enum TabItem: Hashable {
     case file(URL)
     case tag(String)
+    case graph
     
     var displayName: String {
         switch self {
@@ -72,6 +73,8 @@ enum TabItem: Hashable {
             return url.lastPathComponent
         case .tag(let tagName):
             return "#\(tagName)"
+        case .graph:
+            return "Graph"
         }
     }
     
@@ -82,6 +85,11 @@ enum TabItem: Hashable {
     
     var isTag: Bool {
         if case .tag = self { return true }
+        return false
+    }
+
+    var isGraph: Bool {
+        if case .graph = self { return true }
         return false
     }
     
@@ -282,8 +290,14 @@ class AppState: ObservableObject {
             if updateRecency {
                 recordTabRecency(for: tab)
             }
-        case .tag(let tagName):
+        case .tag:
             // Tag tab - clear file state
+            selectedFile = nil
+            fileContent = ""
+            isDirty = false
+            stopWatching()
+        case .graph:
+            // Graph tab - clear file state
             selectedFile = nil
             fileContent = ""
             isDirty = false
@@ -524,7 +538,13 @@ class AppState: ObservableObject {
 
     /// Builds the full vault graph: every note is a node, every [[wikilink]] is a directed edge.
     /// Unresolved links produce "ghost" nodes (no URL) so the edge graph stays complete.
-    func vaultGraph() -> NoteGraph {
+    /// Builds the full vault graph.
+    /// - Parameter includeGhosts: When `false` (default), unresolved wikilink targets are
+    ///   omitted — only files matching the current `fileExtensionFilter` appear as nodes.
+    ///   The local graph passes `true` so nearby ghost neighbours are still visible.
+    /// - Parameter includeOrphans: When `false` (default), notes with no edges (no inbound
+    ///   or outbound links) are excluded. Pass `true` to include all notes regardless.
+    func vaultGraph(includeGhosts: Bool = false, includeOrphans: Bool = false) -> NoteGraph {
         let index = noteIndex()
         var nodes: [String: NoteGraphNode] = [:]
         var edges: [NoteGraphEdge] = []
@@ -548,20 +568,25 @@ class AppState: ObservableObject {
             for link in wikiLinks(in: content) {
                 guard seenTargets.insert(link).inserted else { continue }
 
-                let toID: String
                 if index[link] != nil {
-                    toID = link
-                } else {
-                    // Ghost node: ensure it exists
-                    toID = link
-                    if nodes[toID] == nil {
-                        nodes[toID] = NoteGraphNode(id: toID, title: link, url: nil, isGhost: true)
+                    // Resolved link — always include
+                    let edgeID = "\(fromID)->\(link)"
+                    edges.append(NoteGraphEdge(id: edgeID, fromID: fromID, toID: link))
+                } else if includeGhosts {
+                    // Unresolved link — only include when ghost nodes are requested
+                    if nodes[link] == nil {
+                        nodes[link] = NoteGraphNode(id: link, title: link, url: nil, isGhost: true)
                     }
+                    let edgeID = "\(fromID)->\(link)"
+                    edges.append(NoteGraphEdge(id: edgeID, fromID: fromID, toID: link))
                 }
-
-                let edgeID = "\(fromID)->\(toID)"
-                edges.append(NoteGraphEdge(id: edgeID, fromID: fromID, toID: toID))
             }
+        }
+
+        // Drop orphan nodes (no edges at all) unless caller wants them
+        if !includeOrphans {
+            let connectedIDs = Set(edges.flatMap { [$0.fromID, $0.toID] })
+            nodes = nodes.filter { connectedIDs.contains($0.key) }
         }
 
         return NoteGraph(nodes: Array(nodes.values), edges: edges)
@@ -572,7 +597,7 @@ class AppState: ObservableObject {
     func localGraph() -> NoteGraph? {
         guard let selectedFile else { return nil }
 
-        let fullGraph = vaultGraph()
+        let fullGraph = vaultGraph(includeGhosts: true, includeOrphans: true)
         let selectedTitle = noteTitle(for: selectedFile)
         let selectedID = normalizedNoteReference(selectedTitle)
 
@@ -1020,6 +1045,20 @@ class AppState: ObservableObject {
         recordTabRecency(for: .file(url))
     }
     
+    func openGraphTab() {
+        // If graph tab already open, switch to it
+        if let existingIndex = tabs.firstIndex(of: .graph) {
+            switchTab(to: existingIndex)
+            return
+        }
+        tabs.append(.graph)
+        activeTabIndex = tabs.count - 1
+        selectedFile = nil
+        fileContent = ""
+        isDirty = false
+        stopWatching()
+    }
+
     func openTagInNewTab(_ tag: String) {
         // If tag already open in a tab, just switch to it
         if let existingIndex = tabs.firstIndex(of: .tag(tag)) {

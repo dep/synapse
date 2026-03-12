@@ -45,23 +45,32 @@ final class AppStateGraphTests: XCTestCase {
 
     // MARK: - Nodes
 
-    func test_vaultGraph_singleNote_producesOneNode() {
+    func test_vaultGraph_singleNote_producesOneNode_whenOrphansIncluded() {
         makeNote(named: "Alpha", content: "Hello world")
         sut.refreshAllFiles()
 
-        let graph = sut.vaultGraph()
+        let graph = sut.vaultGraph(includeOrphans: true)
 
         XCTAssertEqual(graph.nodes.count, 1)
         XCTAssertEqual(graph.nodes.first?.title, "Alpha")
     }
 
-    func test_vaultGraph_multipleNotes_producesOneNodePerNote() {
+    func test_vaultGraph_orphanNote_excludedByDefault() {
+        makeNote(named: "Orphan", content: "No links here")
+        sut.refreshAllFiles()
+
+        let graph = sut.vaultGraph()
+
+        XCTAssertTrue(graph.nodes.isEmpty)
+    }
+
+    func test_vaultGraph_multipleNotes_producesOneNodePerNote_whenOrphansIncluded() {
         makeNote(named: "A")
         makeNote(named: "B")
         makeNote(named: "C")
         sut.refreshAllFiles()
 
-        let graph = sut.vaultGraph()
+        let graph = sut.vaultGraph(includeOrphans: true)
 
         XCTAssertEqual(graph.nodes.count, 3)
         let titles = graph.nodes.map(\.title).sorted()
@@ -69,19 +78,21 @@ final class AppStateGraphTests: XCTestCase {
     }
 
     func test_vaultGraph_nodeURL_matchesFileURL() {
-        let url = makeNote(named: "MyNote")
+        let urlA = makeNote(named: "NoteA", content: "[[NoteB]]")
+        makeNote(named: "NoteB")
         sut.refreshAllFiles()
 
         let graph = sut.vaultGraph()
 
-        XCTAssertEqual(graph.nodes.first?.url, url)
+        let nodeA = graph.nodes.first { $0.title == "NoteA" }
+        XCTAssertEqual(nodeA?.url, urlA)
     }
 
-    func test_vaultGraph_ghostNodes_includedForUnresolvedLinks() {
+    func test_vaultGraph_ghostNodes_includedWhenRequested() {
         makeNote(named: "NoteA", content: "See [[Ghost]]")
         sut.refreshAllFiles()
 
-        let graph = sut.vaultGraph()
+        let graph = sut.vaultGraph(includeGhosts: true)
 
         // NoteA (real) + Ghost (ghost)
         XCTAssertEqual(graph.nodes.count, 2)
@@ -91,13 +102,26 @@ final class AppStateGraphTests: XCTestCase {
         XCTAssertNil(ghostNode?.url)
     }
 
+    func test_vaultGraph_ghostNodes_excludedByDefault() {
+        makeNote(named: "NoteA", content: "See [[Ghost]]")
+        sut.refreshAllFiles()
+
+        // includeOrphans: true so NoteA stays; we're testing ghost exclusion specifically
+        let graph = sut.vaultGraph(includeOrphans: true)
+
+        // Only NoteA — unresolved ghost is excluded by default
+        XCTAssertEqual(graph.nodes.count, 1)
+        XCTAssertFalse(graph.nodes.contains { $0.isGhost })
+    }
+
     func test_vaultGraph_realNodesAreNotGhosts() {
-        makeNote(named: "RealNote", content: "No links")
+        makeNote(named: "NoteA", content: "[[NoteB]]")
+        makeNote(named: "NoteB")
         sut.refreshAllFiles()
 
         let graph = sut.vaultGraph()
 
-        XCTAssertFalse(graph.nodes.first!.isGhost)
+        XCTAssertTrue(graph.nodes.allSatisfy { !$0.isGhost })
     }
 
     // MARK: - Edges
@@ -106,7 +130,8 @@ final class AppStateGraphTests: XCTestCase {
         makeNote(named: "Solo")
         sut.refreshAllFiles()
 
-        let graph = sut.vaultGraph()
+        // includeOrphans: true so the note exists; we're testing edge count specifically
+        let graph = sut.vaultGraph(includeOrphans: true)
 
         XCTAssertTrue(graph.edges.isEmpty)
     }
@@ -126,16 +151,25 @@ final class AppStateGraphTests: XCTestCase {
         XCTAssertEqual(toNode.title, "NoteB")
     }
 
-    func test_vaultGraph_unresolvedLink_producesEdgeToGhostNode() {
+    func test_vaultGraph_unresolvedLink_producesEdgeToGhostNode_whenGhostsIncluded() {
         makeNote(named: "NoteA", content: "See [[Phantom]]")
         sut.refreshAllFiles()
 
-        let graph = sut.vaultGraph()
+        let graph = sut.vaultGraph(includeGhosts: true)
 
         XCTAssertEqual(graph.edges.count, 1)
         let toID = graph.edges.first!.toID
         let ghostNode = graph.nodes.first { $0.id == toID }!
         XCTAssertTrue(ghostNode.isGhost)
+    }
+
+    func test_vaultGraph_unresolvedLink_producesNoEdge_byDefault() {
+        makeNote(named: "NoteA", content: "See [[Phantom]]")
+        sut.refreshAllFiles()
+
+        let graph = sut.vaultGraph()
+
+        XCTAssertTrue(graph.edges.isEmpty)
     }
 
     func test_vaultGraph_duplicateLinks_deduped() {
