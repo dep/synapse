@@ -88,8 +88,6 @@ Available panes:
 - Terminal
 - Graph
 
----
-
 ## Keyboard Shortcuts
 
 Synapse relies heavily on keyboard shortcuts to help you navigate and edit quickly.

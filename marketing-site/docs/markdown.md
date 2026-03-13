@@ -7,8 +7,6 @@ title: Markdown Guide
 
 Synapse supports standard Markdown syntax along with powerful extensions for knowledge management, including wiki links, embeds, and hashtags.
 
----
-
 ## Basic Syntax
 
 ### Headings
@@ -134,8 +132,6 @@ ___
 - [ ] Another task
 ```
 
----
-
 ## Synapse Extensions
 
 ### Wiki Links
@@ -237,8 +233,6 @@ This link https://example.com/page#section contains a URL fragment, not a tag.
 But this #is-a-real-tag.
 ```
 
----
-
 ## Templates
 
 Templates allow you to create notes with dynamic content using variables.
@@ -329,8 +323,6 @@ Enable Daily Notes in Settings to automatically create a dated note each day:
 
 When you open your vault, today's note is automatically created if it doesn't exist.
 
----
-
 ## Best Practices
 
 ### File Organization
@@ -369,8 +361,6 @@ Vault/
 2. **Note titles as sentences** - "How to configure Git sync" vs "Git Config"
 3. **Start with context** - Briefly explain what the note is about
 4. **Use headers** - Structure long notes with clear headings
-
----
 
 ## Tips & Tricks
 
