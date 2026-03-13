@@ -223,6 +223,7 @@ class AppState: ObservableObject {
 
     private var gitService: GitService?
     private var pushTimer: Timer?
+    private var pullTimer: Timer?
     private let gitQueue = DispatchQueue(label: "com.Synapse.git", qos: .background)
     private let machineName: String = Host.current().localizedName ?? ProcessInfo.processInfo.hostName
 
@@ -263,7 +264,10 @@ class AppState: ObservableObject {
             source.setEventHandler { [weak self] in
                 guard let self else { return }
                 self.refreshAllFiles()
-                self.reloadSelectedFileFromDiskIfNeeded(force: true)
+                guard case .pulling = self.gitSyncStatus else {
+                    self.reloadSelectedFileFromDiskIfNeeded(force: true)
+                    return
+                }
             }
             source.setCancelHandler { close(fd) }
             source.resume()
@@ -273,7 +277,10 @@ class AppState: ObservableObject {
         filePollCancellable = Timer.publish(every: 0.75, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
-                self?.reloadSelectedFileFromDiskIfNeeded()
+                guard let self, case .pulling = self.gitSyncStatus else {
+                    self?.reloadSelectedFileFromDiskIfNeeded()
+                    return
+                }
             }
     }
 
@@ -839,6 +846,8 @@ class AppState: ObservableObject {
     private func setupGit(for url: URL) {
         pushTimer?.invalidate()
         pushTimer = nil
+        pullTimer?.invalidate()
+        pullTimer = nil
 
         if GitService.isGitRepo(at: url), let git = try? GitService(repoURL: url) {
             gitService = git
@@ -846,6 +855,7 @@ class AppState: ObservableObject {
             gitAheadCount = git.aheadCount()
             gitSyncStatus = .idle
             startPushTimer()
+            startPullTimer()
         } else {
             gitService = nil
             gitBranch = "main"
@@ -860,6 +870,41 @@ class AppState: ObservableObject {
         }
         RunLoop.main.add(timer, forMode: .common)
         pushTimer = timer
+    }
+
+    private func startPullTimer() {
+        let timer = Timer(timeInterval: 10, repeats: true) { [weak self] _ in
+            self?.pullLatest()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        pullTimer = timer
+    }
+
+    func pullLatest() {
+        guard let git = gitService, git.hasRemote() else { return }
+        guard case .idle = gitSyncStatus else { return }
+        gitSyncStatus = .pulling
+        gitQueue.async { [weak self] in
+            guard let self else { return }
+            do {
+                try git.pullRebase()
+
+                if git.hasConflicts() {
+                    DispatchQueue.main.async {
+                        self.gitSyncStatus = .conflict("Merge conflicts detected. Resolve them manually in a terminal, then push.")
+                        self.reloadSelectedFileFromDiskIfNeeded(force: true)
+                    }
+                    return
+                }
+
+                DispatchQueue.main.async {
+                    self.reloadSelectedFileFromDiskIfNeeded(force: true)
+                    self.gitSyncStatus = .idle
+                }
+            } catch {
+                DispatchQueue.main.async { self.gitSyncStatus = .idle }
+            }
+        }
     }
 
     func pushToRemote() {
