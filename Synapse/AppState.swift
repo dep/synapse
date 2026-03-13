@@ -719,6 +719,12 @@ class AppState: ObservableObject {
         // Clean up file watching
         stopWatching()
 
+        // Reset tab state
+        tabs = []
+        activeTabIndex = nil
+        paneStates = [PaneState(), PaneState()]
+        splitOrientation = nil
+
         // Reset file state
         selectedFile = nil
         fileContent = ""
