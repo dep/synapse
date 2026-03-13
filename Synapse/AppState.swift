@@ -1228,6 +1228,11 @@ class AppState: ObservableObject {
     }
 
     func openFileInNewTab(_ url: URL) {
+        if isDirty {
+            saveCurrentFile(content: fileContent)
+            autoPushIfEnabled()
+        }
+
         // If file already open in a tab, just switch to it
         if let existingIndex = tabs.firstIndex(of: .file(url)) {
             switchTab(to: existingIndex)

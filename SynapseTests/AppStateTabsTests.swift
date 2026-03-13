@@ -84,6 +84,19 @@ final class AppStateTabsTests: XCTestCase {
         XCTAssertEqual(sut.activeTabIndex, 2, "Active tab should be index 2")
     }
 
+    func test_openFileInNewTab_savesDirtyActiveFileBeforeSwitching() throws {
+        sut.openFile(fileA)
+        sut.fileContent = "Unsaved edit in A"
+        sut.isDirty = true
+
+        sut.openFileInNewTab(fileB)
+
+        let diskContent = try String(contentsOf: fileA, encoding: .utf8)
+        XCTAssertEqual(diskContent, "Unsaved edit in A", "Opening a new tab should persist dirty edits from the current file")
+        XCTAssertEqual(sut.selectedFile, fileB)
+        XCTAssertFalse(sut.isDirty)
+    }
+
     func test_openFileInNewTab_duplicateFile_makesExistingTabActive() {
         sut.openFile(fileA)
         sut.openFileInNewTab(fileB)
