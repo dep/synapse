@@ -1,0 +1,335 @@
+/**
+ * Synapse Dark Theme - Matching the macOS app aesthetic
+ */
+
+:root {
+  /* Synapse App Colors */
+  --synapse-bg: #0d0d0d;
+  --synapse-bg-elevated: #141414;
+  --synapse-bg-hover: #1a1a1a;
+  --synapse-border: rgba(255, 255, 255, 0.08);
+  --synapse-border-strong: rgba(255, 255, 255, 0.12);
+  --synapse-text: rgba(255, 255, 255, 0.92);
+  --synapse-text-secondary: rgba(255, 255, 255, 0.68);
+  --synapse-text-muted: rgba(255, 255, 255, 0.45);
+  --synapse-accent: #47A8FA;
+  --synapse-accent-soft: #3285D7;
+  
+  /* Override VitePress defaults */
+  --vp-c-bg: var(--synapse-bg);
+  --vp-c-bg-alt: var(--synapse-bg-elevated);
+  --vp-c-bg-elv: var(--synapse-bg-elevated);
+  --vp-c-bg-soft: var(--synapse-bg-hover);
+  
+  --vp-c-text-1: var(--synapse-text);
+  --vp-c-text-2: var(--synapse-text-secondary);
+  --vp-c-text-3: var(--synapse-text-muted);
+  
+  --vp-c-border: var(--synapse-border);
+  --vp-c-divider: var(--synapse-border);
+  --vp-c-gutter: var(--synapse-border);
+  
+  --vp-c-brand-1: var(--synapse-accent);
+  --vp-c-brand-2: var(--synapse-accent-soft);
+  --vp-c-brand-3: var(--synapse-accent);
+  --vp-c-brand-soft: rgba(71, 168, 250, 0.15);
+  
+  --vp-c-default-1: var(--synapse-text-secondary);
+  --vp-c-default-2: var(--synapse-text-muted);
+  --vp-c-default-3: rgba(255, 255, 255, 0.3);
+  
+  /* Code blocks */
+  --vp-code-block-bg: var(--synapse-bg-elevated);
+  --vp-code-bg: rgba(255, 255, 255, 0.08);
+  --vp-code-color: var(--synapse-accent);
+  --vp-code-font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  
+  /* Custom blocks */
+  --vp-custom-block-info-bg: rgba(71, 168, 250, 0.08);
+  --vp-custom-block-info-border: var(--synapse-accent);
+  --vp-custom-block-warning-bg: rgba(250, 180, 71, 0.08);
+  --vp-custom-block-warning-border: #fab447;
+  --vp-custom-block-tip-bg: rgba(71, 250, 143, 0.08);
+  --vp-custom-block-tip-border: #47f88f;
+  
+  /* Fonts */
+  --vp-font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  --vp-font-family-heading: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+}
+
+/* Base styles */
+html {
+  background: var(--synapse-bg);
+}
+
+body {
+  background: var(--synapse-bg);
+  color: var(--synapse-text);
+}
+
+/* Navbar styling */
+.VPNav {
+  background: rgba(13, 13, 13, 0.85) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid var(--synapse-border);
+}
+
+.VPNavBar {
+  border-bottom: none;
+}
+
+.VPNavBarTitle {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* Sidebar styling - always visible */
+.VPSidebar {
+  background: var(--synapse-bg-elevated) !important;
+  border-right: 1px solid var(--synapse-border);
+}
+
+.VPSidebarItem {
+  font-size: 14px;
+}
+
+.VPSidebarItem.is-active {
+  color: var(--synapse-accent);
+}
+
+.VPSidebarItem.is-active .indicator {
+  background: var(--synapse-accent);
+}
+
+/* Main content area */
+.VPDoc {
+  padding: 32px 40px;
+}
+
+.VPDocOutlineAside {
+  background: var(--synapse-bg-elevated);
+  border: 1px solid var(--synapse-border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+/* Typography */
+.VPDoc h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin-bottom: 1.5rem;
+}
+
+.VPDoc h2 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  border-top: 1px solid var(--synapse-border);
+  padding-top: 2rem;
+  margin-top: 2.5rem;
+}
+
+.VPDoc h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.VPDoc p {
+  line-height: 1.7;
+  margin: 1rem 0;
+}
+
+/* Links */
+.VPDoc a {
+  color: var(--synapse-accent);
+  text-decoration: none;
+  font-weight: 500;
+  transition: opacity 0.2s;
+}
+
+.VPDoc a:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+/* Code styling */
+.VPDoc code {
+  background: var(--vp-code-bg);
+  color: var(--synapse-accent);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-family: var(--vp-code-font-family);
+}
+
+.VPDoc pre {
+  background: var(--vp-code-block-bg);
+  border: 1px solid var(--synapse-border);
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+}
+
+.VPDoc pre code {
+  background: transparent;
+  color: var(--synapse-text);
+  padding: 0;
+}
+
+/* Tables */
+.VPDoc table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.5rem 0;
+}
+
+.VPDoc th,
+.VPDoc td {
+  border: 1px solid var(--synapse-border);
+  padding: 12px 16px;
+  text-align: left;
+}
+
+.VPDoc th {
+  background: var(--synapse-bg-elevated);
+  font-weight: 600;
+  color: var(--synapse-text);
+}
+
+.VPDoc tr:hover {
+  background: var(--synapse-bg-hover);
+}
+
+/* Lists */
+.VPDoc ul,
+.VPDoc ol {
+  padding-left: 1.5rem;
+  margin: 1rem 0;
+}
+
+.VPDoc li {
+  margin: 0.5rem 0;
+  line-height: 1.6;
+}
+
+/* Horizontal rules */
+.VPDoc hr {
+  border: none;
+  border-top: 1px solid var(--synapse-border);
+  margin: 2rem 0;
+}
+
+/* Custom blocks (info, warning, tip) */
+.VPDoc .custom-block {
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin: 1.5rem 0;
+  border: 1px solid;
+}
+
+.VPDoc .custom-block.info {
+  background: var(--vp-custom-block-info-bg);
+  border-color: var(--vp-custom-block-info-border);
+}
+
+.VPDoc .custom-block.warning {
+  background: var(--vp-custom-block-warning-bg);
+  border-color: var(--vp-custom-block-warning-border);
+}
+
+.VPDoc .custom-block.tip {
+  background: var(--vp-custom-block-tip-bg);
+  border-color: var(--vp-custom-block-tip-border);
+}
+
+.VPDoc .custom-block .custom-block-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Selection */
+::selection {
+  background: rgba(71, 168, 250, 0.3);
+  color: white;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 960px) {
+  .VPDoc {
+    padding: 24px;
+  }
+  
+  .VPDoc h1 {
+    font-size: 2rem;
+  }
+  
+  .VPDoc h2 {
+    font-size: 1.5rem;
+  }
+}
+
+/* Ensure sidebar is always visible on desktop */
+@media (min-width: 960px) {
+  .VPContent {
+    padding-left: 260px;
+  }
+  
+  .VPSidebar {
+    left: 0 !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: none !important;
+  }
+  
+  .VPNavBar .VPNavBarMenu {
+    display: none; /* Hide hamburger menu on desktop */
+  }
+}
+
+/* Button styling */
+.VPButton {
+  border-radius: 6px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.VPButton.brand {
+  background: var(--synapse-accent);
+  color: white;
+}
+
+.VPButton.brand:hover {
+  background: var(--synapse-accent-soft);
+}
+
+/* Social links */
+.VPNavBarSocialLinks .VPNavBarSocialLink {
+  color: var(--synapse-text-secondary);
+  transition: color 0.2s;
+}
+
+.VPNavBarSocialLinks .VPNavBarSocialLink:hover {
+  color: var(--synapse-accent);
+}
