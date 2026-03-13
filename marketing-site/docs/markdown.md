@@ -394,8 +394,6 @@ While editing:
 - Configure an "On-boot command" in Settings to run when terminal loads
 - Use the terminal alongside your notes for command-line workflows
 
----
-
 ## Troubleshooting
 
 ### Wiki links not working?
@@ -417,8 +415,6 @@ While editing:
 - Use double curly braces: `{{variable}}`
 - Available variables: year, month, day, hour, minute, ampm, cursor
 - Ensure templates are in the configured templates folder
-
----
 
 ## Advanced Features
 
@@ -457,8 +453,6 @@ Drag and drop to customize your workspace:
 2. Drag between left and right sidebars
 3. Collapse panes you don't need
 4. Add/remove panes from the "Add Pane" menu
-
----
 
 Learn more:
 - [User Guide](/) - Complete application guide
