@@ -313,6 +313,53 @@ struct SettingsView: View {
                 Text("Auto-Push")
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
             }
+
+            // MARK: - GitHub Gist Section
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Personal Access Token")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 8) {
+                        SecureField("ghp_...", text: $settings.githubPAT)
+                            .font(.system(.body, design: .monospaced))
+                            .textFieldStyle(.roundedBorder)
+
+                        if settings.hasGitHubPAT {
+                            Button("Clear") {
+                                settings.githubPAT = ""
+                            }
+                            .font(.system(size: 11))
+                            .foregroundStyle(.red)
+                        }
+                    }
+
+                    Text("Used to publish notes to public GitHub Gists. The token needs the 'gist' scope.")
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button(action: {
+                        if let url = URL(string: "https://github.com/settings/tokens/new") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.up.right.square")
+                                .font(.system(size: 10))
+                            Text("Create token on GitHub")
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                        }
+                        .foregroundStyle(SynapseTheme.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.vertical, 4)
+            } header: {
+                Text("GitHub Gist")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+            }
         }
         .formStyle(.grouped)
         .frame(width: 560)
