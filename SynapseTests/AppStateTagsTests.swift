@@ -71,6 +71,30 @@ final class AppStateTagsTests: XCTestCase {
         XCTAssertEqual(tags, ["v2.1"])
     }
 
+    func test_extractTags_allowsNumericPrefixWhenTagContainsLetters() throws {
+        let text = "Instruction tag #00foo"
+        let tags = sut.extractTags(from: text)
+        XCTAssertEqual(tags, ["00foo"])
+    }
+
+    func test_extractTags_ignoresTagLikeFragmentsInsideMarkdownLinkDestinations() throws {
+        let text = "See [](some-url/#some-id/foobars) and keep #realtag"
+        let tags = sut.extractTags(from: text)
+        XCTAssertEqual(tags, ["realtag"])
+    }
+
+    func test_extractTags_ignoresTagLikeFragmentsInsidePlainUrls() throws {
+        let text = "Visit https://example.com/docs/#some-id/foobars and use #123"
+        let tags = sut.extractTags(from: text)
+        XCTAssertEqual(tags, [])
+    }
+
+    func test_extractTags_ignoresUuidLikeFragmentsInsidePlainUrls() throws {
+        let text = "Build link https://buildkite.com/invoca/web/builds/19449#998c04a8-3c20-4f4d-ac10-54f17403d6cd and keep #realtag"
+        let tags = sut.extractTags(from: text)
+        XCTAssertEqual(tags, ["realtag"])
+    }
+
     func test_extractTags_handlesUnderscoresAndHyphens() throws {
         let text = "#my-tag and #my_tag"
         let tags = sut.extractTags(from: text)
