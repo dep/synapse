@@ -65,6 +65,13 @@ class SettingsManager: ObservableObject {
     @Published var collapsedPanes: Set<String> {
         didSet { save() }
     }
+    @Published var githubPAT: String {
+        didSet { save() }
+    }
+
+    var hasGitHubPAT: Bool {
+        !githubPAT.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     let configPath: String
 
@@ -82,6 +89,7 @@ class SettingsManager: ObservableObject {
         var leftPaneHeights: [String: CGFloat]?
         var rightPaneHeights: [String: CGFloat]?
         var collapsedPanes: [String]?
+        var githubPAT: String?
 
         init(
             onBootCommand: String,
@@ -96,7 +104,8 @@ class SettingsManager: ObservableObject {
             rightSidebarPanes: [SidebarPane]?,
             leftPaneHeights: [String: CGFloat]?,
             rightPaneHeights: [String: CGFloat]?,
-            collapsedPanes: [String]?
+            collapsedPanes: [String]?,
+            githubPAT: String?
         ) {
             self.onBootCommand = onBootCommand
             self.fileExtensionFilter = fileExtensionFilter
@@ -111,6 +120,7 @@ class SettingsManager: ObservableObject {
             self.leftPaneHeights = leftPaneHeights
             self.rightPaneHeights = rightPaneHeights
             self.collapsedPanes = collapsedPanes
+            self.githubPAT = githubPAT
         }
 
         init(from decoder: Decoder) throws {
@@ -128,6 +138,7 @@ class SettingsManager: ObservableObject {
             leftPaneHeights = try container.decodeIfPresent([String: CGFloat].self, forKey: .leftPaneHeights)
             rightPaneHeights = try container.decodeIfPresent([String: CGFloat].self, forKey: .rightPaneHeights)
             collapsedPanes = try container.decodeIfPresent([String].self, forKey: .collapsedPanes)
+            githubPAT = try container.decodeIfPresent(String.self, forKey: .githubPAT)
         }
     }
 
@@ -159,6 +170,7 @@ class SettingsManager: ObservableObject {
             self.leftPaneHeights = config.leftPaneHeights ?? [:]
             self.rightPaneHeights = config.rightPaneHeights ?? [:]
             self.collapsedPanes = Set(config.collapsedPanes ?? [])
+            self.githubPAT = config.githubPAT ?? ""
         } else {
             self.onBootCommand = ""
             self.fileExtensionFilter = "*.md, *.txt"
@@ -173,6 +185,7 @@ class SettingsManager: ObservableObject {
             self.leftPaneHeights = [:]
             self.rightPaneHeights = [:]
             self.collapsedPanes = []
+            self.githubPAT = ""
         }
     }
 
@@ -228,7 +241,8 @@ class SettingsManager: ObservableObject {
             rightSidebarPanes: rightSidebarPanes,
             leftPaneHeights: leftPaneHeights,
             rightPaneHeights: rightPaneHeights,
-            collapsedPanes: Array(collapsedPanes)
+            collapsedPanes: Array(collapsedPanes),
+            githubPAT: githubPAT.isEmpty ? nil : githubPAT
         )
         guard let data = try? JSONEncoder().encode(config) else { return }
         let configURL = URL(fileURLWithPath: configPath)

@@ -171,6 +171,24 @@ struct EditorView: View {
 
             Spacer()
 
+            // Publish to Gist button (only when PAT is configured and not in read-only mode)
+            if !isReadOnly && appState.settings.hasGitHubPAT {
+                Button(action: {
+                    let note = NoteContent(filename: file.lastPathComponent, content: appState.fileContent)
+                    appState.gistPublisher.publish(note, pat: appState.settings.githubPAT)
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "globe")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Publish to Gist")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    }
+                    .foregroundStyle(SynapseTheme.accent)
+                }
+                .buttonStyle(.plain)
+                .help("Publish this note to a public GitHub Gist")
+            }
+
             if appState.isDirty {
                 TinyBadge(text: "Editing", color: SynapseTheme.success)
             } else {

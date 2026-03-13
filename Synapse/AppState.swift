@@ -192,6 +192,7 @@ class AppState: ObservableObject {
 
     // Settings
     let settings = SettingsManager()
+    let gistPublisher = GistPublisher()
 
     private var history: [URL] {
         get { paneStates[activePaneIndex].history }

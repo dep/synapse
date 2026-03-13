@@ -354,7 +354,7 @@ struct ContentView: View {
                         appState.saveCurrentFile(content: appState.fileContent)
                         appState.autoPushIfEnabled()
                     }) {
-                        Image(systemName: "externaldrive.fill")
+                        Image(systemName: "opticaldisc")
                     }
                     .buttonStyle(PrimaryChromeButtonStyle())
                     .keyboardShortcut("s", modifiers: .command)
