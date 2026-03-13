@@ -268,6 +268,23 @@ struct FileTreeView: View {
                 .fill(SynapseTheme.divider)
                 .frame(height: 1)
 
+                // MARK: - Pinned Section
+                if !appState.pinnedItems.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Pinned")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .tracking(1.8)
+                            .foregroundStyle(SynapseTheme.textMuted)
+                            .padding(.horizontal, 8)
+                            .padding(.top, 4)
+
+                        ForEach(appState.pinnedItems) { item in
+                            PinnedItemRow(item: item)
+                        }
+                    }
+                    .padding(.bottom, 8)
+                }
+
                 ScrollView {
                     if settings.fileTreeMode == .file {
                         let flatFiles = flatSortedFiles()
@@ -586,6 +603,12 @@ struct FileNodeRow: View {
                     Button("Open in Split") { appState.openFileInSplit(node.url) }
                 }
                 Divider()
+                if appState.isPinned(node.url) {
+                    Button("Unpin") { appState.unpinItem(node.url) }
+                } else {
+                    Button("Pin") { appState.pinItem(node.url) }
+                }
+                Divider()
                 Button("Rename") { onRename(node.url, node.isDirectory) }
                 Button("Delete", role: .destructive) { onDelete(node.url, node.isDirectory) }
             }
@@ -620,6 +643,54 @@ struct FileNodeRow: View {
             } else {
                 appState.openFile(node.url)
             }
+        }
+    }
+}
+
+// MARK: - Pinned Item Row
+struct PinnedItemRow: View {
+    @EnvironmentObject var appState: AppState
+    let item: PinnedItem
+
+    var body: some View {
+        Button(action: handleTap) {
+            HStack(spacing: 6) {
+                Image(systemName: item.isFolder ? "folder.fill" : "pin.fill")
+                    .foregroundStyle(SynapseTheme.accent)
+                    .frame(width: 16)
+                Text(item.name)
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(SynapseTheme.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .background {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(SynapseTheme.row)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .stroke(SynapseTheme.rowBorder, lineWidth: 1)
+                    }
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 2)
+        .contextMenu {
+            Button("Unpin") { appState.unpinItem(item.url) }
+            Divider()
+            Button("Open") { handleTap() }
+        }
+    }
+
+    private func handleTap() {
+        if item.isFolder {
+            // Expand/collapse folder in tree and scroll to it
+            appState.expandAndScrollToFolder(item.url)
+        } else {
+            appState.openFile(item.url)
         }
     }
 }
