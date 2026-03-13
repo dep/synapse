@@ -52,12 +52,27 @@ private struct BrowserEditorAction: Identifiable {
 private struct BrowserDeleteTarget {
     let url: URL
     let isDirectory: Bool
+    let isBatch: Bool
+    let batchCount: Int
+    
+    init(url: URL, isDirectory: Bool, isBatch: Bool = false, batchCount: Int = 0) {
+        self.url = url
+        self.isDirectory = isDirectory
+        self.isBatch = isBatch
+        self.batchCount = batchCount
+    }
 
     var title: String {
-        isDirectory ? "Delete Folder?" : "Delete File?"
+        if isBatch {
+            return "Delete \(batchCount) Items?"
+        }
+        return isDirectory ? "Delete Folder?" : "Delete File?"
     }
 
     var message: String {
+        if isBatch {
+            return "Delete \(batchCount) selected items? This cannot be undone."
+        }
         if isDirectory {
             return "Delete \(url.lastPathComponent) and everything inside it? This cannot be undone."
         }
@@ -329,7 +344,8 @@ struct FileTreeView: View {
                                         onCreateNote: { presentCreateNote(in: $0) },
                                         onCreateFolder: { presentCreateFolder(in: $0) },
                                         onRename: { presentRename(for: $0, isDirectory: $1) },
-                                        onDelete: { presentDelete(for: $0, isDirectory: $1) }
+                                        onDelete: { presentDelete(for: $0, isDirectory: $1) },
+                                        onBatchDelete: { presentBatchDelete() }
                                     )
                                 }
                             }
@@ -480,6 +496,10 @@ struct FileTreeView: View {
         deleteTarget = BrowserDeleteTarget(url: url, isDirectory: isDirectory)
     }
 
+    private func presentBatchDelete() {
+        deleteTarget = BrowserDeleteTarget(url: URL(fileURLWithPath: "/batch"), isDirectory: false, isBatch: true, batchCount: appState.selectedFilesCount)
+    }
+
     private func handleEditorSubmit(action: BrowserEditorAction, submittedName: String) {
         do {
             switch action.kind {
@@ -512,12 +532,18 @@ struct FileTreeView: View {
     private func confirmDelete() {
         guard let target = deleteTarget else { return }
         deleteTarget = nil
-        do {
-            try appState.deleteItem(at: target.url)
-            expandedDirs.remove(target.url)
+        
+        if target.isBatch {
+            appState.deleteSelectedFiles()
             refresh()
-        } catch {
-            errorMessage = error.localizedDescription
+        } else {
+            do {
+                try appState.deleteItem(at: target.url)
+                expandedDirs.remove(target.url)
+                refresh()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 }
@@ -531,9 +557,12 @@ struct FileNodeRow: View {
     let onCreateFolder: (URL) -> Void
     let onRename: (URL, Bool) -> Void
     let onDelete: (URL, Bool) -> Void
+    let onBatchDelete: () -> Void
 
     private var isExpanded: Bool { expandedDirs.contains(node.url) }
     private var isSelected: Bool { appState.selectedFile == node.url }
+    private var isMultiSelected: Bool { appState.isFileSelected(node.url) }
+    private var hasMultiSelection: Bool { appState.selectedFilesCount > 0 }
     private var contextDirectory: URL { node.isDirectory ? node.url : node.url.deletingLastPathComponent() }
     private var isTemplatesDirectory: Bool { node.isDirectory && appState.isTemplatesDirectory(node.url) }
 
@@ -558,7 +587,7 @@ struct FileNodeRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .font(.system(size: 13, weight: isSelected ? .semibold : .medium, design: .rounded))
-                    .foregroundStyle(isSelected ? Color.white : SynapseTheme.textPrimary)
+                    .foregroundStyle(isSelected ? Color.white : (isMultiSelected ? SynapseTheme.accent : SynapseTheme.textPrimary))
 
                 if isTemplatesDirectory {
                     TinyBadge(text: "Templates", color: SynapseTheme.accent)
@@ -570,24 +599,39 @@ struct FileNodeRow: View {
             .padding(.horizontal, 8)
             .background {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(isSelected ? SynapseTheme.accentSoft : SynapseTheme.row)
+                    .fill(isSelected ? SynapseTheme.accentSoft : (isMultiSelected ? SynapseTheme.accent.opacity(0.2) : SynapseTheme.row))
                     .overlay {
                         RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .stroke(isSelected ? SynapseTheme.accent : SynapseTheme.rowBorder, lineWidth: 1)
+                            .stroke(isSelected ? SynapseTheme.accent : (isMultiSelected ? SynapseTheme.accent.opacity(0.5) : SynapseTheme.rowBorder), lineWidth: 1)
                     }
             }
             .contentShape(Rectangle())
-            .onTapGesture(perform: handleTap)
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onEnded { _ in
+                        handleClick()
+                    }
+            )
             .contextMenu {
-                Button("New Note") { appState.presentRootNoteSheet(in: contextDirectory) }
-                Button("New Folder") { onCreateFolder(contextDirectory) }
-                if !node.isDirectory {
+                if hasMultiSelection && isMultiSelected {
+                    Button("Delete \(appState.selectedFilesCount) items", role: .destructive) {
+                        onBatchDelete()
+                    }
                     Divider()
-                    Button("Open in Split") { appState.openFileInSplit(node.url) }
+                    Button("Clear Selection") {
+                        appState.clearFileSelection()
+                    }
+                } else {
+                    Button("New Note") { appState.presentRootNoteSheet(in: contextDirectory) }
+                    Button("New Folder") { onCreateFolder(contextDirectory) }
+                    if !node.isDirectory {
+                        Divider()
+                        Button("Open in Split") { appState.openFileInSplit(node.url) }
+                    }
+                    Divider()
+                    Button("Rename") { onRename(node.url, node.isDirectory) }
+                    Button("Delete", role: .destructive) { onDelete(node.url, node.isDirectory) }
                 }
-                Divider()
-                Button("Rename") { onRename(node.url, node.isDirectory) }
-                Button("Delete", role: .destructive) { onDelete(node.url, node.isDirectory) }
             }
 
             if node.isDirectory, isExpanded, let children = node.children {
@@ -599,7 +643,8 @@ struct FileNodeRow: View {
                         onCreateNote: onCreateNote,
                         onCreateFolder: onCreateFolder,
                         onRename: onRename,
-                        onDelete: onDelete
+                        onDelete: onDelete,
+                        onBatchDelete: onBatchDelete
                     )
                 }
             }
@@ -608,16 +653,27 @@ struct FileNodeRow: View {
         .id(node.url)
     }
 
-    private func handleTap() {
+    private func handleClick() {
+        let modifierFlags = NSEvent.modifierFlags
+        let isCmdPressed = modifierFlags.contains(.command)
+        let isShiftPressed = modifierFlags.contains(.shift)
+        
         if node.isDirectory {
-            if isExpanded { expandedDirs.remove(node.url) }
-            else { expandedDirs.insert(node.url) }
+            if isCmdPressed || isShiftPressed {
+                appState.toggleFileSelection(node.url)
+            } else {
+                if isExpanded { expandedDirs.remove(node.url) }
+                else { expandedDirs.insert(node.url) }
+            }
         } else {
-            // Check if Cmd key is pressed
-            let isCmdPressed = NSEvent.modifierFlags.contains(.command)
-            if isCmdPressed {
+            if isShiftPressed, let lastSelected = appState.lastSelectedFile {
+                appState.selectFilesRange(from: lastSelected, to: node.url)
+                appState.openFile(node.url)
+            } else if isCmdPressed {
+                appState.toggleFileSelection(node.url)
                 appState.openFileInNewTab(node.url)
             } else {
+                appState.clearFileSelection()
                 appState.openFile(node.url)
             }
         }

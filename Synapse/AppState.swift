@@ -182,6 +182,63 @@ class AppState: ObservableObject {
     @Published var searchMode: SearchMode = .currentFile
     // Wiki link completion handler - called when a file is selected in wiki link mode
     var wikiLinkCompletionHandler: ((URL) -> Void)?
+    
+    // MARK: - Multi-File Selection
+    @Published var selectedFiles: Set<URL> = []
+    var lastSelectedFile: URL? = nil
+    
+    /// Toggles selection of a file (CMD-CLICK behavior)
+    func toggleFileSelection(_ url: URL) {
+        if selectedFiles.contains(url) {
+            selectedFiles.remove(url)
+        } else {
+            selectedFiles.insert(url)
+            lastSelectedFile = url
+        }
+    }
+    
+    /// Selects a range of files (SHIFT-CLICK behavior)
+    func selectFilesRange(from startURL: URL, to endURL: URL) {
+        // Get ordered list of files
+        let orderedFiles = allFiles.sorted { $0.path < $1.path }
+        
+        guard let startIndex = orderedFiles.firstIndex(of: startURL),
+              let endIndex = orderedFiles.firstIndex(of: endURL) else {
+            return
+        }
+        
+        let range = min(startIndex, endIndex)...max(startIndex, endIndex)
+        for index in range {
+            selectedFiles.insert(orderedFiles[index])
+        }
+        lastSelectedFile = endURL
+    }
+    
+    /// Clears all file selections
+    func clearFileSelection() {
+        selectedFiles.removeAll()
+        lastSelectedFile = nil
+    }
+    
+    /// Checks if a file is currently selected
+    func isFileSelected(_ url: URL) -> Bool {
+        return selectedFiles.contains(url)
+    }
+    
+    /// Deletes all selected files
+    func deleteSelectedFiles() {
+        for url in selectedFiles {
+            try? FileManager.default.removeItem(at: url)
+        }
+        refreshAllFiles()
+        clearFileSelection()
+    }
+    
+    /// Returns the count of selected files
+    var selectedFilesCount: Int {
+        return selectedFiles.count
+    }
+    
     // Current-file find state (shared so CMD-G works globally)
     @Published var searchQuery: String = ""
     @Published var searchMatchIndex: Int = 0
