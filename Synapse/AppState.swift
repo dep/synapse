@@ -878,6 +878,10 @@ class AppState: ObservableObject {
         persistDirtyFileIfNeeded()
         stopWatching()
         rootURL = standardized(url)
+        
+        // Reload settings for the new vault
+        reloadSettingsForVault(rootURL)
+        
         selectedFile = nil
         fileContent = ""
         isDirty = false
@@ -895,6 +899,17 @@ class AppState: ObservableObject {
         }
         
         setupGit(for: url)
+    }
+    
+    /// Reload settings for the specified vault root
+    private func reloadSettingsForVault(_ vaultURL: URL?) {
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            // In tests, keep using the test settings manager
+            return
+        }
+        
+        // Create new settings manager for the vault
+        settings = SettingsManager(vaultRoot: vaultURL)
     }
 
     /// Exits the current vault/folder and returns to the splash screen

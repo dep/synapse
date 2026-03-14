@@ -439,4 +439,140 @@ final class SettingsManagerTests: XCTestCase {
     func test_graphPane_includedInCaseIterable() {
         XCTAssertTrue(SidebarPane.allCases.contains(.graph))
     }
+
+    // MARK: - Vault-Specific Settings (.noted)
+
+    func test_vaultSpecificSettings_usesNotedFolderWhenVaultRootProvided() {
+        // Create a mock vault directory
+        let vaultDir = tempDir.appendingPathComponent("TestVault", isDirectory: true)
+        try! FileManager.default.createDirectory(at: vaultDir, withIntermediateDirectories: true)
+
+        // Initialize SettingsManager with vault root
+        let notedSettings = SettingsManager(vaultRoot: vaultDir)
+
+        // Change a setting
+        notedSettings.fileExtensionFilter = "*.swift"
+
+        // Verify the settings file was created in .noted folder
+        let notedDir = vaultDir.appendingPathComponent(".noted", isDirectory: true)
+        let settingsFile = notedDir.appendingPathComponent("settings.json")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: settingsFile.path),
+                      "Settings file should be created in .noted folder")
+
+        // Create new manager pointing to same vault and verify settings persisted
+        let newManager = SettingsManager(vaultRoot: vaultDir)
+        XCTAssertEqual(newManager.fileExtensionFilter, "*.swift",
+                       "Settings should persist to .noted/settings.json")
+    }
+
+    func test_vaultSpecificSettings_createsNotedFolderAutomatically() {
+        let vaultDir = tempDir.appendingPathComponent("TestVault", isDirectory: true)
+        try! FileManager.default.createDirectory(at: vaultDir, withIntermediateDirectories: true)
+
+        // .noted folder should not exist initially
+        let notedDir = vaultDir.appendingPathComponent(".noted", isDirectory: true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: notedDir.path),
+                       ".noted folder should not exist initially")
+
+        // Initialize SettingsManager - should create .noted folder
+        let _ = SettingsManager(vaultRoot: vaultDir)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: notedDir.path),
+                      ".noted folder should be created automatically")
+    }
+
+    func test_vaultSpecificSettings_githubPATStaysInApplicationSupport() {
+        let vaultDir = tempDir.appendingPathComponent("TestVault", isDirectory: true)
+        try! FileManager.default.createDirectory(at: vaultDir, withIntermediateDirectories: true)
+
+        // Create a separate Application Support config file for testing
+        let appSupportDir = tempDir.appendingPathComponent("AppSupport", isDirectory: true)
+        try! FileManager.default.createDirectory(at: appSupportDir, withIntermediateDirectories: true)
+        let globalConfigPath = appSupportDir.appendingPathComponent("settings.json").path
+
+        // Initialize manager with both vault root and global config path
+        var manager = SettingsManager(vaultRoot: vaultDir, globalConfigPath: globalConfigPath)
+
+        // Set githubPAT - should go to global config
+        manager.githubPAT = "ghp_test_token"
+
+        // Verify token was saved to global config, not vault config
+        let notedSettingsFile = vaultDir.appendingPathComponent(".noted/settings.json")
+        let globalData = try! Data(contentsOf: URL(fileURLWithPath: globalConfigPath))
+        let globalJson = try! JSONSerialization.jsonObject(with: globalData) as! [String: Any]
+        XCTAssertEqual(globalJson["githubPAT"] as? String, "ghp_test_token",
+                       "githubPAT should be saved to global config")
+
+        // Verify token is NOT in vault config
+        let vaultData = try! Data(contentsOf: notedSettingsFile)
+        let vaultJson = try! JSONSerialization.jsonObject(with: vaultData) as! [String: Any]
+        XCTAssertNil(vaultJson["githubPAT"],
+                     "githubPAT should NOT be saved to vault-specific config")
+    }
+
+    func test_vaultSpecificSettings_otherSettingsGoToNotedFolder() {
+        let vaultDir = tempDir.appendingPathComponent("TestVault", isDirectory: true)
+        try! FileManager.default.createDirectory(at: vaultDir, withIntermediateDirectories: true)
+
+        let manager = SettingsManager(vaultRoot: vaultDir)
+
+        // Set various non-sensitive settings
+        manager.onBootCommand = "npm start"
+        manager.fileExtensionFilter = "*.md, *.swift"
+        manager.hiddenFileFolderFilter = ".git, .build"
+        manager.templatesDirectory = "my-templates"
+        manager.dailyNotesEnabled = true
+        manager.autoSave = true
+
+        // Verify all these settings are in vault config
+        let notedSettingsFile = vaultDir.appendingPathComponent(".noted/settings.json")
+        let data = try! Data(contentsOf: notedSettingsFile)
+        let json = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertEqual(json["onBootCommand"] as? String, "npm start")
+        XCTAssertEqual(json["fileExtensionFilter"] as? String, "*.md, *.swift")
+        XCTAssertEqual(json["hiddenFileFolderFilter"] as? String, ".git, .build")
+        XCTAssertEqual(json["templatesDirectory"] as? String, "my-templates")
+        XCTAssertEqual(json["dailyNotesEnabled"] as? Bool, true)
+        XCTAssertEqual(json["autoSave"] as? Bool, true)
+    }
+
+    func test_vaultSpecificSettings_withoutVaultRootUsesDefaults() {
+        // Initialize without vault root - should use defaults
+        let manager = SettingsManager(vaultRoot: nil)
+
+        // All settings should have default values
+        XCTAssertEqual(manager.onBootCommand, "")
+        XCTAssertEqual(manager.fileExtensionFilter, "*.md, *.txt")
+        XCTAssertEqual(manager.hiddenFileFolderFilter, "")
+        XCTAssertEqual(manager.templatesDirectory, "templates")
+        XCTAssertEqual(manager.githubPAT, "")
+    }
+
+    func test_vaultSpecificSettings_changingVaultReloadsSettings() {
+        // Create two vaults with different settings
+        let vault1 = tempDir.appendingPathComponent("Vault1", isDirectory: true)
+        let vault2 = tempDir.appendingPathComponent("Vault2", isDirectory: true)
+        try! FileManager.default.createDirectory(at: vault1, withIntermediateDirectories: true)
+        try! FileManager.default.createDirectory(at: vault2, withIntermediateDirectories: true)
+
+        // Set up different settings in each vault
+        let manager1 = SettingsManager(vaultRoot: vault1)
+        manager1.fileExtensionFilter = "*.md"
+        manager1.onBootCommand = "vault1-cmd"
+
+        let manager2 = SettingsManager(vaultRoot: vault2)
+        manager2.fileExtensionFilter = "*.swift"
+        manager2.onBootCommand = "vault2-cmd"
+
+        // Create new manager for vault1 and verify it loads vault1's settings
+        let newManager1 = SettingsManager(vaultRoot: vault1)
+        XCTAssertEqual(newManager1.fileExtensionFilter, "*.md")
+        XCTAssertEqual(newManager1.onBootCommand, "vault1-cmd")
+
+        // Create new manager for vault2 and verify it loads vault2's settings
+        let newManager2 = SettingsManager(vaultRoot: vault2)
+        XCTAssertEqual(newManager2.fileExtensionFilter, "*.swift")
+        XCTAssertEqual(newManager2.onBootCommand, "vault2-cmd")
+    }
 }
