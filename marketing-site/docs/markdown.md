@@ -136,16 +136,14 @@ ___
 
 ### Slash Commands
 
-Type `/` at the start of a new line to open inline slash-command suggestions. As you keep typing, Synapse filters the list. Use the arrow keys to move through results, then press `Enter` or `Tab` to insert the selected command.
+Type a slash command at the start of a line or after a space — it expands automatically as you finish typing, no confirmation needed.
 
 | Command | Inserts |
 | --- | --- |
 | `/time` | Current time like `2:34 pm` |
 | `/date` | Current date like `2026-03-14` |
-| `/datetime` | Current date and time like `2026-03-14 2:34 PM` |
 | `/todo` | `- [ ] ` |
 | `/note` | `> **Note:** ` |
-| `/filename` | Current file name without its extension |
 
 ### Wiki Links
 
@@ -384,7 +382,7 @@ While editing:
 - **⌘F** - Find in note
 - **⌘G** - Find next
 - **⇧⌘G** - Find previous
-- **/** at line start - Open slash commands
+- **/command** - Slash commands expand inline at line start or after a space
 
 ### Navigation Tips
 

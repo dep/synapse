@@ -130,7 +130,7 @@ Artifacts:
 
 ### Core Editing
 - **Live Markdown Styling** - See bold, italics, links, and code blocks styled as you type
-- **Slash Commands** - Type `/` at the start of a line to insert time, date, datetime, todo checkboxes, note callouts, or the current filename inline
+- **Slash Commands** - Type `/time`, `/date`, `/todo`, or `/note` at the start of a line or after a space to insert content inline
 - **Wiki Links** - Link to other notes using `[[Note Name]]` syntax with automatic backlink tracking
 - **Embeddable Notes** - Include other notes inline using `![[Note Name]]` syntax
 - **Inline Image Previews** - View images directly in the editor
@@ -222,16 +222,14 @@ Settings automatically sync with your vault. When you open a vault, Synapse stor
 
 ## Slash Commands
 
-At the start of a new line, type `/` to open inline slash-command suggestions. Keep typing to filter, use the arrow keys to move, then press `Enter` or `Tab` to insert the selected result.
+Type a slash command at the start of a line or after a space — it expands automatically as you finish typing.
 
 | Command | Inserts |
 |--------|---------|
 | `/time` | Current time like `2:34 pm` |
 | `/date` | Current date like `2026-03-14` |
-| `/datetime` | Current date and time like `2026-03-14 2:34 PM` |
 | `/todo` | `- [ ] ` |
 | `/note` | `> **Note:** ` |
-| `/filename` | Current file name without extension |
 
 ### Tabs & Navigation
 | Action | Shortcut |
