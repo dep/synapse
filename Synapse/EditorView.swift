@@ -405,7 +405,6 @@ struct RawEditor: NSViewRepresentable {
                     guard let self, let tv else { return }
                     self.linkCheckScheduled = false
                     tv.checkForLinkTrigger()
-                    tv.checkForSlashCommandTrigger()
                 }
             }
             if !stylingScheduled {
@@ -969,10 +968,6 @@ class LinkAwareTextView: NSTextView {
     private var completionVC: CompletionViewController?
     private var linkTypingRange: NSRange?
     private var eventMonitor: Any?
-    private var slashCommandPopover: NSPopover?
-    private var slashCommandVC: SlashCommandViewController?
-    private var slashCommandTypingRange: NSRange?
-    private var slashCommandEventMonitor: Any?
     private var inlineImageViews: [String: NSImageView] = [:]
     private var inlineVideoViews: [String: YouTubePreviewView] = [:]
     private var animatedInlineImageKeys: Set<String> = []
@@ -1227,9 +1222,31 @@ class LinkAwareTextView: NSTextView {
     }
 
     override func insertNewline(_ sender: Any?) {
+        // If the cursor sits exactly at the end of a recognised slash command,
+        // expand it in-place and swallow the newline.
+        let cursor = selectedRange().location
+        if cursor != NSNotFound,
+           let context = slashCommandContext(in: string, cursor: cursor),
+           let command = SlashCommand(rawValue: context.query) {
+            let output = resolveSlashCommandOutput(
+                command,
+                context: SlashCommandResolverContext(
+                    now: slashCommandNowProvider(),
+                    currentFileURL: currentFileURL,
+                    locale: Locale(identifier: "en_US_POSIX"),
+                    timeZone: slashCommandTimeZone
+                )
+            )
+            if shouldChangeText(in: context.range, replacementString: output) {
+                replaceCharacters(in: context.range, with: output)
+                didChangeText()
+                setSelectedRange(NSRange(location: context.range.location + (output as NSString).length, length: 0))
+            }
+            return
+        }
+
         // Preserve the leading whitespace of the current line on the new line.
         let nsText = string as NSString
-        let cursor = selectedRange().location
         guard cursor != NSNotFound else { super.insertNewline(sender); return }
 
         // Find the start of the current line.
@@ -1255,15 +1272,6 @@ class LinkAwareTextView: NSTextView {
     }
 
     override func keyDown(with event: NSEvent) {
-        if let popover = slashCommandPopover, popover.isShown {
-            switch event.keyCode {
-            case 48, 36, 76: slashCommandVC?.selectCurrentItem(); return
-            case 53: dismissSlashCommand(); return
-            case 125: slashCommandVC?.moveSelection(by: 1); return
-            case 126: slashCommandVC?.moveSelection(by: -1); return
-            default: break
-            }
-        }
         if let popover = completionPopover, popover.isShown {
             switch event.keyCode {
             case 125: completionVC?.moveSelection(by: 1);    return  // down
@@ -1323,7 +1331,6 @@ class LinkAwareTextView: NSTextView {
             debugLog("query='\(query)' allFiles=\(allFiles.count)")
             // Limit completion to the actively typed token only.
             if !query.contains("]]") && query.count <= 120 {
-                dismissSlashCommand()
                 linkTypingRange = tokenRange
                 // Use command palette for wiki link picker instead of completion popover
                 onWikiLinkRequest?()
@@ -1331,26 +1338,6 @@ class LinkAwareTextView: NSTextView {
             }
         }
         dismissCompletion()
-    }
-
-    func checkForSlashCommandTrigger(plainText: String? = nil, cursor cursorOverride: Int? = nil) {
-        let text = plainText ?? string
-        let cursor = min(max(0, cursorOverride ?? selectedRange().location), (text as NSString).length)
-
-        guard let context = slashCommandContext(in: text, cursor: cursor) else {
-            dismissSlashCommand()
-            return
-        }
-
-        let commands = filteredSlashCommands(for: context.query)
-        guard !commands.isEmpty else {
-            dismissSlashCommand()
-            return
-        }
-
-        dismissCompletion()
-        slashCommandTypingRange = context.range
-        showSlashCommands(commands)
     }
 
     private func fuzzyScore(query: String, candidate: String) -> Int? {
@@ -1444,73 +1431,6 @@ class LinkAwareTextView: NSTextView {
         if let m = eventMonitor { NSEvent.removeMonitor(m); eventMonitor = nil }
     }
 
-    func dismissSlashCommand() {
-        slashCommandPopover?.close()
-        slashCommandPopover = nil
-        slashCommandVC = nil
-        slashCommandTypingRange = nil
-        if let monitor = slashCommandEventMonitor {
-            NSEvent.removeMonitor(monitor)
-            slashCommandEventMonitor = nil
-        }
-    }
-
-    @discardableResult
-    func insertSlashCommand(_ command: SlashCommand) -> Bool {
-        guard let range = slashCommandTypingRange else { return false }
-        guard range.location >= 0, range.location + range.length <= (string as NSString).length else {
-            dismissSlashCommand()
-            return false
-        }
-
-        let output = resolveSlashCommandOutput(
-            command,
-            context: SlashCommandResolverContext(
-                now: slashCommandNowProvider(),
-                currentFileURL: currentFileURL,
-                locale: Locale(identifier: "en_US_POSIX"),
-                timeZone: slashCommandTimeZone
-            )
-        )
-
-        if shouldChangeText(in: range, replacementString: output) {
-            replaceCharacters(in: range, with: output)
-            didChangeText()
-            setSelectedRange(NSRange(location: range.location + (output as NSString).length, length: 0))
-            dismissSlashCommand()
-            return true
-        }
-
-        dismissSlashCommand()
-        return false
-    }
-
-    private func showSlashCommands(_ commands: [SlashCommand]) {
-        if slashCommandPopover == nil {
-            let vc = SlashCommandViewController()
-            vc.onSelect = { [weak self] command in _ = self?.insertSlashCommand(command) }
-            slashCommandVC = vc
-
-            let popover = NSPopover()
-            popover.contentViewController = vc
-            popover.behavior = .applicationDefined
-            popover.contentSize = NSSize(width: 320, height: 200)
-            slashCommandPopover = popover
-
-            slashCommandEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-                self?.dismissSlashCommand()
-                return event
-            }
-        }
-
-        slashCommandVC?.update(commands: commands)
-
-        guard window != nil,
-              slashCommandPopover?.isShown == false,
-              let rect = rectForCaret() else { return }
-        slashCommandPopover?.show(relativeTo: rect, of: self, preferredEdge: .maxY)
-    }
-
     func insertLink(_ url: URL) {
         guard let range = linkTypingRange else { return }
         guard range.location >= 0, range.location + range.length <= (string as NSString).length else {
@@ -1557,6 +1477,7 @@ class LinkAwareTextView: NSTextView {
         rect.origin.y += textContainerOrigin.y
         return rect
     }
+
 
     func refreshInlineImagePreviews() {
         guard let layoutManager, let textContainer else { return }
@@ -2704,84 +2625,6 @@ extension CompletionViewController: NSSearchFieldDelegate, NSControlTextEditingD
         default:
             return false
         }
-    }
-}
-
-final class SlashCommandViewController: NSViewController {
-    var onSelect: ((SlashCommand) -> Void)?
-
-    private let tableView = NSTableView()
-    private let scrollView = NSScrollView()
-    private var commands: [SlashCommand] = []
-
-    override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 200))
-
-        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("command"))
-        column.isEditable = false
-        tableView.addTableColumn(column)
-        tableView.headerView = nil
-        tableView.rowHeight = 30
-        tableView.dataSource = self
-        tableView.delegate = self
-        tableView.target = self
-        tableView.action = #selector(selectItem)
-        tableView.doubleAction = #selector(selectItem)
-        tableView.allowsEmptySelection = false
-
-        scrollView.documentView = tableView
-        scrollView.hasVerticalScroller = true
-        scrollView.autohidesScrollers = true
-        scrollView.drawsBackground = false
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-
-        view.addSubview(scrollView)
-        NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: view.topAnchor),
-            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-        ])
-    }
-
-    func update(commands: [SlashCommand]) {
-        self.commands = commands
-        tableView.reloadData()
-        if !commands.isEmpty {
-            tableView.selectRowIndexes([0], byExtendingSelection: false)
-        }
-    }
-
-    func selectCurrentItem() {
-        selectItem()
-    }
-
-    func moveSelection(by delta: Int) {
-        guard !commands.isEmpty else { return }
-        let current = max(0, tableView.selectedRow)
-        let next = max(0, min(commands.count - 1, current + delta))
-        tableView.selectRowIndexes([next], byExtendingSelection: false)
-        tableView.scrollRowToVisible(next)
-    }
-
-    @objc private func selectItem() {
-        let row = tableView.selectedRow
-        guard row >= 0, row < commands.count else { return }
-        onSelect?(commands[row])
-    }
-}
-
-extension SlashCommandViewController: NSTableViewDataSource, NSTableViewDelegate {
-    func numberOfRows(in tableView: NSTableView) -> Int {
-        commands.count
-    }
-
-    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let command = commands[row]
-        let label = NSTextField(labelWithString: "\(command.token) - \(command.hint)")
-        label.font = .systemFont(ofSize: 13)
-        label.lineBreakMode = .byTruncatingTail
-        return label
     }
 }
 

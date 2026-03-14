@@ -13,26 +13,6 @@ enum SlashCommand: String, CaseIterable {
     case note
     case filename
 
-    var token: String {
-        "/\(rawValue)"
-    }
-
-    var hint: String {
-        switch self {
-        case .time:
-            return "Current time"
-        case .date:
-            return "Current date"
-        case .datetime:
-            return "Current date and time"
-        case .todo:
-            return "Markdown task"
-        case .note:
-            return "Markdown note callout"
-        case .filename:
-            return "Current file name"
-        }
-    }
 }
 
 struct SlashCommandResolverContext {
@@ -64,13 +44,6 @@ func slashCommandContext(in text: String, cursor: Int) -> SlashCommandContext? {
     guard token.range(of: #"^/[A-Za-z]*$"#, options: .regularExpression) != nil else { return nil }
 
     return SlashCommandContext(range: tokenRange, query: String(token.dropFirst()).lowercased())
-}
-
-func filteredSlashCommands(for query: String) -> [SlashCommand] {
-    let normalizedQuery = query.lowercased()
-    return SlashCommand.allCases.filter { command in
-        normalizedQuery.isEmpty || command.rawValue.hasPrefix(normalizedQuery)
-    }
 }
 
 func resolveSlashCommandOutput(_ command: SlashCommand, context: SlashCommandResolverContext) -> String {
