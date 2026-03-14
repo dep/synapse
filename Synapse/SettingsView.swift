@@ -87,7 +87,28 @@ struct SettingsView: View {
                         .font(.system(size: 11))
                     }
 
-                    Text("Filter which files appear in the sidebar. Use commas to list multiple patterns (e.g. *.md, *.txt) or * for all files. Changes apply immediately.")
+                    Text("Hide Files, Folders Matching")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.secondary)
+
+                    TextField("", text: $settings.hiddenFileFolderFilter)
+                        .font(.system(.body, design: .monospaced))
+                        .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.leading)
+                        .frame(width: settingsFieldWidth, alignment: .leading)
+                        .placeholder(when: settings.hiddenFileFolderFilter.isEmpty) {
+                            Text(".git, .noted, .images")
+                                .foregroundStyle(.tertiary)
+                        }
+
+                    if !settings.hiddenFileFolderFilter.isEmpty {
+                        Button("Clear Hidden Rules") {
+                            settings.hiddenFileFolderFilter = ""
+                        }
+                        .font(.system(size: 11))
+                    }
+
+                    Text("Filter which files appear in the sidebar. Use commas to list multiple patterns (e.g. *.md, *.txt) or * for all files. You can also hide matching files or folders with patterns like .git, .noted, or .images. Changes apply immediately.")
                         .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

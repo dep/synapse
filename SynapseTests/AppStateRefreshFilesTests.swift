@@ -8,19 +8,25 @@ final class AppStateRefreshFilesTests: XCTestCase {
 
     var sut: AppState!
     var tempDir: URL!
+    var settingsDir: URL!
 
     override func setUp() {
         super.setUp()
         sut = AppState()
-        tempDir = FileManager.default.temporaryDirectory
+        let base = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        tempDir = base.appendingPathComponent("vault", isDirectory: true)
+        settingsDir = base.appendingPathComponent("settings", isDirectory: true)
         try! FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        try! FileManager.default.createDirectory(at: settingsDir, withIntermediateDirectories: true)
+        sut.replaceSettingsForTesting(SettingsManager(configPath: settingsDir.appendingPathComponent("settings.json").path))
         sut.openFolder(tempDir)
     }
 
     override func tearDown() {
-        try? FileManager.default.removeItem(at: tempDir)
+        try? FileManager.default.removeItem(at: tempDir.deletingLastPathComponent())
         sut = nil
+        settingsDir = nil
         super.tearDown()
     }
 
@@ -95,6 +101,26 @@ final class AppStateRefreshFilesTests: XCTestCase {
                        "Empty filter should show all files")
     }
 
+    func test_hiddenPatterns_excludeMatchingFilesAndFolderContents() throws {
+        sut.settings.fileExtensionFilter = "*"
+        sut.settings.hiddenFileFolderFilter = "*.project, .private-*"
+
+        let visible = createFile("note.md")
+        let hiddenFile = createFile("secret.project")
+        let hiddenFolder = tempDir.appendingPathComponent(".private-cache", isDirectory: true)
+        try FileManager.default.createDirectory(at: hiddenFolder, withIntermediateDirectories: false)
+        let hiddenNested = createFile(".private-cache/inside.md")
+
+        sut.refreshAllFiles()
+
+        XCTAssertTrue(sut.allProjectFiles.contains(visible))
+        XCTAssertFalse(sut.allProjectFiles.contains(hiddenFile))
+        XCTAssertFalse(sut.allProjectFiles.contains(hiddenNested))
+        XCTAssertTrue(sut.allFiles.contains(visible))
+        XCTAssertFalse(sut.allFiles.contains(hiddenFile))
+        XCTAssertFalse(sut.allFiles.contains(hiddenNested))
+    }
+
     // MARK: - No workspace
 
     func test_refreshAllFiles_withNoWorkspace_producesEmptyArrays() {
@@ -106,19 +132,32 @@ final class AppStateRefreshFilesTests: XCTestCase {
         XCTAssertTrue(sut.allProjectFiles.isEmpty)
     }
 
-    // MARK: - Hidden files are excluded
+    // MARK: - Hidden files visibility
 
-    func test_refreshAllFiles_hiddenFilesAreExcluded() {
+    func test_refreshAllFiles_dotFilesAreVisibleByDefault() {
         sut.settings.fileExtensionFilter = "*"
         createFile("visible.md")
-        // Hidden files (dot-prefixed) should be skipped by .skipsHiddenFiles
+        let hiddenURL = tempDir.appendingPathComponent(".hidden")
+        FileManager.default.createFile(atPath: hiddenURL.path, contents: Data())
+
+        sut.refreshAllFiles()
+
+        XCTAssertTrue(sut.allProjectFiles.contains { $0.lastPathComponent == ".hidden" },
+                      "Dot-files should be visible by default — user controls visibility via hide patterns")
+        XCTAssertTrue(sut.allProjectFiles.contains { $0.lastPathComponent == "visible.md" })
+    }
+
+    func test_refreshAllFiles_dotFilesHiddenWhenPatternMatches() {
+        sut.settings.fileExtensionFilter = "*"
+        sut.settings.hiddenFileFolderFilter = ".*"
+        createFile("visible.md")
         let hiddenURL = tempDir.appendingPathComponent(".hidden")
         FileManager.default.createFile(atPath: hiddenURL.path, contents: Data())
 
         sut.refreshAllFiles()
 
         XCTAssertFalse(sut.allProjectFiles.contains { $0.lastPathComponent == ".hidden" },
-                       "Hidden dot-files should be excluded from allProjectFiles")
+                       "Dot-files should be excluded when hide pattern matches")
         XCTAssertTrue(sut.allProjectFiles.contains { $0.lastPathComponent == "visible.md" })
     }
 

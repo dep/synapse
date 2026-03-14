@@ -80,6 +80,7 @@ func buildFileTree(at url: URL, sortCriterion: SortCriterion, ascending: Bool, s
         let modificationDate = (try? childURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
         let name = childURL.lastPathComponent
         if isDir && name == ".git" { continue }
+        if settings.shouldHideItem(named: name) { continue }
         if !isDir && name.hasPrefix(".") { continue }
         items.append((childURL, isDir, name, modificationDate))
     }
@@ -374,6 +375,9 @@ struct FileTreeView: View {
                 revealSelection(with: proxy)
             }
             .onChange(of: settings.fileExtensionFilter) { _, _ in
+                refresh()
+            }
+            .onChange(of: settings.hiddenFileFolderFilter) { _, _ in
                 refresh()
             }
             .onChange(of: settings.templatesDirectory) { _, _ in
