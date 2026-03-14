@@ -1798,6 +1798,75 @@ class LinkAwareTextView: NSTextView {
         }.resume()
     }
 
+    // MARK: - Image paste handling
+    
+    /// Handles paste events for images. Saves image to .images folder and inserts markdown.
+    override func paste(_ sender: Any?) {
+        let pasteboard = NSPasteboard.general
+        
+        // Check if pasteboard contains an image
+        if let image = NSImage(pasteboard: pasteboard) {
+            handleImagePaste(image: image)
+        } else {
+            // Fall back to regular paste behavior
+            super.paste(sender)
+        }
+    }
+    
+    /// Handles image paste: saves to .images folder and inserts markdown
+    func handleImagePaste(image: NSImage) {
+        guard let currentFileURL = currentFileURL else {
+            // No current file, fall back to regular paste (but images can't be pasted without a file context)
+            return
+        }
+        
+        let fileFolder = currentFileURL.deletingLastPathComponent()
+        let imagesFolder = fileFolder.appendingPathComponent(".images")
+        
+        // Create .images folder if it doesn't exist
+        let fileManager = FileManager.default
+        if !fileManager.fileExists(atPath: imagesFolder.path) {
+            do {
+                try fileManager.createDirectory(at: imagesFolder, withIntermediateDirectories: true)
+            } catch {
+                debugLog("Failed to create .images folder: \(error)")
+                return
+            }
+        }
+        
+        // Generate unique filename with timestamp and random component
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let random = Int.random(in: 1000...9999)
+        let filename = "image_\(timestamp)_\(random).png"
+        let imagePath = imagesFolder.appendingPathComponent(filename)
+        
+        // Convert NSImage to PNG data and save
+        guard let tiffData = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmap.representation(using: .png, properties: [:]) else {
+            debugLog("Failed to convert image to PNG")
+            return
+        }
+        
+        do {
+            try pngData.write(to: imagePath)
+        } catch {
+            debugLog("Failed to save image: \(error)")
+            return
+        }
+        
+        // Calculate relative path from current file to image
+        let relativePath = ".images/\(filename)"
+        let markdown = "![](\(relativePath))"
+        
+        // Insert markdown at current cursor position
+        let currentRange = selectedRange()
+        if shouldChangeText(in: currentRange, replacementString: markdown) {
+            replaceCharacters(in: currentRange, with: markdown)
+            didChangeText()
+        }
+    }
+    
     private func scaledInlineImageSize(for image: NSImage, maxWidth: CGFloat) -> NSSize {
         let originalSize = image.size.width > 0 && image.size.height > 0 ? image.size : NSSize(width: maxWidth, height: 180)
         let width = min(maxWidth, originalSize.width)
