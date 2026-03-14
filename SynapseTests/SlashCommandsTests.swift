@@ -41,10 +41,8 @@ final class SlashCommandsTests: XCTestCase {
 
         XCTAssertEqual(resolveSlashCommandOutput(.time, context: context), "2:34 pm")
         XCTAssertEqual(resolveSlashCommandOutput(.date, context: context), "2026-03-14")
-        XCTAssertEqual(resolveSlashCommandOutput(.datetime, context: context), "2026-03-14 2:34 PM")
         XCTAssertEqual(resolveSlashCommandOutput(.todo, context: context), "- [ ] ")
         XCTAssertEqual(resolveSlashCommandOutput(.note, context: context), "> **Note:** ")
-        XCTAssertEqual(resolveSlashCommandOutput(.filename, context: context), "my-note")
     }
 
     func test_expandSlashCommandIfNeeded_expandsExactCommandInPlace() {

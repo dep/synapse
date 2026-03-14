@@ -8,10 +8,8 @@ struct SlashCommandContext: Equatable {
 enum SlashCommand: String, CaseIterable {
     case time
     case date
-    case datetime
     case todo
     case note
-    case filename
 
 }
 
@@ -71,14 +69,10 @@ func resolveSlashCommandOutput(_ command: SlashCommand, context: SlashCommandRes
         return formattedSlashCommandDate(context.now, format: "h:mm a", locale: context.locale, timeZone: context.timeZone).lowercased()
     case .date:
         return formattedSlashCommandDate(context.now, format: "yyyy-MM-dd", locale: context.locale, timeZone: context.timeZone)
-    case .datetime:
-        return formattedSlashCommandDate(context.now, format: "yyyy-MM-dd h:mm a", locale: context.locale, timeZone: context.timeZone)
     case .todo:
         return "- [ ] "
     case .note:
         return "> **Note:** "
-    case .filename:
-        return context.currentFileURL?.deletingPathExtension().lastPathComponent ?? ""
     }
 }
 
