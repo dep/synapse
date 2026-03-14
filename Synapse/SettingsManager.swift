@@ -29,6 +29,9 @@ class SettingsManager: ObservableObject {
     @Published var fileExtensionFilter: String {
         didSet { save() }
     }
+    @Published var hiddenFileFolderFilter: String {
+        didSet { save() }
+    }
     @Published var templatesDirectory: String {
         didSet { save() }
     }
@@ -87,6 +90,7 @@ class SettingsManager: ObservableObject {
     private struct Config: Codable {
         var onBootCommand: String
         var fileExtensionFilter: String
+        var hiddenFileFolderFilter: String?
         var templatesDirectory: String
         var dailyNotesEnabled: Bool?
         var dailyNotesFolder: String?
@@ -106,6 +110,7 @@ class SettingsManager: ObservableObject {
         init(
             onBootCommand: String,
             fileExtensionFilter: String,
+            hiddenFileFolderFilter: String?,
             templatesDirectory: String,
             dailyNotesEnabled: Bool?,
             dailyNotesFolder: String?,
@@ -124,6 +129,7 @@ class SettingsManager: ObservableObject {
         ) {
             self.onBootCommand = onBootCommand
             self.fileExtensionFilter = fileExtensionFilter
+            self.hiddenFileFolderFilter = hiddenFileFolderFilter
             self.templatesDirectory = templatesDirectory
             self.dailyNotesEnabled = dailyNotesEnabled
             self.dailyNotesFolder = dailyNotesFolder
@@ -145,6 +151,7 @@ class SettingsManager: ObservableObject {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             onBootCommand = try container.decode(String.self, forKey: .onBootCommand)
             fileExtensionFilter = try container.decode(String.self, forKey: .fileExtensionFilter)
+            hiddenFileFolderFilter = try container.decodeIfPresent(String.self, forKey: .hiddenFileFolderFilter)
             templatesDirectory = try container.decodeIfPresent(String.self, forKey: .templatesDirectory) ?? "templates"
             dailyNotesEnabled = try container.decodeIfPresent(Bool.self, forKey: .dailyNotesEnabled)
             dailyNotesFolder = try container.decodeIfPresent(String.self, forKey: .dailyNotesFolder)
@@ -180,6 +187,7 @@ class SettingsManager: ObservableObject {
         if let config = Self.loadConfig(from: configPath) {
             self.onBootCommand = config.onBootCommand
             self.fileExtensionFilter = config.fileExtensionFilter
+            self.hiddenFileFolderFilter = config.hiddenFileFolderFilter ?? ""
             self.templatesDirectory = config.templatesDirectory
             self.dailyNotesEnabled = config.dailyNotesEnabled ?? false
             self.dailyNotesFolder = config.dailyNotesFolder ?? "daily"
@@ -198,6 +206,7 @@ class SettingsManager: ObservableObject {
         } else {
             self.onBootCommand = ""
             self.fileExtensionFilter = "*.md, *.txt"
+            self.hiddenFileFolderFilter = ""
             self.templatesDirectory = "templates"
             self.dailyNotesEnabled = false
             self.dailyNotesFolder = "daily"
@@ -240,8 +249,40 @@ class SettingsManager: ObservableObject {
             }
     }
 
+    var parsedHiddenPatterns: [String] {
+        hiddenFileFolderFilter
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    func shouldHideItem(named name: String) -> Bool {
+        let patterns = parsedHiddenPatterns
+        guard !patterns.isEmpty else { return false }
+
+        return patterns.contains { pattern in
+            wildcardMatches(name, pattern: pattern)
+        }
+    }
+
+    private func wildcardMatches(_ name: String, pattern: String) -> Bool {
+        let regexPattern = "^" + NSRegularExpression.escapedPattern(for: pattern)
+            .replacingOccurrences(of: "\\*", with: ".*") + "$"
+
+        return name.range(of: regexPattern, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
     /// Check if a file should be shown based on the current extension filter
-    func shouldShowFile(_ url: URL) -> Bool {
+    func shouldShowFile(_ url: URL, relativeTo root: URL? = nil) -> Bool {
+        if shouldHideItem(named: url.lastPathComponent) {
+            return false
+        }
+
+        if let root,
+           isHiddenByAncestor(url, relativeTo: root) {
+            return false
+        }
+
         let extensions = parsedExtensions
 
         // Empty extensions means show all files
@@ -253,11 +294,26 @@ class SettingsManager: ObservableObject {
         return extensions.contains(fileExt)
     }
 
+    private func isHiddenByAncestor(_ url: URL, relativeTo root: URL) -> Bool {
+        let standardizedURL = url.standardizedFileURL
+        let standardizedRoot = root.standardizedFileURL
+        let urlComponents = standardizedURL.pathComponents
+        let rootComponents = standardizedRoot.pathComponents
+
+        guard urlComponents.starts(with: rootComponents) else {
+            return false
+        }
+
+        let relativeComponents = Array(urlComponents.dropFirst(rootComponents.count).dropLast())
+        return relativeComponents.contains { shouldHideItem(named: $0) }
+    }
+
     /// Save current settings to disk
     private func save() {
         let config = Config(
             onBootCommand: onBootCommand,
             fileExtensionFilter: fileExtensionFilter,
+            hiddenFileFolderFilter: hiddenFileFolderFilter.isEmpty ? nil : hiddenFileFolderFilter,
             templatesDirectory: templatesDirectory,
             dailyNotesEnabled: dailyNotesEnabled,
             dailyNotesFolder: dailyNotesFolder,

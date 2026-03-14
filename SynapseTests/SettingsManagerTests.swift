@@ -30,6 +30,7 @@ final class SettingsManagerTests: XCTestCase {
     func test_initialState_defaultValues() {
         XCTAssertEqual(sut.onBootCommand, "", "On-boot command should default to empty")
         XCTAssertEqual(sut.fileExtensionFilter, "*.md, *.txt", "File extension filter should default to *.md, *.txt")
+        XCTAssertEqual(sut.hiddenFileFolderFilter, "", "Hidden file/folder filter should default to empty")
         XCTAssertEqual(sut.templatesDirectory, "templates", "Templates directory should default to templates")
     }
 
@@ -80,6 +81,13 @@ final class SettingsManagerTests: XCTestCase {
         XCTAssertTrue(defaultFilter.contains("*.txt"), "Default filter should include *.txt")
     }
 
+    func test_hiddenFileFolderFilter_persistsToDisk() {
+        sut.hiddenFileFolderFilter = "*.project, .private-*"
+
+        let newManager = SettingsManager(configPath: configFilePath)
+        XCTAssertEqual(newManager.hiddenFileFolderFilter, "*.project, .private-*")
+    }
+
     // MARK: - Templates Directory
 
     func test_templatesDirectory_canBeSet() {
@@ -126,6 +134,12 @@ final class SettingsManagerTests: XCTestCase {
         XCTAssertTrue(extensions.isEmpty, "Empty filter should return empty array (meaning all files)")
     }
 
+    func test_parseHiddenPatterns_multiplePatterns() {
+        sut.hiddenFileFolderFilter = "*.project, .git, .private-*"
+
+        XCTAssertEqual(sut.parsedHiddenPatterns, ["*.project", ".git", ".private-*"])
+    }
+
     // MARK: - File Matching
 
     func test_shouldShowFile_withMatchingExtension() {
@@ -169,6 +183,25 @@ final class SettingsManagerTests: XCTestCase {
 
         XCTAssertTrue(sut.shouldShowFile(upperFile), "Should be case insensitive")
         XCTAssertTrue(sut.shouldShowFile(mixedFile), "Should be case insensitive")
+    }
+
+    func test_shouldHideItem_matchesExactAndWildcardPatterns() {
+        sut.hiddenFileFolderFilter = "*.project, .git, .private-*"
+
+        XCTAssertTrue(sut.shouldHideItem(named: "Folder.project"))
+        XCTAssertTrue(sut.shouldHideItem(named: ".git"))
+        XCTAssertTrue(sut.shouldHideItem(named: ".private-cache"))
+        XCTAssertFalse(sut.shouldHideItem(named: "notes"))
+    }
+
+    func test_shouldShowFile_returnsFalseWhenParentFolderMatchesHiddenPattern() {
+        sut.fileExtensionFilter = "*"
+        sut.hiddenFileFolderFilter = ".private-*"
+
+        let root = URL(fileURLWithPath: "/test")
+        let hiddenFile = URL(fileURLWithPath: "/test/.private-cache/note.md")
+
+        XCTAssertFalse(sut.shouldShowFile(hiddenFile, relativeTo: root))
     }
 
     // MARK: - Config Persistence

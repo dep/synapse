@@ -198,7 +198,7 @@ class AppState: ObservableObject {
     @AppStorage("sortAscending") var sortAscending: Bool = true
 
     // Settings
-    var settings = SettingsManager()
+    var settings: SettingsManager
     let gistPublisher = GistPublisher()
 
     /// Replace settings for testing purposes only
@@ -236,14 +236,27 @@ class AppState: ObservableObject {
     private let gitQueue = DispatchQueue(label: "com.Synapse.git", qos: .background)
     private let machineName: String = Host.current().localizedName ?? ProcessInfo.processInfo.hostName
 
-    init(now: @escaping () -> Date = Date.init) {
+    init(now: @escaping () -> Date = Date.init, settings: SettingsManager? = nil) {
         self.now = now
+        self.settings = settings ?? Self.makeDefaultSettings()
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleAppTermination),
             name: NSApplication.willTerminateNotification,
             object: nil
         )
+    }
+
+    private static func makeDefaultSettings() -> SettingsManager {
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            let testConfigPath = FileManager.default.temporaryDirectory
+                .appendingPathComponent("SynapseTests-\(UUID().uuidString)", isDirectory: true)
+                .appendingPathComponent("settings.json")
+                .path
+            return SettingsManager(configPath: testConfigPath)
+        }
+
+        return SettingsManager()
     }
 
     // MARK: - Pinning
@@ -1062,15 +1075,31 @@ class AppState: ObservableObject {
         let fm = FileManager.default
         guard let enumerator = fm.enumerator(
             at: root,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
             options: [.skipsHiddenFiles]
         ) else { return }
-        let discoveredFiles = enumerator.compactMap { $0 as? URL }
-            .map { standardized($0) }
-            .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+
+        var discoveredFiles: [URL] = []
+
+        while let item = enumerator.nextObject() as? URL {
+            let url = standardized(item)
+            let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey])
+
+            if settings.shouldHideItem(named: url.lastPathComponent) {
+                if values?.isDirectory == true {
+                    enumerator.skipDescendants()
+                }
+                continue
+            }
+
+            guard values?.isRegularFile == true else { continue }
+            discoveredFiles.append(url)
+        }
+
+        discoveredFiles.sort { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
 
         allProjectFiles = discoveredFiles
-        allFiles = discoveredFiles.filter { settings.shouldShowFile($0) }
+        allFiles = discoveredFiles.filter { settings.shouldShowFile($0, relativeTo: root) }
     }
 
     func presentCommandPalette(mode: CommandPaletteMode = .files) {

@@ -84,6 +84,22 @@ final class FileTreeHiddenItemsTests: XCTestCase {
         XCTAssertTrue(names.contains("visible.md"))
     }
 
+    func test_buildFileTree_excludesItemsMatchingHiddenPatterns() {
+        settings.hiddenFileFolderFilter = "*.project, .private-*"
+        createDir("Design.project")
+        createDir(".private-cache")
+        createFile(at: "secret.project", contents: "")
+        createFile(at: "visible.md", contents: "")
+
+        let nodes = buildFileTree(at: vaultDir, sortCriterion: .name, ascending: true, settings: settings)
+        let names = nodes.map(\.name)
+
+        XCTAssertFalse(names.contains("Design.project"))
+        XCTAssertFalse(names.contains(".private-cache"))
+        XCTAssertFalse(names.contains("secret.project"))
+        XCTAssertTrue(names.contains("visible.md"))
+    }
+
     // MARK: - Empty vault
 
     func test_buildFileTree_emptyDirectory_returnsEmpty() {
