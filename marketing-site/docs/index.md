@@ -8,6 +8,8 @@ layout: doc
 
 Synapse is a powerful Markdown-based knowledge management application exclusively built for macOS using SwiftUI. It serves as your second brain, supercharged with local graph visualization, Git sync, and seamless workflows.
 
+♥️ Built by nerds _for_ nerds.
+
 ## Setup & Installation
 
 1. **Download the App:** [Download the latest release of Synapse](https://github.com/dep/synapse/releases).
