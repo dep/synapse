@@ -404,6 +404,7 @@ struct RawEditor: NSViewRepresentable {
                 DispatchQueue.main.async { [weak self, weak tv] in
                     guard let self, let tv else { return }
                     self.linkCheckScheduled = false
+                    tv.expandSlashCommandIfNeeded()
                     tv.checkForLinkTrigger()
                 }
             }
@@ -1222,30 +1223,8 @@ class LinkAwareTextView: NSTextView {
     }
 
     override func insertNewline(_ sender: Any?) {
-        // If the cursor sits exactly at the end of a recognised slash command,
-        // expand it in-place and swallow the newline.
-        let cursor = selectedRange().location
-        if cursor != NSNotFound,
-           let context = slashCommandContext(in: string, cursor: cursor),
-           let command = SlashCommand(rawValue: context.query) {
-            let output = resolveSlashCommandOutput(
-                command,
-                context: SlashCommandResolverContext(
-                    now: slashCommandNowProvider(),
-                    currentFileURL: currentFileURL,
-                    locale: Locale(identifier: "en_US_POSIX"),
-                    timeZone: slashCommandTimeZone
-                )
-            )
-            if shouldChangeText(in: context.range, replacementString: output) {
-                replaceCharacters(in: context.range, with: output)
-                didChangeText()
-                setSelectedRange(NSRange(location: context.range.location + (output as NSString).length, length: 0))
-            }
-            return
-        }
-
         // Preserve the leading whitespace of the current line on the new line.
+        let cursor = selectedRange().location
         let nsText = string as NSString
         guard cursor != NSNotFound else { super.insertNewline(sender); return }
 
@@ -1300,6 +1279,27 @@ class LinkAwareTextView: NSTextView {
             return true
         }
         return super.performKeyEquivalent(with: event)
+    }
+
+    func expandSlashCommandIfNeeded() {
+        let cursor = selectedRange().location
+        guard cursor != NSNotFound,
+              let context = slashCommandContext(in: string, cursor: cursor),
+              let command = SlashCommand(rawValue: context.query) else { return }
+
+        let output = resolveSlashCommandOutput(
+            command,
+            context: SlashCommandResolverContext(
+                now: slashCommandNowProvider(),
+                currentFileURL: currentFileURL,
+                locale: Locale(identifier: "en_US_POSIX"),
+                timeZone: slashCommandTimeZone
+            )
+        )
+        guard shouldChangeText(in: context.range, replacementString: output) else { return }
+        replaceCharacters(in: context.range, with: output)
+        didChangeText()
+        setSelectedRange(NSRange(location: context.range.location + (output as NSString).length, length: 0))
     }
 
     func checkForLinkTrigger(plainText: String? = nil, cursor cursorOverride: Int? = nil) {

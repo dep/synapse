@@ -36,7 +36,7 @@ final class SlashCommandsTests: XCTestCase {
         XCTAssertEqual(resolveSlashCommandOutput(.filename, context: context), "my-note")
     }
 
-    func test_insertNewline_expandsExactSlashCommandAndSwallowsNewline() {
+    func test_expandSlashCommandIfNeeded_expandsExactCommandInPlace() {
         let textView = LinkAwareTextView()
         textView.currentFileURL = URL(fileURLWithPath: "/tmp/my-note.md")
         textView.slashCommandNowProvider = { Date(timeIntervalSince1970: 1_773_498_840) }
@@ -44,42 +44,53 @@ final class SlashCommandsTests: XCTestCase {
         textView.string = "/time"
         textView.setSelectedRange(NSRange(location: 5, length: 0))
 
-        textView.insertNewline(nil)
+        textView.expandSlashCommandIfNeeded()
 
         XCTAssertEqual(textView.string, "2:34 pm")
         XCTAssertEqual(textView.selectedRange(), NSRange(location: 7, length: 0))
     }
 
-    func test_insertNewline_doesNotExpandPartialCommand() {
+    func test_expandSlashCommandIfNeeded_doesNotExpandPartialCommand() {
         let textView = LinkAwareTextView()
         textView.string = "/ti"
         textView.setSelectedRange(NSRange(location: 3, length: 0))
 
-        textView.insertNewline(nil)
+        textView.expandSlashCommandIfNeeded()
 
-        // "/ti" is not a valid command, so a regular newline is inserted
-        XCTAssertEqual(textView.string, "/ti\n")
+        XCTAssertEqual(textView.string, "/ti")  // unchanged
     }
 
-    func test_insertNewline_doesNotExpandSlashCommandMidLine() {
+    func test_expandSlashCommandIfNeeded_doesNotExpandSlashCommandMidLine() {
         let textView = LinkAwareTextView()
         textView.string = "some text /time"
         textView.setSelectedRange(NSRange(location: 15, length: 0))
 
-        textView.insertNewline(nil)
+        textView.expandSlashCommandIfNeeded()
 
-        // mid-line slash is not a command
-        XCTAssertEqual(textView.string, "some text /time\n")
+        XCTAssertEqual(textView.string, "some text /time")  // unchanged
     }
 
-    func test_insertNewline_expandsTodo() {
+    func test_expandSlashCommandIfNeeded_expandsTodoCommand() {
         let textView = LinkAwareTextView()
         textView.slashCommandNowProvider = { Date(timeIntervalSince1970: 1_773_498_840) }
         textView.string = "/todo"
         textView.setSelectedRange(NSRange(location: 5, length: 0))
 
-        textView.insertNewline(nil)
+        textView.expandSlashCommandIfNeeded()
 
         XCTAssertEqual(textView.string, "- [ ] ")
+    }
+
+    func test_expandSlashCommandIfNeeded_expandsOnSecondLine() {
+        let textView = LinkAwareTextView()
+        textView.slashCommandNowProvider = { Date(timeIntervalSince1970: 1_773_498_840) }
+        textView.slashCommandTimeZone = TimeZone(secondsFromGMT: 0)!
+        textView.string = "First line\n/date"
+        let cursor = (textView.string as NSString).length
+        textView.setSelectedRange(NSRange(location: cursor, length: 0))
+
+        textView.expandSlashCommandIfNeeded()
+
+        XCTAssertEqual(textView.string, "First line\n2026-03-14")
     }
 }
