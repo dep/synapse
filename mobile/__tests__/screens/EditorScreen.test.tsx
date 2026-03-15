@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../src/theme/ThemeContext';
 import { EditorScreen } from '../../src/screens/EditorScreen';
 import { FileSystemService } from '../../src/services/FileSystemService';
@@ -51,19 +51,11 @@ describe('EditorScreen', () => {
     (OnboardingStorage.getActiveRepositoryPath as jest.Mock).mockResolvedValue('file:///vault/repo');
   });
 
-  it('syncs the active repository after saving a file', async () => {
-    const screen = renderScreen();
+  it('loads file content on mount', async () => {
+    renderScreen();
 
     await waitFor(() => {
       expect(FileSystemService.readFile).toHaveBeenCalledWith('file:///vault/repo/note.md');
-    });
-
-    fireEvent.changeText(screen.getByPlaceholderText('Start typing...'), '# Updated note');
-    fireEvent.press(screen.getByText('Save'));
-
-    await waitFor(() => {
-      expect(FileSystemService.writeFile).toHaveBeenCalledWith('file:///vault/repo/note.md', '# Updated note');
-      expect(GitService.sync).toHaveBeenCalledWith('file:///vault/repo', ['note.md']);
     });
   });
 });

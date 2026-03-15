@@ -12,6 +12,7 @@
     "lint": "echo 'No linting configured yet'"
   },
   "dependencies": {
+    "@expensify/react-native-live-markdown": "^0.1.325",
     "@expo/vector-icons": "^15.1.1",
     "@isomorphic-git/lightning-fs": "^4.6.2",
     "@react-native-async-storage/async-storage": "^1.24.0",

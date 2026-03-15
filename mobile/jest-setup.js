@@ -127,6 +127,14 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 44, bottom: 34, left: 0, right: 0 }),
 }));
 
+// Mock react-native-markdown-display
+jest.mock('react-native-markdown-display', () => {
+  const React = require('react');
+  return function MockMarkdown({ children }) {
+    return React.createElement('text', { testID: 'markdown-preview' }, children);
+  };
+});
+
 // Mock useColorScheme from the proper path
 jest.mock('react-native/Libraries/Utilities/useColorScheme', () => ({
   default: jest.fn(() => 'light'),
