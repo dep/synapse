@@ -84,6 +84,9 @@ class SettingsManager: ObservableObject {
     @Published var pinnedItems: [PinnedItem] {
         didSet { save() }
     }
+    @Published var defaultEditMode: Bool {
+        didSet { save() }
+    }
 
     var hasGitHubPAT: Bool {
         !githubPAT.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -121,6 +124,7 @@ class SettingsManager: ObservableObject {
         var githubPAT: String?
         var fileTreeMode: String?
         var pinnedItems: [PinnedItem]?
+        var defaultEditMode: Bool?
 
         init(
             onBootCommand: String,
@@ -140,7 +144,8 @@ class SettingsManager: ObservableObject {
             collapsedPanes: [String]?,
             githubPAT: String?,
             fileTreeMode: String?,
-            pinnedItems: [PinnedItem]?
+            pinnedItems: [PinnedItem]?,
+            defaultEditMode: Bool?
         ) {
             self.onBootCommand = onBootCommand
             self.fileExtensionFilter = fileExtensionFilter
@@ -160,6 +165,7 @@ class SettingsManager: ObservableObject {
             self.githubPAT = githubPAT
             self.fileTreeMode = fileTreeMode
             self.pinnedItems = pinnedItems
+            self.defaultEditMode = defaultEditMode
         }
 
         init(from decoder: Decoder) throws {
@@ -182,6 +188,7 @@ class SettingsManager: ObservableObject {
             githubPAT = try container.decodeIfPresent(String.self, forKey: .githubPAT)
             fileTreeMode = try container.decodeIfPresent(String.self, forKey: .fileTreeMode)
             pinnedItems = try container.decodeIfPresent([PinnedItem].self, forKey: .pinnedItems)
+            defaultEditMode = try container.decodeIfPresent(Bool.self, forKey: .defaultEditMode)
         }
     }
 
@@ -198,6 +205,7 @@ class SettingsManager: ObservableObject {
         var autoSave: Bool
         var autoPush: Bool
         var pinnedItems: [PinnedItem]?
+        var defaultEditMode: Bool?
 
         init(
             onBootCommand: String,
@@ -210,7 +218,8 @@ class SettingsManager: ObservableObject {
             dailyNotesOpenOnStartup: Bool?,
             autoSave: Bool,
             autoPush: Bool,
-            pinnedItems: [PinnedItem]?
+            pinnedItems: [PinnedItem]?,
+            defaultEditMode: Bool?
         ) {
             self.onBootCommand = onBootCommand
             self.fileExtensionFilter = fileExtensionFilter
@@ -223,6 +232,7 @@ class SettingsManager: ObservableObject {
             self.autoSave = autoSave
             self.autoPush = autoPush
             self.pinnedItems = pinnedItems
+            self.defaultEditMode = defaultEditMode
         }
 
         init(from decoder: Decoder) throws {
@@ -238,6 +248,7 @@ class SettingsManager: ObservableObject {
             autoSave = try container.decodeIfPresent(Bool.self, forKey: .autoSave) ?? false
             autoPush = try container.decodeIfPresent(Bool.self, forKey: .autoPush) ?? false
             pinnedItems = try container.decodeIfPresent([PinnedItem].self, forKey: .pinnedItems)
+            defaultEditMode = try container.decodeIfPresent(Bool.self, forKey: .defaultEditMode)
         }
     }
 
@@ -305,6 +316,7 @@ class SettingsManager: ObservableObject {
             self.githubPAT = config.githubPAT ?? ""
             self.fileTreeMode = FileTreeMode(rawValue: config.fileTreeMode ?? "") ?? .folder
             self.pinnedItems = config.pinnedItems ?? []
+            self.defaultEditMode = config.defaultEditMode ?? true
         } else {
             self.onBootCommand = ""
             self.fileExtensionFilter = "*.md, *.txt"
@@ -324,6 +336,7 @@ class SettingsManager: ObservableObject {
             self.githubPAT = ""
             self.fileTreeMode = .folder
             self.pinnedItems = []
+            self.defaultEditMode = true
         }
     }
 
@@ -372,6 +385,7 @@ class SettingsManager: ObservableObject {
                 self.autoSave = vaultConfig.autoSave
                 self.autoPush = vaultConfig.autoPush
                 self.pinnedItems = vaultConfig.pinnedItems ?? []
+                self.defaultEditMode = vaultConfig.defaultEditMode ?? true
             } else {
                 // No vault config exists yet - use defaults
                 self.onBootCommand = ""
@@ -385,6 +399,7 @@ class SettingsManager: ObservableObject {
                 self.autoSave = false
                 self.autoPush = false
                 self.pinnedItems = []
+                self.defaultEditMode = true
             }
 
             self.leftSidebarPanes = [.files, .tags, .links]
@@ -426,6 +441,7 @@ class SettingsManager: ObservableObject {
             self.githubPAT = ""
             self.fileTreeMode = .folder
             self.pinnedItems = []
+            self.defaultEditMode = true
         }
     }
 
@@ -549,7 +565,8 @@ class SettingsManager: ObservableObject {
                 collapsedPanes: Array(collapsedPanes),
                 githubPAT: githubPAT.isEmpty ? nil : githubPAT,
                 fileTreeMode: fileTreeMode.rawValue,
-                pinnedItems: pinnedItems.isEmpty ? nil : pinnedItems
+                pinnedItems: pinnedItems.isEmpty ? nil : pinnedItems,
+                defaultEditMode: defaultEditMode
             )
             let encoder = Self.makePrettyJSONEncoder()
             guard let data = try? encoder.encode(config) else { return }
@@ -570,7 +587,8 @@ class SettingsManager: ObservableObject {
                 dailyNotesOpenOnStartup: dailyNotesOpenOnStartup,
                 autoSave: autoSave,
                 autoPush: autoPush,
-                pinnedItems: pinnedItems.isEmpty ? nil : pinnedItems
+                pinnedItems: pinnedItems.isEmpty ? nil : pinnedItems,
+                defaultEditMode: defaultEditMode
             )
 
             // Save vault-specific settings to .noted/settings.yml

@@ -76,6 +76,7 @@ struct EditorView: View {
     private var isReadOnly: Bool { readOnlyFile != nil }
     private var displayFile: URL? { readOnlyFile ?? appState.selectedFile }
     private var displayContent: String { readOnlyContent ?? appState.fileContent }
+    private var isInViewMode: Bool { isReadOnly || !appState.isEditMode }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -86,7 +87,7 @@ struct EditorView: View {
                         .padding(.top, 12)
                         .padding(.bottom, 8)
 
-                    if !isReadOnly && appState.isSearchPresented && appState.searchMode == .currentFile {
+                    if !isInViewMode && appState.isSearchPresented && appState.searchMode == .currentFile {
                         FindBar()
                             .environmentObject(appState)
                             .transition(.move(edge: .top).combined(with: .opacity))
@@ -94,7 +95,7 @@ struct EditorView: View {
 
                     HStack(spacing: 0) {
                         // Editor takes available space
-                        if isReadOnly {
+                        if isInViewMode {
                             RawEditor(
                                 text: .constant(displayContent),
                                 isEditable: false,
@@ -105,6 +106,7 @@ struct EditorView: View {
                         } else {
                             RawEditor(
                                 text: $appState.fileContent,
+                                isEditable: true,
                                 paneIndex: paneIndex,
                                 embeddedNotes: $embeddedNotes
                             )
@@ -112,7 +114,7 @@ struct EditorView: View {
                         }
 
                         // Embedded notes panel on the right
-                        if !embeddedNotes.isEmpty {
+                        if !isInViewMode && !embeddedNotes.isEmpty {
                             EmbeddedNotesPanel(
                                 notes: embeddedNotes,
                                 allFiles: appState.allFiles,
@@ -328,6 +330,9 @@ struct RawEditor: NSViewRepresentable {
             textView.setPlainText(text)
             textView.selectedRanges = selected
             context.coordinator.suppressSync = false
+        } else if !isEditable {
+            // Re-apply preview styling when mode switches without a text change
+            textView.applyPreviewStyling()
         }
         textView.onOpenFile = { appState.openFile($0) }
         textView.onMatchCountUpdate = { count in appState.searchMatchCount = count }
@@ -562,7 +567,107 @@ extension LinkAwareTextView {
         storage.beginEditing()
         storage.setAttributedString(NSAttributedString(string: plain))
         storage.endEditing()
-        applyMarkdownStyling()
+        if isEditable {
+            applyMarkdownStyling()
+        } else {
+            applyMarkdownStyling()
+            applyPreviewStyling()
+        }
+    }
+
+    /// Called after applyMarkdownStyling() in view/preview mode.
+    /// Hides markdown syntax tokens (delimiters, sigils, fences) by setting
+    /// their font size to near-zero and foreground color to clear, so only the
+    /// styled content is visible.
+    func applyPreviewStyling() {
+        guard let storage = textStorage else { return }
+        let fullRange = NSRange(location: 0, length: storage.length)
+        guard fullRange.length > 0 else { return }
+        let text = storage.string
+
+        let hiddenAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 0.001),
+            .foregroundColor: NSColor.clear,
+        ]
+
+        func hide(_ pattern: String, options: NSRegularExpression.Options = []) {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else { return }
+            regex.enumerateMatches(in: text, options: [], range: fullRange) { match, _, _ in
+                guard let range = match?.range else { return }
+                storage.addAttributes(hiddenAttrs, range: range)
+            }
+        }
+
+        func hideGroup(_ pattern: String, group: Int, options: NSRegularExpression.Options = []) {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else { return }
+            regex.enumerateMatches(in: text, options: [], range: fullRange) { match, _, _ in
+                guard let match, match.numberOfRanges > group else { return }
+                let r = match.range(at: group)
+                guard r.location != NSNotFound else { return }
+                storage.addAttributes(hiddenAttrs, range: r)
+            }
+        }
+
+        storage.beginEditing()
+
+        // ATX headings: hide the "# " prefix
+        hide("^#{1,6} ", options: [.anchorsMatchLines])
+
+        // Bold **text** — hide the ** delimiters
+        hideGroup("(\\*\\*)(.+?)(\\*\\*)", group: 1)
+        hideGroup("(\\*\\*)(.+?)(\\*\\*)", group: 3)
+        // Bold __text__ — hide the __ delimiters
+        hideGroup("(__)(.+?)(__)", group: 1)
+        hideGroup("(__)(.+?)(__)", group: 3)
+
+        // Italic *text* — hide the * delimiters (not **)
+        hideGroup("(?<!\\*)(\\*)(?!\\*)(.+?)(?<!\\*)(\\*)(?!\\*)", group: 1)
+        hideGroup("(?<!\\*)(\\*)(?!\\*)(.+?)(?<!\\*)(\\*)(?!\\*)", group: 3)
+
+        // Inline code `code` — hide the backtick delimiters
+        hideGroup("(`)((?:[^`\\n])+)(`)", group: 1)
+        hideGroup("(`)((?:[^`\\n])+)(`)", group: 3)
+
+        // Fenced code blocks: hide the ``` fences (whole fence line)
+        hide("^```[^\\n]*$", options: [.anchorsMatchLines])
+
+        // Blockquote "> " prefix — hide the sigil
+        hide("^> ", options: [.anchorsMatchLines])
+
+        // Horizontal rule ---
+        hide("^---$", options: [.anchorsMatchLines])
+
+        // Markdown links [label](url) — hide [, ](url) parts, keep label visible
+        hideGroup("(\\[)([^\\]]+)(\\]\\([^)]+\\))", group: 1)
+        hideGroup("(\\[)([^\\]]+)(\\]\\([^)]+\\))", group: 3)
+
+        // Wiki links [[note]] — hide the [[ and ]] delimiters
+        hideGroup("(\\[\\[)([^\\]]+)(\\]\\])", group: 1)
+        hideGroup("(\\[\\[)([^\\]]+)(\\]\\])", group: 3)
+
+        // Embed ![[note]] — hide ![[  and  ]]
+        hideGroup("(!\\[\\[)([^\\]]+)(\\]\\])", group: 1)
+        hideGroup("(!\\[\\[)([^\\]]+)(\\]\\])", group: 3)
+
+        // YAML frontmatter block: hide the --- fences
+        let fullString = text
+        if fullString.hasPrefix("---") {
+            let lines = fullString.components(separatedBy: "\n")
+            var fenceCount = 0
+            var charOffset = 0
+            for line in lines {
+                let lineLength = (line as NSString).length
+                if line == "---" {
+                    let fenceRange = NSRange(location: charOffset, length: lineLength)
+                    storage.addAttributes(hiddenAttrs, range: fenceRange)
+                    fenceCount += 1
+                    if fenceCount == 2 { break }
+                }
+                charOffset += lineLength + 1
+            }
+        }
+
+        storage.endEditing()
     }
 
     func applyMarkdownStyling() {

@@ -199,6 +199,11 @@ class AppState: ObservableObject {
 
     // Settings
     @Published var settings: SettingsManager
+    /// Edit/view mode toggle — stored here so SwiftUI views re-render on change.
+    /// Initialized from settings and written back to settings for persistence.
+    @Published var isEditMode: Bool = true {
+        didSet { settings.defaultEditMode = isEditMode }
+    }
     let gistPublisher = GistPublisher()
 
     /// Replace settings for testing purposes only
@@ -238,7 +243,9 @@ class AppState: ObservableObject {
 
     init(now: @escaping () -> Date = Date.init, settings: SettingsManager? = nil) {
         self.now = now
-        self.settings = settings ?? Self.makeDefaultSettings()
+        let resolvedSettings = settings ?? Self.makeDefaultSettings()
+        self.settings = resolvedSettings
+        self.isEditMode = resolvedSettings.defaultEditMode
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleAppTermination),

@@ -394,6 +394,14 @@ struct ContentView: View {
                 }
 
                 if appState.selectedFile != nil {
+                    headerToggleButton(
+                        systemName: "eye",
+                        isActive: !appState.isEditMode,
+                        action: { appState.isEditMode.toggle() },
+                        help: appState.isEditMode ? "Preview (⌘⇧P)" : "Edit (⌘⇧P)"
+                    )
+                    .keyboardShortcut("p", modifiers: [.command, .shift])
+
                     Button(action: {
                         appState.saveCurrentFile(content: appState.fileContent)
                         appState.autoPushIfEnabled()

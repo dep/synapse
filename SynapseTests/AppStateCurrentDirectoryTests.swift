@@ -1,9 +1,9 @@
 import XCTest
 @testable import Synapse
 
-/// Tests for `currentSynapseirectory()` and `expandAndScrollToFolder(_:)`.
+/// Tests for `currentSynapseDirectory()` and `expandAndScrollToFolder(_:)`.
 ///
-/// `currentSynapseirectory()` is the pivot that decides *where* new notes land:
+/// `currentSynapseDirectory()` is the pivot that decides *where* new notes land:
 /// it returns the selected file's parent directory, falling back to the vault root,
 /// and then to nil.  Any misimplementation silently places new notes in unexpected
 /// locations. `expandAndScrollToFolder(_:)` is the minimal entry-point for pinned-
@@ -28,42 +28,42 @@ final class AppStateCurrentDirectoryTests: XCTestCase {
         super.tearDown()
     }
 
-    // MARK: - currentSynapseirectory() with no vault open
+    // MARK: - currentSynapseDirectory() with no vault open
 
-    func test_currentSynapseirectory_withNoRootURL_returnsNil() {
+    func test_currentSynapseDirectory_withNoRootURL_returnsNil() {
         XCTAssertNil(sut.rootURL)
-        XCTAssertNil(sut.currentSynapseirectory())
+        XCTAssertNil(sut.currentSynapseDirectory())
     }
 
-    // MARK: - currentSynapseirectory() with vault open but no file selected
+    // MARK: - currentSynapseDirectory() with vault open but no file selected
 
-    func test_currentSynapseirectory_withRootURL_andNoSelectedFile_returnsRootURL() {
+    func test_currentSynapseDirectory_withRootURL_andNoSelectedFile_returnsRootURL() {
         sut.openFolder(tempDir)
         XCTAssertNil(sut.selectedFile)
 
-        let directory = sut.currentSynapseirectory()
+        let directory = sut.currentSynapseDirectory()
 
         XCTAssertEqual(directory?.standardizedFileURL, tempDir.standardizedFileURL,
                        "Should return vault root when no file is selected")
     }
 
-    // MARK: - currentSynapseirectory() with a file selected in the root
+    // MARK: - currentSynapseDirectory() with a file selected in the root
 
-    func test_currentSynapseirectory_withFileInRoot_returnsRootDirectory() throws {
+    func test_currentSynapseDirectory_withFileInRoot_returnsRootDirectory() throws {
         sut.openFolder(tempDir)
         let noteURL = tempDir.appendingPathComponent("Note.md")
         try "content".write(to: noteURL, atomically: true, encoding: .utf8)
         sut.openFile(noteURL)
 
-        let directory = sut.currentSynapseirectory()
+        let directory = sut.currentSynapseDirectory()
 
         XCTAssertEqual(directory?.standardizedFileURL, tempDir.standardizedFileURL,
                        "A file at vault root should report root as its directory")
     }
 
-    // MARK: - currentSynapseirectory() with a file in a subdirectory
+    // MARK: - currentSynapseDirectory() with a file in a subdirectory
 
-    func test_currentSynapseirectory_withFileInSubdirectory_returnsSubdirectory() throws {
+    func test_currentSynapseDirectory_withFileInSubdirectory_returnsSubdirectory() throws {
         sut.openFolder(tempDir)
         let subDir = tempDir.appendingPathComponent("projects", isDirectory: true)
         try FileManager.default.createDirectory(at: subDir, withIntermediateDirectories: true)
@@ -71,13 +71,13 @@ final class AppStateCurrentDirectoryTests: XCTestCase {
         try "content".write(to: noteURL, atomically: true, encoding: .utf8)
         sut.openFile(noteURL)
 
-        let directory = sut.currentSynapseirectory()
+        let directory = sut.currentSynapseDirectory()
 
         XCTAssertEqual(directory?.standardizedFileURL, subDir.standardizedFileURL,
                        "A file in a subdirectory should report that subdirectory")
     }
 
-    func test_currentSynapseirectory_withFileInDeeplyNestedDirectory_returnsImmediateParent() throws {
+    func test_currentSynapseDirectory_withFileInDeeplyNestedDirectory_returnsImmediateParent() throws {
         sut.openFolder(tempDir)
         let deepDir = tempDir
             .appendingPathComponent("a", isDirectory: true)
@@ -88,15 +88,15 @@ final class AppStateCurrentDirectoryTests: XCTestCase {
         try "deep".write(to: noteURL, atomically: true, encoding: .utf8)
         sut.openFile(noteURL)
 
-        let directory = sut.currentSynapseirectory()
+        let directory = sut.currentSynapseDirectory()
 
         XCTAssertEqual(directory?.standardizedFileURL, deepDir.standardizedFileURL,
                        "Should return the immediate parent, not the vault root")
     }
 
-    // MARK: - currentSynapseirectory() reflects the currently selected file
+    // MARK: - currentSynapseDirectory() reflects the currently selected file
 
-    func test_currentSynapseirectory_changesWhenSelectedFileChanges() throws {
+    func test_currentSynapseDirectory_changesWhenSelectedFileChanges() throws {
         sut.openFolder(tempDir)
 
         let subDir = tempDir.appendingPathComponent("sub", isDirectory: true)
@@ -108,10 +108,10 @@ final class AppStateCurrentDirectoryTests: XCTestCase {
         try "sub".write(to: noteInSub, atomically: true, encoding: .utf8)
 
         sut.openFile(noteInRoot)
-        XCTAssertEqual(sut.currentSynapseirectory()?.standardizedFileURL, tempDir.standardizedFileURL)
+        XCTAssertEqual(sut.currentSynapseDirectory()?.standardizedFileURL, tempDir.standardizedFileURL)
 
         sut.openFile(noteInSub)
-        XCTAssertEqual(sut.currentSynapseirectory()?.standardizedFileURL, subDir.standardizedFileURL)
+        XCTAssertEqual(sut.currentSynapseDirectory()?.standardizedFileURL, subDir.standardizedFileURL)
     }
 
     // MARK: - expandAndScrollToFolder
@@ -149,7 +149,7 @@ final class AppStateCurrentDirectoryTests: XCTestCase {
         XCTAssertEqual(sut.selectedFile?.standardizedFileURL, folderURL.standardizedFileURL)
     }
 
-    // MARK: - Interaction: new note is created in currentSynapseirectory()
+    // MARK: - Interaction: new note is created in currentSynapseDirectory()
 
     func test_createNote_inCurrentDirectory_placesNoteInSelectedFilesParent() throws {
         sut.openFolder(tempDir)
@@ -159,7 +159,7 @@ final class AppStateCurrentDirectoryTests: XCTestCase {
         try "".write(to: existingNote, atomically: true, encoding: .utf8)
         sut.openFile(existingNote)
 
-        let newNote = try sut.createNote(named: "NewFromContext", in: sut.currentSynapseirectory())
+        let newNote = try sut.createNote(named: "NewFromContext", in: sut.currentSynapseDirectory())
 
         XCTAssertEqual(newNote.deletingLastPathComponent().standardizedFileURL,
                        subDir.standardizedFileURL,
