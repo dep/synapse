@@ -1,4 +1,4 @@
-import { FileSystemService, FileSystemError, FileSystemErrorType, FileNode } from '../../src/services/fileSystemService';
+import { FileSystemService, FileSystemError, FileSystemErrorType, FileNode } from '../../src/services/FileSystemService';
 import * as FileSystem from 'expo-file-system/legacy';
 
 // Mock expo-file-system
