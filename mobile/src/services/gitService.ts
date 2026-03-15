@@ -1,7 +1,271 @@
 import git from 'isomorphic-git';
-import http from 'isomorphic-git/http/web';
-import LightningFS from '@isomorphic-git/lightning-fs';
+import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const getDocumentDirectory = () => FileSystem.documentDirectory || 'file:///';
+
+const toExpoUri = (inputPath: string): string => {
+  if (!inputPath) {
+    return inputPath;
+  }
+
+  if (inputPath.startsWith('file:///')) {
+    return inputPath;
+  }
+
+  if (inputPath.startsWith('file://')) {
+    return `file:///${inputPath.slice('file://'.length).replace(/^\/+/, '')}`;
+  }
+
+  if (inputPath.startsWith('file:/')) {
+    return `file:///${inputPath.slice('file:/'.length).replace(/^\/+/, '')}`;
+  }
+
+  if (inputPath.startsWith('/')) {
+    return `file://${inputPath}`;
+  }
+
+  const docDir = getDocumentDirectory().replace(/\/+$/, '');
+  return `${docDir}/${inputPath.replace(/^\/+/, '')}`;
+};
+
+const createFsError = (code: string, syscall: string, targetPath: string) => {
+  const error = new Error(`${code}: no such file or directory, ${syscall} '${targetPath}'`) as Error & {
+    code: string;
+    errno: number;
+    syscall: string;
+    path: string;
+  };
+
+  error.code = code;
+  error.errno = -2;
+  error.syscall = syscall;
+  error.path = targetPath;
+
+  return error;
+};
+
+const getParentPath = (targetPath: string) => {
+  const normalizedPath = targetPath.replace(/\/+$/, '');
+  const lastSlashIndex = normalizedPath.lastIndexOf('/');
+
+  if (lastSlashIndex <= 'file:///'.length - 1) {
+    return null;
+  }
+
+  return normalizedPath.slice(0, lastSlashIndex);
+};
+
+const ensureParentDirectory = async (targetPath: string) => {
+  const parentPath = getParentPath(targetPath);
+
+  if (!parentPath) {
+    return;
+  }
+
+  await FileSystem.makeDirectoryAsync(toExpoUri(parentPath), {
+    intermediates: true,
+  });
+};
+
+// Collect an async iterable body into a single Uint8Array
+const collectBody = async (
+  body?: Iterable<Uint8Array> | AsyncIterable<Uint8Array>
+): Promise<Uint8Array> => {
+  if (!body) return new Uint8Array(0);
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of body as AsyncIterable<Uint8Array>) {
+    chunks.push(chunk);
+  }
+  const totalLength = chunks.reduce((n, c) => n + c.byteLength, 0);
+  const merged = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return merged;
+};
+
+// Wrap bytes in an async iterable that isomorphic-git's StreamReader can consume.
+// isomorphic-git calls Buffer.from(value) on every yielded chunk; the single-arg
+// Buffer.from(uint8Array) form is reliably supported in React Native / Hermes.
+// We deliberately avoid Buffer.from(arrayBuffer, byteOffset, length) which is
+// broken in some React Native Buffer polyfills.
+const bytesToAsyncIterable = (bytes: Uint8Array) => {
+  const CHUNK = 65536;
+  let offset = 0;
+  return {
+    [Symbol.asyncIterator]() {
+      return this;
+    },
+    async next(): Promise<{ done: boolean; value: Uint8Array | undefined }> {
+      if (offset >= bytes.byteLength) {
+        return { done: true, value: undefined };
+      }
+      const end = Math.min(offset + CHUNK, bytes.byteLength);
+      // subarray() returns a view into the same owned buffer — no copy needed.
+      // We already own `bytes` (it was copied fresh in the http adapter), so
+      // this view is safe for as long as the iterator lives.
+      const chunk = bytes.subarray(offset, end);
+      offset = end;
+      return { done: false, value: chunk };
+    },
+    async return(): Promise<{ done: boolean; value: undefined }> {
+      offset = bytes.byteLength;
+      return { done: true, value: undefined };
+    },
+  };
+};
+
+const http = {
+  async request({
+    url,
+    method = 'GET',
+    headers = {},
+    body,
+  }: {
+    url: string;
+    method?: string;
+    headers?: Record<string, string>;
+    body?: Iterable<Uint8Array> | AsyncIterable<Uint8Array>;
+  }) {
+    // Materialise request body before sending (streaming POST not supported in RN fetch)
+    const requestBytes = await collectBody(body);
+    const requestBody = requestBytes.byteLength > 0 ? requestBytes : undefined;
+
+    const response = await fetch(url, { method, headers, body: requestBody });
+
+    const responseHeaders: Record<string, string> = {};
+    response.headers.forEach((v: string, k: string) => {
+      responseHeaders[k] = v;
+    });
+
+    const arrayBuf = await response.arrayBuffer();
+
+    // Copy bytes into a brand-new ArrayBuffer that is fully owned by us.
+    // Hermes may return a neutered/transferred ArrayBuffer from fetch's
+    // arrayBuffer() call; wrapping it in a fresh copy prevents Buffer.from()
+    // inside isomorphic-git's StreamReader from throwing on a detached buffer.
+    const srcBytes = new Uint8Array(arrayBuf);
+    const bodyBytes = new Uint8Array(srcBytes.byteLength);
+    bodyBytes.set(srcBytes);
+
+    console.log('[git-http]', method, url, '->', response.status,
+      'body bytes:', bodyBytes.byteLength,
+      'ct:', responseHeaders['content-type']);
+
+    return {
+      url: response.url || url,
+      method,
+      statusCode: response.status,
+      statusMessage: response.statusText,
+      headers: responseHeaders,
+      body: bytesToAsyncIterable(bodyBytes),
+    };
+  },
+};
+
+// Node.js fs-compatible adapter for expo-file-system
+// This allows isomorphic-git to work with Expo's FileSystem API
+const fs = {
+  promises: {
+    async readFile(filepath: string, options?: { encoding?: string }): Promise<string | Uint8Array> {
+      const content = await FileSystem.readAsStringAsync(toExpoUri(filepath), {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+      return options?.encoding === 'utf8' ? content : new TextEncoder().encode(content);
+    },
+
+    async writeFile(filepath: string, data: string | Uint8Array, options?: { encoding?: string }): Promise<void> {
+      let content: string;
+      if (data instanceof Uint8Array) {
+        content = new TextDecoder().decode(data);
+      } else {
+        content = data;
+      }
+      await ensureParentDirectory(filepath);
+      await FileSystem.writeAsStringAsync(toExpoUri(filepath), content, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+    },
+
+    async mkdir(dirpath: string, options?: { recursive?: boolean }): Promise<void> {
+      await FileSystem.makeDirectoryAsync(toExpoUri(dirpath), {
+        intermediates: options?.recursive ?? false 
+      });
+    },
+
+    async rmdir(dirpath: string): Promise<void> {
+      await FileSystem.deleteAsync(toExpoUri(dirpath), { idempotent: true });
+    },
+
+    async readdir(dirpath: string): Promise<string[]> {
+      return await FileSystem.readDirectoryAsync(toExpoUri(dirpath));
+    },
+
+    async unlink(filepath: string): Promise<void> {
+      await FileSystem.deleteAsync(toExpoUri(filepath), { idempotent: true });
+    },
+
+    async rename(oldpath: string, newpath: string): Promise<void> {
+      // Expo doesn't have a direct rename, so we copy and delete
+      await ensureParentDirectory(newpath);
+      await FileSystem.copyAsync({ from: toExpoUri(oldpath), to: toExpoUri(newpath) });
+      await FileSystem.deleteAsync(toExpoUri(oldpath), { idempotent: true });
+    },
+
+    async stat(filepath: string): Promise<{
+      type: string;
+      mode: number;
+      size: number;
+      ino: number;
+      mtimeMs: number;
+      ctimeMs: number;
+      uid: number;
+      gid: number;
+      dev: number;
+      isFile: () => boolean;
+      isDirectory: () => boolean;
+      isSymbolicLink: () => boolean;
+    }> {
+      const info = await FileSystem.getInfoAsync(toExpoUri(filepath));
+      if (!info.exists) {
+        throw createFsError('ENOENT', 'stat', filepath);
+      }
+      
+      const size = info.size || 0;
+      const mtimeMs = info.modificationTime ? info.modificationTime * 1000 : Date.now();
+      
+      return {
+        type: info.isDirectory ? 'directory' : 'file',
+        mode: 0o644,
+        size,
+        ino: 0,
+        mtimeMs,
+        ctimeMs: mtimeMs,
+        uid: 0,
+        gid: 0,
+        dev: 0,
+        isFile: () => !info.isDirectory,
+        isDirectory: () => info.isDirectory,
+        isSymbolicLink: () => false,
+      };
+    },
+
+    async lstat(filepath: string): Promise<ReturnType<typeof fs.promises.stat>> {
+      return await fs.promises.stat(filepath);
+    },
+
+    symlink(): never {
+      throw new Error('Symlinks not supported in Expo FileSystem');
+    },
+
+    readlink(): never {
+      throw new Error('Symlinks not supported in Expo FileSystem');
+    },
+  },
+};
 
 export enum GitErrorType {
   AUTH_FAILURE = 'AUTH_FAILURE',
@@ -68,13 +332,8 @@ function getGitErrorType(error: Error): GitErrorType {
 
 export class GitService {
   private static instance: GitService | null = null;
-  private fs: LightningFS;
-  private pfs: LightningFS['promises'];
 
-  private constructor() {
-    this.fs = new LightningFS('git');
-    this.pfs = this.fs.promises;
-  }
+  private constructor() {}
 
   static getInstance(): GitService {
     if (!GitService.instance) {
@@ -137,7 +396,7 @@ export class GitService {
   ): Promise<void> {
     try {
       await git.clone({
-        fs: this.fs,
+        fs,
         http,
         dir,
         url,
@@ -147,7 +406,11 @@ export class GitService {
         onAuth: await GitService.getAuthCallback(url),
       });
     } catch (error) {
-      this.handleError(error as Error, 'Clone');
+      const err = error as any;
+      console.log('[clone-error] message:', err?.message);
+      console.log('[clone-error] caller:', err?.caller);
+      console.log('[clone-error] stack:', err?.stack?.split('\n').slice(0, 8).join('\n'));
+      this.handleError(err as Error, 'Clone');
     }
   }
 
@@ -156,7 +419,7 @@ export class GitService {
       const remoteUrl = await this.getRemoteUrl(dir);
       
       await git.pull({
-        fs: this.fs,
+        fs,
         http,
         dir,
         fastForwardOnly: false,
@@ -170,25 +433,22 @@ export class GitService {
 
   async commit(dir: string): Promise<string | null> {
     try {
-      const status = await git.statusMatrix({ fs: this.fs, dir });
+      const status = await git.statusMatrix({ fs, dir });
       
       let hasChanges = false;
       const modifiedFiles: string[] = [];
       const deletedFiles: string[] = [];
       
       for (const [filepath, headStatus, workdirStatus, stageStatus] of status) {
-        // workdirStatus !== stageStatus means there's a change
         if (workdirStatus !== stageStatus) {
           hasChanges = true;
           
           if (workdirStatus === 0) {
-            // Deleted
             deletedFiles.push(filepath);
-            await git.remove({ fs: this.fs, dir, filepath });
+            await git.remove({ fs, dir, filepath });
           } else {
-            // Modified or added
             modifiedFiles.push(filepath);
-            await git.add({ fs: this.fs, dir, filepath });
+            await git.add({ fs, dir, filepath });
           }
         }
       }
@@ -201,7 +461,7 @@ export class GitService {
       const message = `Synapse mobile sync — ${timestamp}`;
       
       const sha = await git.commit({
-        fs: this.fs,
+        fs,
         dir,
         message,
         author: {
@@ -219,10 +479,10 @@ export class GitService {
   async push(dir: string): Promise<void> {
     try {
       const remoteUrl = await this.getRemoteUrl(dir);
-      const currentBranch = await git.currentBranch({ fs: this.fs, dir, fullname: false });
+      const currentBranch = await git.currentBranch({ fs, dir, fullname: false });
       
       await git.push({
-        fs: this.fs,
+        fs,
         http,
         dir,
         remote: 'origin',
@@ -243,7 +503,6 @@ export class GitService {
       await this.pull(dir);
       pulled = true;
     } catch (error) {
-      // Pull failed, but we can still try to commit and push
       console.warn('Pull failed during sync:', error);
     }
     
@@ -264,23 +523,19 @@ export class GitService {
   // Helper Methods
   async getStatus(dir: string): Promise<StatusResult> {
     try {
-      const status = await git.statusMatrix({ fs: this.fs, dir });
+      const status = await git.statusMatrix({ fs, dir });
       
       const modified: string[] = [];
       const deleted: string[] = [];
       const added: string[] = [];
       
       for (const [filepath, headStatus, workdirStatus, stageStatus] of status) {
-        // Check if file has uncommitted changes
         if (workdirStatus !== stageStatus) {
           if (headStatus === 0) {
-            // New file (not in HEAD)
             added.push(filepath);
           } else if (workdirStatus === 0) {
-            // Deleted file (not in workdir but was in HEAD)
             deleted.push(filepath);
           } else {
-            // Modified file (in HEAD but workdir differs from stage)
             modified.push(filepath);
           }
         }
@@ -304,7 +559,7 @@ export class GitService {
 
   async isRepository(dir: string): Promise<boolean> {
     try {
-      await git.currentBranch({ fs: this.fs, dir, fullname: false });
+      await git.currentBranch({ fs, dir, fullname: false });
       return true;
     } catch {
       return false;
@@ -313,7 +568,7 @@ export class GitService {
 
   private async getRemoteUrl(dir: string): Promise<string> {
     try {
-      const remote = await git.getConfig({ fs: this.fs, dir, path: 'remote.origin.url' });
+      const remote = await git.getConfig({ fs, dir, path: 'remote.origin.url' });
       return remote?.value || '';
     } catch {
       return '';

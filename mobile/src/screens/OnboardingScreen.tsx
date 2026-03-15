@@ -11,13 +11,13 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
   const { theme } = useTheme();
 
   const handleNewWorkspace = async () => {
-    await OnboardingStorage.setOnboardingCompleted();
-    navigation.navigate('Home');
+    // For new workspace, we still want to collect the token for future use
+    navigation.navigate('GitHubToken', { nextStep: 'Home' });
   };
 
   const handleCloneRepository = async () => {
-    await OnboardingStorage.setOnboardingCompleted();
-    navigation.navigate('CloneRepository');
+    // Go to token screen first, then clone
+    navigation.navigate('GitHubToken', { nextStep: 'CloneRepository' });
   };
 
   return (

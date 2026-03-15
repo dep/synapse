@@ -1,11 +1,21 @@
 import { GitService, GitError, GitErrorType } from '../../src/services/gitService';
 import git from 'isomorphic-git';
-import LightningFS from '@isomorphic-git/lightning-fs';
+import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Mock dependencies
 jest.mock('isomorphic-git');
-jest.mock('@isomorphic-git/lightning-fs');
+jest.mock('expo-file-system/legacy', () => ({
+  documentDirectory: 'file:///mock/documents/',
+  EncodingType: { UTF8: 'utf8', Base64: 'base64' },
+  readAsStringAsync: jest.fn(),
+  writeAsStringAsync: jest.fn(),
+  readDirectoryAsync: jest.fn(),
+  getInfoAsync: jest.fn(),
+  makeDirectoryAsync: jest.fn(),
+  deleteAsync: jest.fn(),
+  copyAsync: jest.fn(),
+}));
 jest.mock('@react-native-async-storage/async-storage', () => ({
   setItem: jest.fn(() => Promise.resolve()),
   getItem: jest.fn(() => Promise.resolve(null)),
@@ -13,27 +23,8 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 describe('GitService', () => {
-  let mockFs: jest.Mocked<LightningFS>;
-  let mockPfs: any;
-
   beforeEach(() => {
     jest.clearAllMocks();
-    
-    // Setup mock filesystem
-    mockPfs = {
-      mkdir: jest.fn(() => Promise.resolve()),
-      readdir: jest.fn(() => Promise.resolve([])),
-      readFile: jest.fn(() => Promise.resolve('')),
-      writeFile: jest.fn(() => Promise.resolve()),
-      unlink: jest.fn(() => Promise.resolve()),
-      rmdir: jest.fn(() => Promise.resolve()),
-      stat: jest.fn(() => Promise.resolve({ type: 'file' })),
-      lstat: jest.fn(() => Promise.resolve({ type: 'file' })),
-    };
-    
-    (LightningFS as jest.MockedClass<typeof LightningFS>).mockImplementation(() => ({
-      promises: mockPfs,
-    }) as any);
   });
 
   afterEach(() => {
@@ -150,6 +141,47 @@ describe('GitService', () => {
           onAuth: expect.any(Function),
         })
       );
+    });
+
+    it('should expose Node-style ENOENT errors from fs adapter', async () => {
+      const repoUrl = 'https://github.com/test/repo.git';
+      const localPath = 'file:///data/user/0/com.dnnypck.mobile/files/vault';
+
+      (FileSystem.getInfoAsync as jest.Mock).mockResolvedValueOnce({
+        exists: false,
+        isDirectory: false,
+      });
+
+      (git.clone as jest.Mock).mockImplementationOnce(async ({ fs }: any) => {
+        await fs.promises.stat('file:/data/user/0/com.dnnypck.mobile/files/vault/.git/config');
+      });
+
+      await expect(GitService.clone(repoUrl, localPath)).rejects.toMatchObject({
+        originalError: expect.objectContaining({
+          code: 'ENOENT',
+          path: 'file:/data/user/0/com.dnnypck.mobile/files/vault/.git/config',
+        }),
+      });
+    });
+
+    it('should create parent directories before writing nested git files', async () => {
+      const repoUrl = 'https://github.com/test/repo.git';
+      const localPath = 'file:///data/user/0/com.dnnypck.mobile/files/vault/agent-sync';
+
+      (git.clone as jest.Mock).mockImplementationOnce(async ({ fs }: any) => {
+        await fs.promises.writeFile(
+          'file:/data/user/0/com.dnnypck.mobile/files/vault/agent-sync/.git/config',
+          '[core]\nrepositoryformatversion = 0\n'
+        );
+      });
+
+      await GitService.clone(repoUrl, localPath);
+
+      expect(FileSystem.makeDirectoryAsync).toHaveBeenCalledWith(
+        'file:///data/user/0/com.dnnypck.mobile/files/vault/agent-sync/.git',
+        { intermediates: true }
+      );
+      expect(FileSystem.writeAsStringAsync).toHaveBeenCalled();
     });
 
     it('should throw GitError on authentication failure', async () => {

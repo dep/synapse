@@ -47,4 +47,30 @@ describe('OnboardingStorage', () => {
       expect(AsyncStorage.removeItem).toHaveBeenCalledWith('onboarding_completed');
     });
   });
+
+  describe('active repository path', () => {
+    it('should persist active repository path', async () => {
+      await OnboardingStorage.setActiveRepositoryPath('file:///mock/documents/vault/repo');
+
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+        'active_repository_path',
+        'file:///mock/documents/vault/repo'
+      );
+    });
+
+    it('should retrieve active repository path', async () => {
+      (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce('file:///mock/documents/vault/repo');
+
+      const result = await OnboardingStorage.getActiveRepositoryPath();
+
+      expect(result).toBe('file:///mock/documents/vault/repo');
+      expect(AsyncStorage.getItem).toHaveBeenCalledWith('active_repository_path');
+    });
+
+    it('should clear active repository path', async () => {
+      await OnboardingStorage.clearActiveRepositoryPath();
+
+      expect(AsyncStorage.removeItem).toHaveBeenCalledWith('active_repository_path');
+    });
+  });
 });

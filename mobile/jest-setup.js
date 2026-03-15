@@ -14,36 +14,59 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   removeItem: jest.fn(() => Promise.resolve()),
 }));
 
-// Mock TurboModuleRegistry
-jest.mock('react-native/Libraries/TurboModule/TurboModuleRegistry', () => ({
-  getEnforcing: jest.fn(() => ({})),
-  get: jest.fn(() => ({})),
-}));
+// Mock react-native
+jest.mock('react-native', () => {
+  const React = require('react');
+  
+  const mockComponent = (name) => {
+    return React.forwardRef((props, ref) => {
+      return React.createElement(name, { ...props, ref });
+    });
+  };
+  
+  return {
+    View: mockComponent('View'),
+    Text: mockComponent('Text'),
+    TouchableOpacity: mockComponent('TouchableOpacity'),
+    ScrollView: mockComponent('ScrollView'),
+    Modal: mockComponent('Modal'),
+    TextInput: mockComponent('TextInput'),
+    Animated: {
+      View: mockComponent('Animated.View'),
+      Value: jest.fn((val) => ({
+        setValue: jest.fn(),
+        _value: val,
+      })),
+      timing: jest.fn(() => ({
+        start: jest.fn((cb) => cb && cb()),
+      })),
+    },
+    StyleSheet: {
+      create: jest.fn((styles) => styles),
+      flatten: jest.fn((style) => style),
+      compose: jest.fn((style1, style2) => [style1, style2]),
+      absoluteFill: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        top: 0,
+        bottom: 0,
+      },
+      hairlineWidth: 1,
+    },
+    Dimensions: {
+      get: jest.fn(() => ({ width: 375, height: 812, scale: 2, fontScale: 1 })),
+      addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+    },
+    useColorScheme: jest.fn(() => 'light'),
+    PixelRatio: {
+      get: jest.fn(() => 2),
+      roundToNearestPixel: jest.fn((value) => value),
+    },
+  };
+});
 
-// Mock Dimensions
-jest.mock('react-native/Libraries/Utilities/Dimensions', () => ({
-  get: jest.fn(() => ({ width: 375, height: 812, scale: 2, fontScale: 1 })),
-  addEventListener: jest.fn(() => ({ remove: jest.fn() })),
-}));
-
-// Mock PixelRatio
-jest.mock('react-native/Libraries/Utilities/PixelRatio', () => ({
-  get: jest.fn(() => 2),
-  roundToNearestPixel: jest.fn((value) => value),
-}));
-
-// Mock NativeDeviceInfo
-jest.mock('react-native/Libraries/Utilities/NativeDeviceInfo', () => ({
-  __esModule: true,
-  default: {
-    Dimensions: { window: { width: 375, height: 812, scale: 2, fontScale: 1 } },
-  },
-}));
-
-// Mock DeviceInfo
-jest.mock('react-native/src/private/specs_DEPRECATED/modules/NativeDeviceInfo', () => ({
-  __esModule: true,
-  default: {
-    getConstants: jest.fn(() => ({})),
-  },
+// Mock useColorScheme from the proper path
+jest.mock('react-native/Libraries/Utilities/useColorScheme', () => ({
+  default: jest.fn(() => 'light'),
 }));
