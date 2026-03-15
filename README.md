@@ -8,6 +8,19 @@ A minimal macOS markdown editor with a built-in terminal, wiki links, quick open
 
 Docs: https://synapse-delta-nine.vercel.app/
 
+## Project Structure
+
+```
+synapse/
+├── macOS/              # macOS app (current)
+│   ├── Synapse/        # Source files
+│   ├── SynapseTests/   # Test suite
+│   ├── Synapse.xcodeproj
+│   └── project.yml
+├── marketing-site/     # Documentation website
+└── ...                 # Shared resources
+```
+
 ## Requirements
 
 - macOS 14+
@@ -28,13 +41,13 @@ Preferred: run it entirely from the CLI.
 1. Generate the Xcode project:
 
 ```bash
-xcodegen generate
+cd macOS && xcodegen generate
 ```
 
 2. Build the app:
 
 ```bash
-xcodebuild -project "Synapse.xcodeproj" -scheme "Synapse" -destination "platform=macOS" build
+cd macOS && xcodebuild -project "Synapse.xcodeproj" -scheme "Synapse" -destination "platform=macOS" build
 ```
 
 3. Launch the built app:
@@ -46,7 +59,7 @@ open ~/Library/Developer/Xcode/DerivedData/Synapse-*/Build/Products/Debug/Synaps
 Or do all three steps in one shot:
 
 ```bash
-xcodegen generate && xcodebuild -project "Synapse.xcodeproj" -scheme "Synapse" -destination "platform=macOS" build && open ~/Library/Developer/Xcode/DerivedData/Synapse-*/Build/Products/Debug/Synapse.app
+cd macOS && xcodegen generate && xcodebuild -project "Synapse.xcodeproj" -scheme "Synapse" -destination "platform=macOS" build && open ~/Library/Developer/Xcode/DerivedData/Synapse-*/Build/Products/Debug/Synapse.app
 ```
 
 The app is built into Xcode DerivedData under the Debug products folder.
@@ -56,7 +69,7 @@ The app is built into Xcode DerivedData under the Debug products folder.
 If you prefer Xcode:
 
 ```bash
-open Synapse.xcodeproj
+open macOS/Synapse.xcodeproj
 ```
 
 Then select the `Synapse` scheme and press `Cmd-R`.
@@ -66,12 +79,12 @@ Then select the `Synapse` scheme and press `Cmd-R`.
 Run tests from the command line:
 
 ```bash
-xcodebuild test -scheme Synapse -destination 'platform=macOS'
+cd macOS && xcodebuild test -project Synapse.xcodeproj -scheme Synapse -destination 'platform=macOS'
 ```
 
 Or run tests in Xcode:
 
-1. Open the project: `open Synapse.xcodeproj`
+1. Open the project: `open macOS/Synapse.xcodeproj`
 2. Select the `Synapse` scheme
 3. Press `Cmd-U` to run all tests
 
@@ -90,12 +103,12 @@ Prerequisites:
 
 - A valid `Developer ID Application` certificate with private key installed in your login keychain
 - A configured notarization profile for `notarytool` (example: `Synapse-notary`)
-- `project.yml` must remain the source of truth for release signing settings; do not rely on Xcode-only UI changes because `xcodegen generate` will overwrite them
+- `macOS/project.yml` must remain the source of truth for release signing settings; do not rely on Xcode-only UI changes because `xcodegen generate` will overwrite them
 
 Create a signed Release archive:
 
 ```bash
-xcodegen generate && \
+cd macOS && xcodegen generate && \
 xcodebuild archive \
   -project "Synapse.xcodeproj" \
   -scheme "Synapse" \
@@ -376,4 +389,4 @@ MyVault/
 ## Notes
 
 - The project uses `SwiftTerm` via Swift Package Manager.
-- If you add new source files, regenerate the project with `xcodegen generate` before building.
+- If you add new source files, regenerate the project with `cd macOS && xcodegen generate` before building.
