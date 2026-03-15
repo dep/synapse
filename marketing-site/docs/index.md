@@ -2,8 +2,6 @@
 layout: doc
 ---
 
-![](images/logo.png)
-
 # Welcome to Synapse!
 
 ![](images/hero.png)
