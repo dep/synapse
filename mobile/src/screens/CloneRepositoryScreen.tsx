@@ -13,13 +13,17 @@ import { useTheme } from '../theme/ThemeContext';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { GitService, GitError } from '../services/gitService';
+import { FileSystemService } from '../services/FileSystemService';
 import { OnboardingStorage } from '../services/onboardingStorage';
 import git from 'isomorphic-git';
+import * as FileSystem from 'expo-file-system/legacy';
 
 type CloneRepositoryScreenProps = NativeStackScreenProps<RootStackParamList, 'CloneRepository'>;
 
-// Default vault path
-const VAULT_PATH = '/vault';
+// Use the document directory for the vault
+const getVaultPath = () => {
+  return `${FileSystem.documentDirectory}vault`.replace(/\/+$/, '');
+};
 
 export function CloneRepositoryScreen({ navigation }: CloneRepositoryScreenProps) {
   const { theme } = useTheme();
@@ -60,6 +64,19 @@ export function CloneRepositoryScreen({ navigation }: CloneRepositoryScreenProps
         return;
       }
 
+      // Get the vault path
+      const vaultPath = getVaultPath();
+      
+      // Ensure the vault directory exists
+      try {
+        const dirInfo = await FileSystem.getInfoAsync(vaultPath);
+        if (!dirInfo.exists) {
+          await FileSystem.makeDirectoryAsync(vaultPath, { intermediates: true });
+        }
+      } catch (dirError) {
+        console.log('Vault directory may already exist:', dirError);
+      }
+
       // Update credentials for this specific repo
       const cleanUrl = repoUrl.trim().replace(/\.git$/, '');
       await GitService.setCredentials(cleanUrl, credentials.username, credentials.token);
@@ -67,7 +84,7 @@ export function CloneRepositoryScreen({ navigation }: CloneRepositoryScreenProps
       // Clone the repository
       await GitService.clone(
         cleanUrl,
-        VAULT_PATH,
+        vaultPath,
         (stage: git.ProgressStage) => {
           setProgress(`${stage.phase}: ${stage.loaded}/${stage.total || '?'} ${stage.lengthComputable ? '' : 'objects'}`);
         }

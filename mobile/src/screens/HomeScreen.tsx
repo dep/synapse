@@ -5,11 +5,12 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { FileDrawer } from '../components/FileDrawer';
 import { FileSystemService } from '../services/FileSystemService';
+import * as FileSystem from 'expo-file-system/legacy';
 
 type HomeScreenProps = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
-// Default vault path - in a real app, this would be configurable
-const VAULT_PATH = '/vault';
+// Get the vault path from document directory
+const VAULT_PATH = `${FileSystem.documentDirectory}vault`.replace(/\/+$/, '');
 
 export function HomeScreen({ navigation }: HomeScreenProps) {
   const { theme, isDark, toggleTheme, followSystem, setFollowSystem } = useTheme();
