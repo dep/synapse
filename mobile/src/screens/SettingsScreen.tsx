@@ -3,11 +3,17 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { useTheme } from '../theme/ThemeContext';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
+import { OnboardingStorage } from '../services/onboardingStorage';
 
 type SettingsScreenProps = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
 export function SettingsScreen({ navigation }: SettingsScreenProps) {
   const { theme, isDark, toggleTheme, followSystem, setFollowSystem } = useTheme();
+
+  const handleResetOnboarding = async () => {
+    await OnboardingStorage.clearOnboardingState();
+    navigation.navigate('Onboarding');
+  };
 
   return (
     <ScrollView
@@ -77,6 +83,24 @@ export function SettingsScreen({ navigation }: SettingsScreenProps) {
           Go Back
         </Text>
       </TouchableOpacity>
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+          Developer
+        </Text>
+        
+        <TouchableOpacity
+          style={[styles.card, { backgroundColor: theme.colors.card }]}
+          onPress={handleResetOnboarding}
+        >
+          <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+            View Onboarding Screen
+          </Text>
+          <Text style={[styles.infoSubtext, { color: theme.colors.text, opacity: 0.6, marginTop: 4 }]}>
+            Reset onboarding state and navigate to onboarding
+          </Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
