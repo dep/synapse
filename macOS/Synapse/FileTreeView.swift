@@ -382,6 +382,11 @@ struct FileTreeView: View {
                 expandPath(to: newFile)
                 revealSelection(with: proxy)
             }
+            .onChange(of: appState.focusPinnedFolder) { _, folder in
+                guard let folder else { return }
+                focusPinnedFolder(folder, proxy: proxy)
+                appState.focusPinnedFolder = nil
+            }
             .onChange(of: settings.fileExtensionFilter) { _, _ in
                 refresh()
             }
@@ -453,6 +458,23 @@ struct FileTreeView: View {
         }
         nodes = buildFileTree(at: root, sortCriterion: appState.sortCriterion, ascending: appState.sortAscending, settings: settings)
         expandPath(to: appState.selectedFile)
+    }
+
+    private func focusPinnedFolder(_ folder: URL, proxy: ScrollViewProxy) {
+        // Collapse all root-level folders except the one being focused.
+        let rootDirs = nodes.filter { $0.isDirectory }.map { $0.url }
+        for dir in rootDirs where dir != folder {
+            expandedDirs.remove(dir)
+        }
+        // Expand the target folder and all its ancestors.
+        expandPath(to: folder)
+        expandedDirs.insert(folder)
+        // Scroll to it.
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                proxy.scrollTo(folder, anchor: .top)
+            }
+        }
     }
 
     private func expandPath(to file: URL?) {

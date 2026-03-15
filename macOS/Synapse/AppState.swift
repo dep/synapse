@@ -134,6 +134,8 @@ class AppState: ObservableObject {
 
     @Published var rootURL: URL?
     @Published var selectedFile: URL?
+    /// Set when a pinned folder is tapped — signals FileTreeView to collapse others and focus this folder.
+    @Published var focusPinnedFolder: URL? = nil
     @Published var fileContent: String = ""
     @Published var isDirty: Bool = false
     @Published var allFiles: [URL] = []
@@ -1433,11 +1435,10 @@ class AppState: ObservableObject {
 
     // MARK: - Folder Navigation for Pinned Items
 
-    /// Expands the folder in the file tree (called when a pinned folder is clicked)
+    /// Called when a pinned folder is tapped — signals FileTreeView to collapse all other
+    /// root-level folders and expand/focus this one.
     func expandAndScrollToFolder(_ url: URL) {
-        // For now, just ensure the folder path is expanded
-        // The actual scrolling will be handled by the UI observing fileTreeSelection
-        selectedFile = url
+        focusPinnedFolder = url
     }
 
     func openFileInNewTab(_ url: URL) {

@@ -116,17 +116,17 @@ final class AppStateCurrentDirectoryTests: XCTestCase {
 
     // MARK: - expandAndScrollToFolder
 
-    func test_expandAndScrollToFolder_setsSelectedFileToFolderURL() {
+    func test_expandAndScrollToFolder_setsFocusPinnedFolder() {
         sut.openFolder(tempDir)
         let folderURL = tempDir.appendingPathComponent("MyFolder", isDirectory: true)
 
         sut.expandAndScrollToFolder(folderURL)
 
-        XCTAssertEqual(sut.selectedFile?.standardizedFileURL, folderURL.standardizedFileURL,
-                       "expandAndScrollToFolder should set selectedFile to the folder URL")
+        XCTAssertEqual(sut.focusPinnedFolder?.standardizedFileURL, folderURL.standardizedFileURL,
+                       "expandAndScrollToFolder should signal focusPinnedFolder")
     }
 
-    func test_expandAndScrollToFolder_overwritesPreviousSelection() throws {
+    func test_expandAndScrollToFolder_doesNotChangeSelectedFile() throws {
         sut.openFolder(tempDir)
         let noteURL = tempDir.appendingPathComponent("Note.md")
         try "content".write(to: noteURL, atomically: true, encoding: .utf8)
@@ -136,17 +136,17 @@ final class AppStateCurrentDirectoryTests: XCTestCase {
         let folderURL = tempDir.appendingPathComponent("Docs", isDirectory: true)
         sut.expandAndScrollToFolder(folderURL)
 
-        XCTAssertEqual(sut.selectedFile?.standardizedFileURL, folderURL.standardizedFileURL,
-                       "expandAndScrollToFolder should replace any previously selected file")
+        XCTAssertEqual(sut.selectedFile, noteURL,
+                       "expandAndScrollToFolder should not change the current file selection")
     }
 
-    func test_expandAndScrollToFolder_withNilRootURL_stillSetsSelectedFile() {
+    func test_expandAndScrollToFolder_withNilRootURL_stillSetsFocusPinnedFolder() {
         XCTAssertNil(sut.rootURL)
 
         let folderURL = tempDir.appendingPathComponent("AnyFolder", isDirectory: true)
         sut.expandAndScrollToFolder(folderURL)
 
-        XCTAssertEqual(sut.selectedFile?.standardizedFileURL, folderURL.standardizedFileURL)
+        XCTAssertEqual(sut.focusPinnedFolder?.standardizedFileURL, folderURL.standardizedFileURL)
     }
 
     // MARK: - Interaction: new note is created in currentSynapseDirectory()
