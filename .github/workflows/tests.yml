@@ -79,7 +79,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ./mobile
-        run: npm ci
+        run: npm install
 
       - name: Run mobile tests
         working-directory: ./mobile
