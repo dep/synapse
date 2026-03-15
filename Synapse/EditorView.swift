@@ -440,20 +440,44 @@ private enum MarkdownTheme {
     static let codeBackground = SynapseTheme.editorCodeBackground
 }
 
+/// Thread-safe regex cache for markdown styling outside of LinkAwareTextView.
+private var sharedRegexCache: [String: NSRegularExpression] = [:]
+
+private func cachedRegex(_ pattern: String, options: NSRegularExpression.Options = []) -> NSRegularExpression? {
+    let key = "\(pattern)|\(options.rawValue)"
+    if let cached = sharedRegexCache[key] { return cached }
+    guard let compiled = try? NSRegularExpression(pattern: pattern, options: options) else { return nil }
+    sharedRegexCache[key] = compiled
+    return compiled
+}
+
 /// Styles markdown text and returns an attributed string for display
 func styleMarkdownContent(_ content: String, fontSize: CGFloat = 12) -> NSAttributedString {
     let storage = NSTextStorage(string: content)
     let text = content as NSString
     let fullRange = NSRange(location: 0, length: text.length)
     
-    // Base attributes with smaller font for embedded display
     let baseFont = NSFont.systemFont(ofSize: fontSize)
     storage.addAttributes([
         .font: baseFont,
         .foregroundColor: SynapseTheme.editorForeground,
     ], range: fullRange)
+
+    func applyPattern(_ pattern: String, options: NSRegularExpression.Options = [], apply: (NSRange) -> Void) {
+        guard let regex = cachedRegex(pattern, options: options) else { return }
+        regex.enumerateMatches(in: content, options: [], range: fullRange) { match, _, _ in
+            guard let range = match?.range else { return }
+            apply(range)
+        }
+    }
+
+    func dimDelims(_ range: NSRange, _ delimLen: Int) {
+        guard range.length >= delimLen * 2 else { return }
+        storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: NSRange(location: range.location, length: delimLen))
+        storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: NSRange(location: range.location + range.length - delimLen, length: delimLen))
+    }
     
-    // Header patterns with scaled sizes
+    // Headers
     let headerPatterns: [(String, NSFont)] = [
         ("^#{6} .+$", NSFont.systemFont(ofSize: fontSize + 2, weight: .semibold)),
         ("^#{5} .+$", NSFont.systemFont(ofSize: fontSize + 2, weight: .semibold)),
@@ -462,121 +486,66 @@ func styleMarkdownContent(_ content: String, fontSize: CGFloat = 12) -> NSAttrib
         ("^## .+$",   NSFont.systemFont(ofSize: fontSize + 6, weight: .bold)),
         ("^# .+$",    NSFont.systemFont(ofSize: fontSize + 8, weight: .bold)),
     ]
-    
     for (pattern, font) in headerPatterns {
-        if let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines]) {
-            regex.enumerateMatches(in: content, range: fullRange) { match, _, _ in
-                guard let range = match?.range else { return }
-                storage.addAttributes([.font: font], range: range)
-                // Dim the hash markers
-                let hashEnd = (text.substring(with: range) as NSString).range(of: "^#{1,6} ", options: .regularExpression)
-                if hashEnd.location != NSNotFound {
-                    let absRange = NSRange(location: range.location + hashEnd.location, length: hashEnd.length)
-                    storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: absRange)
-                }
+        applyPattern(pattern, options: [.anchorsMatchLines]) { range in
+            storage.addAttributes([.font: font], range: range)
+            let hashEnd = (text.substring(with: range) as NSString).range(of: "^#{1,6} ", options: .regularExpression)
+            if hashEnd.location != NSNotFound {
+                storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: NSRange(location: range.location + hashEnd.location, length: hashEnd.length))
             }
         }
     }
     
-    // Bold: **text** or __text__
-    let boldPatterns = [
-        ("\\*\\*(.+?)\\*\\*", 2),
-        ("__(.+?)__", 2),
-    ]
-    for (pattern, delimLen) in boldPatterns {
-        if let regex = try? NSRegularExpression(pattern: pattern) {
-            regex.enumerateMatches(in: content, range: fullRange) { match, _, _ in
-                guard let range = match?.range else { return }
-                storage.addAttribute(.font, value: NSFont.systemFont(ofSize: fontSize, weight: .bold), range: range)
-                // Dim delimiters
-                if range.length >= delimLen * 2 {
-                    storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: NSRange(location: range.location, length: delimLen))
-                    storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: NSRange(location: range.location + range.length - delimLen, length: delimLen))
-                }
-            }
-        }
+    // Bold
+    applyPattern("\\*\\*(.+?)\\*\\*") { range in
+        storage.addAttribute(.font, value: NSFont.systemFont(ofSize: fontSize, weight: .bold), range: range)
+        dimDelims(range, 2)
     }
-    
-    // Italic: *text* (but not **)
-    if let italicRegex = try? NSRegularExpression(pattern: "\\*(?!\\*)(.+?)(?<!\\*)\\*") {
-        italicRegex.enumerateMatches(in: content, range: fullRange) { match, _, _ in
-            guard let range = match?.range else { return }
-            let desc = baseFont.fontDescriptor.withSymbolicTraits(.italic)
-            if let f = NSFont(descriptor: desc, size: fontSize) {
-                storage.addAttribute(.font, value: f, range: range)
-            }
-            storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: NSRange(location: range.location, length: 1))
-            storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: NSRange(location: range.location + range.length - 1, length: 1))
-        }
+    applyPattern("__(.+?)__") { range in
+        storage.addAttribute(.font, value: NSFont.systemFont(ofSize: fontSize, weight: .bold), range: range)
+        dimDelims(range, 2)
     }
-    
-    // Inline code: `code`
-    if let codeRegex = try? NSRegularExpression(pattern: "`([^`\\n]+)`") {
-        codeRegex.enumerateMatches(in: content, range: fullRange) { match, _, _ in
-            guard let range = match?.range else { return }
-            let monoFont = NSFont.monospacedSystemFont(ofSize: max(10, fontSize - 1), weight: .regular)
-            storage.addAttributes([
-                .font: monoFont,
-                .backgroundColor: MarkdownTheme.codeBackground,
-            ], range: range)
+    // Italic
+    applyPattern("\\*(?!\\*)(.+?)(?<!\\*)\\*") { range in
+        let desc = baseFont.fontDescriptor.withSymbolicTraits(.italic)
+        if let f = NSFont(descriptor: desc, size: fontSize) {
+            storage.addAttribute(.font, value: f, range: range)
         }
+        dimDelims(range, 1)
     }
-    
-    // Code blocks: ```code```
-    if let codeBlockRegex = try? NSRegularExpression(pattern: "```[\\s\\S]*?```") {
-        codeBlockRegex.enumerateMatches(in: content, range: fullRange) { match, _, _ in
-            guard let range = match?.range else { return }
-            let monoFont = NSFont.monospacedSystemFont(ofSize: max(10, fontSize - 1), weight: .regular)
-            storage.addAttributes([
-                .font: monoFont,
-                .backgroundColor: MarkdownTheme.codeBackground,
-                .foregroundColor: SynapseTheme.editorForeground,
-            ], range: range)
-        }
+    // Inline code
+    applyPattern("`([^`\\n]+)`") { range in
+        storage.addAttributes([.font: NSFont.monospacedSystemFont(ofSize: max(10, fontSize - 1), weight: .regular), .backgroundColor: MarkdownTheme.codeBackground], range: range)
     }
-    
-    // Blockquotes: > text
-    if let quoteRegex = try? NSRegularExpression(pattern: "^> .+$", options: [.anchorsMatchLines]) {
-        quoteRegex.enumerateMatches(in: content, range: fullRange) { match, _, _ in
-            guard let range = match?.range else { return }
-            storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: range)
-        }
+    // Code blocks
+    applyPattern("```[\\s\\S]*?```") { range in
+        storage.addAttributes([.font: NSFont.monospacedSystemFont(ofSize: max(10, fontSize - 1), weight: .regular), .backgroundColor: MarkdownTheme.codeBackground, .foregroundColor: SynapseTheme.editorForeground], range: range)
     }
-    
-    // Wiki links: [[note]]
-    if let wikiRegex = try? NSRegularExpression(pattern: "\\[\\[[^\\]]+\\]\\]") {
-        wikiRegex.enumerateMatches(in: content, range: fullRange) { match, _, _ in
-            guard let range = match?.range, range.length > 4 else { return }
-            let inner = text.substring(with: NSRange(location: range.location + 2, length: range.length - 4))
-            storage.addAttributes([
-                .foregroundColor: MarkdownTheme.linkColor,
-                .underlineStyle: NSUnderlineStyle.single.rawValue,
-                .link: inner,
-            ], range: range)
-        }
+    // Blockquotes
+    applyPattern("^> .+$", options: [.anchorsMatchLines]) { range in
+        storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: range)
     }
-    
-    // Markdown links: [text](url)
-    if let mdLinkRegex = try? NSRegularExpression(pattern: "(?<!!)\\[([^\\]]+)\\]\\(([^)]+)\\)") {
-        mdLinkRegex.enumerateMatches(in: content, range: fullRange) { match, _, _ in
-            guard let match = match, match.numberOfRanges >= 3 else { return }
+    // Wiki links
+    applyPattern("\\[\\[[^\\]]+\\]\\]") { range in
+        guard range.length > 4 else { return }
+        let inner = text.substring(with: NSRange(location: range.location + 2, length: range.length - 4))
+        storage.addAttributes([.foregroundColor: MarkdownTheme.linkColor, .underlineStyle: NSUnderlineStyle.single.rawValue, .link: inner], range: range)
+    }
+    // Markdown links
+    applyPattern("(?<!!)\\[([^\\]]+)\\]\\(([^)]+)\\)") { range in
+        // Need to re-match to get capture groups
+        guard let regex = cachedRegex("(?<!!)\\[([^\\]]+)\\]\\(([^)]+)\\)") else { return }
+        regex.enumerateMatches(in: content, options: [], range: range) { match, _, _ in
+            guard let match, match.numberOfRanges >= 3 else { return }
             let full = match.range(at: 0)
             let label = match.range(at: 1)
-            
             storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: full)
-            storage.addAttributes([
-                .foregroundColor: MarkdownTheme.linkColor,
-                .underlineStyle: NSUnderlineStyle.single.rawValue,
-            ], range: label)
+            storage.addAttributes([.foregroundColor: MarkdownTheme.linkColor, .underlineStyle: NSUnderlineStyle.single.rawValue], range: label)
         }
     }
-    
-    // Horizontal rules: ---
-    if let hrRegex = try? NSRegularExpression(pattern: "^---$", options: [.anchorsMatchLines]) {
-        hrRegex.enumerateMatches(in: content, range: fullRange) { match, _, _ in
-            guard let range = match?.range else { return }
-            storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: range)
-        }
+    // Horizontal rules
+    applyPattern("^---$", options: [.anchorsMatchLines]) { range in
+        storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: range)
     }
     
     return NSAttributedString(attributedString: storage)
@@ -803,7 +772,7 @@ extension LinkAwareTextView {
 
         let text = storage.string
         let sections = collapsibleParser.parse(text)
-        let fileURL = currentFileURL ?? URL(fileURLWithPath: "/tmp/unsaved.md")
+        let fileURL = currentFileURL ?? AppConstants.unsavedFileURL
 
         // When the file has no session state yet, auto-initialise each section:
         // collapse it if it has >= 10 lines, expand it otherwise.
@@ -852,7 +821,7 @@ extension LinkAwareTextView {
 
         let text = string
         let sections = collapsibleParser.parse(text)
-        let fileURL = currentFileURL ?? URL(fileURLWithPath: "/tmp/unsaved.md")
+        let fileURL = currentFileURL ?? AppConstants.unsavedFileURL
 
         let activeKeys = Set(sections.map { $0.getIdentifier() })
 
@@ -914,7 +883,7 @@ extension LinkAwareTextView {
     @objc private func collapsibleToggleTapped(_ sender: NSButton) {
         let sectionId = sender.identifier?.rawValue ?? ""
         guard !sectionId.isEmpty else { return }
-        let fileURL = currentFileURL ?? URL(fileURLWithPath: "/tmp/unsaved.md")
+        let fileURL = currentFileURL ?? AppConstants.unsavedFileURL
         let current = collapsibleStateManager.isCollapsed(sectionId, in: fileURL)
         collapsibleStateManager.setCollapsed(!current, for: sectionId, in: fileURL)
         preserveScrollOffset(for: self) {
@@ -937,6 +906,7 @@ extension LinkAwareTextView {
     }
 }
 
+#if DEBUG
 private func debugLog(_ msg: String) {
     let line = "[Synapse] \(msg)\n"
     if let data = line.data(using: .utf8) {
@@ -951,6 +921,9 @@ private func debugLog(_ msg: String) {
         }
     }
 }
+#else
+@inline(__always) private func debugLog(_ msg: String) {}
+#endif
 
 // MARK: - LinkAwareTextView
 
@@ -1253,15 +1226,15 @@ class LinkAwareTextView: NSTextView {
     override func keyDown(with event: NSEvent) {
         if let popover = completionPopover, popover.isShown {
             switch event.keyCode {
-            case 125: completionVC?.moveSelection(by: 1);    return  // down
-            case 126: completionVC?.moveSelection(by: -1);   return  // up
-            case 36, 76: completionVC?.selectCurrentItem();  return  // return / numpad enter
-            case 53: dismissCompletion();                    return  // escape
+            case KeyCode.downArrow: completionVC?.moveSelection(by: 1);    return
+            case KeyCode.upArrow: completionVC?.moveSelection(by: -1);     return
+            case KeyCode.returnKey, KeyCode.numpadEnter: completionVC?.selectCurrentItem(); return
+            case KeyCode.escape: dismissCompletion();                      return
             default: break
             }
         }
         // Shift-Tab on a multi-line selection → dedent.
-        if event.keyCode == 48, event.modifierFlags.contains(.shift) {
+        if event.keyCode == KeyCode.tab, event.modifierFlags.contains(.shift) {
             let sel = selectedRange()
             let selText = sel.length > 0 ? (string as NSString).substring(with: sel) : ""
             if selText.contains("\n") {
@@ -1577,7 +1550,7 @@ class LinkAwareTextView: NSTextView {
         let matches = inlineImageMatches()
         guard !matches.isEmpty else { return [] }
 
-        let fileURL = currentFileURL ?? URL(fileURLWithPath: "/tmp/unsaved.md")
+        let fileURL = currentFileURL ?? AppConstants.unsavedFileURL
         let sections = collapsibleParser.parse(string)
         let collapsedRanges = sections.compactMap { section -> NSRange? in
             guard section.contentRange.length > 0 else { return nil }

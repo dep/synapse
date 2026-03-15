@@ -150,9 +150,7 @@ private struct GraphCanvas: View {
     }
 
     private func nodeColor(isSelected: Bool, isGhost: Bool) -> Color {
-        if isSelected { return SynapseTheme.accent }
-        if isGhost { return SynapseTheme.textMuted.opacity(0.6) }
-        return SynapseTheme.textSecondary.opacity(0.8)
+        graphNodeColor(isSelected: isSelected, isGhost: isGhost)
     }
 
     private func installScrollMonitor() {

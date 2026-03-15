@@ -2,10 +2,7 @@ import SwiftUI
 import AppKit
 
 enum SynapseTheme {
-    static let canvasTop = Color(white: 0.05)
-    static let canvasBottom = Color(white: 0.05)
-    static let glowA = Color.clear
-    static let glowB = Color.clear
+    static let canvas = Color(white: 0.05)
     static let panel = Color(white: 0.07)
     static let panelElevated = Color(white: 0.10)
     static let editorShell = Color(white: 0.07)
@@ -19,7 +16,6 @@ enum SynapseTheme {
     static let textMuted = Color.white.opacity(0.45)
     static let accent = Color(red: 0.28, green: 0.66, blue: 0.98)
     static let accentSoft = Color(red: 0.20, green: 0.48, blue: 0.89)
-    static let accentGlow = Color.clear
     static let success = Color(red: 0.37, green: 0.83, blue: 0.60)
     static let error = Color(red: 0.95, green: 0.30, blue: 0.30)
 
@@ -40,7 +36,7 @@ enum SynapseTheme {
 
 struct AppBackdrop: View {
     var body: some View {
-        SynapseTheme.canvasTop.ignoresSafeArea()
+        SynapseTheme.canvas.ignoresSafeArea()
     }
 }
 
@@ -62,7 +58,7 @@ struct PanelSurface: ViewModifier {
 }
 
 extension View {
-    func SynapsePanel(radius: CGFloat = 6) -> some View {
+    func synapsePanel(radius: CGFloat = 6) -> some View {
         modifier(PanelSurface(radius: radius))
     }
 }

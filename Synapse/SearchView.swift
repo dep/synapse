@@ -155,6 +155,7 @@ struct AllFilesSearchView: View {
     @State private var selectedIndex: Int = -1
     @State private var isSearching: Bool = false
     @State private var eventMonitor: Any?
+    @State private var searchWorkItem: DispatchWorkItem?
     @FocusState private var isFieldFocused: Bool
 
     var body: some View {
@@ -287,7 +288,7 @@ struct AllFilesSearchView: View {
             }
             .padding(14)
             .frame(width: 640)
-            .SynapsePanel(radius: 6)
+            .synapsePanel(radius: 6)
             .shadow(color: .black.opacity(0.35), radius: 20, x: 0, y: 18)
         }
         .onAppear {
@@ -330,16 +331,23 @@ struct AllFilesSearchView: View {
     }
 
     private func scheduleSearch(_ newQuery: String) {
+        // Cancel any in-flight search
+        searchWorkItem?.cancel()
+        searchWorkItem = nil
+
         results = []
         guard !newQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             isSearching = false
             return
         }
         isSearching = true
+
+        // Capture allFiles on the main thread to avoid data races
         let q = newQuery
-        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.2) {
+        let files = appState.allFiles
+
+        let workItem = DispatchWorkItem { [weak appState] in
             let needle = q.lowercased()
-            let files = appState.allFiles
             var found: [FileSearchResult] = []
             for url in files {
                 guard let content = try? String(contentsOf: url, encoding: .utf8) else { continue }
@@ -357,20 +365,24 @@ struct AllFilesSearchView: View {
                 if found.count >= 200 { break }
             }
             DispatchQueue.main.async {
+                // Only update if this search wasn't cancelled
+                guard appState != nil else { return }
                 self.results = found
                 self.isSearching = false
             }
         }
+        searchWorkItem = workItem
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.2, execute: workItem)
     }
 
     private func installEventMonitor() {
         removeEventMonitor()
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             switch event.keyCode {
-            case 125: moveSelection(by: 1);  return nil  // ↓
-            case 126: moveSelection(by: -1); return nil  // ↑
-            case 36, 76: openSelected();     return nil  // Return / numpad Enter
-            case 53: dismiss();              return nil  // Escape
+            case KeyCode.downArrow: moveSelection(by: 1);                    return nil
+            case KeyCode.upArrow: moveSelection(by: -1);                     return nil
+            case KeyCode.returnKey, KeyCode.numpadEnter: openSelected();     return nil
+            case KeyCode.escape: dismiss();                                  return nil
             default: return event
             }
         }

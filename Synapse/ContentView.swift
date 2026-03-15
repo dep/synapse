@@ -18,9 +18,9 @@ func shouldConsumePaneSwitchShortcut(
 
     switch splitOrientation {
     case .vertical:
-        return keyCode == 123 || keyCode == 124
+        return keyCode == KeyCode.leftArrow || keyCode == KeyCode.rightArrow
     case .horizontal:
-        return keyCode == 125 || keyCode == 126
+        return keyCode == KeyCode.downArrow || keyCode == KeyCode.upArrow
     }
 }
 
@@ -46,7 +46,7 @@ struct ContentView: View {
                             .frame(width: leftSidebarWidth)
                             .background(SynapseTheme.panel)
                         ResizeDivider(axis: .vertical) { delta in
-                            leftSidebarWidth = max(220, min(420, leftSidebarWidth + delta))
+                            leftSidebarWidth = max(SynapseTheme.Layout.minLeftSidebarWidth, min(SynapseTheme.Layout.maxLeftSidebarWidth, leftSidebarWidth + delta))
                         }
                     }
 
@@ -56,7 +56,7 @@ struct ContentView: View {
 
                     if isRightSidebarVisible {
                         ResizeDivider(axis: .vertical) { delta in
-                            rightSidebarWidth = max(280, min(620, rightSidebarWidth - delta))
+                            rightSidebarWidth = max(SynapseTheme.Layout.minRightSidebarWidth, min(SynapseTheme.Layout.maxRightSidebarWidth, rightSidebarWidth - delta))
                         }
                         SidebarContainerView(settings: appState.settings, isLeft: false)
                             .frame(width: rightSidebarWidth)
@@ -224,7 +224,7 @@ struct ContentView: View {
             let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
             // Ctrl-Tab: cycle MRU tabs
-            if event.keyCode == 48, mods == .control {
+            if event.keyCode == KeyCode.tab, mods == .control {
                 appState.cycleMostRecentTabs()
                 return nil
             }
@@ -998,32 +998,32 @@ struct SidebarPaneWrapper: View {
                 return loadAndMove(providers: providers, before: true)
             }
 
-            // Content — always in the tree to preserve state; clipped to zero height when collapsed
-            Group {
-                switch pane {
-                case .files:
-                    FileTreeView(settings: settings)
-                        .frame(minHeight: 150)
-                case .tags:
-                    TagsPaneView()
-                        .frame(minHeight: 100)
-                case .links:
-                    RelatedLinksPaneView()
-                        .frame(minHeight: 150)
-                case .terminal:
-                    TerminalPaneView()
-                        .frame(minHeight: 150)
-                case .graph:
-                    GraphPaneView()
-                        .frame(minHeight: 150)
+            // Content — only rendered when expanded to avoid wasting resources
+            if !isCollapsed {
+                Group {
+                    switch pane {
+                    case .files:
+                        FileTreeView(settings: settings)
+                            .frame(minHeight: 150)
+                    case .tags:
+                        TagsPaneView()
+                            .frame(minHeight: 100)
+                    case .links:
+                        RelatedLinksPaneView()
+                            .frame(minHeight: 150)
+                    case .terminal:
+                        TerminalPaneView()
+                            .frame(minHeight: 150)
+                    case .graph:
+                        GraphPaneView()
+                            .frame(minHeight: 150)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onDrop(of: [.utf8PlainText], isTargeted: $contentTargeted) { providers, _ in
+                    return loadAndMove(providers: providers, before: false)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: isCollapsed ? 0 : .infinity)
-            .clipped()
-            .onDrop(of: [.utf8PlainText], isTargeted: $contentTargeted) { providers, _ in
-                return loadAndMove(providers: providers, before: false)
-            }
-            .allowsHitTesting(!isCollapsed)
 
             // Drop indicator below — visible while hovering over content
             Rectangle()

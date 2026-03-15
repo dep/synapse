@@ -97,7 +97,7 @@ struct FolderPickerView: View {
                 .padding(.horizontal, 32)
                 .padding(.vertical, 28)
                 .frame(maxWidth: 460)
-                .SynapsePanel(radius: 6)
+                .synapsePanel(radius: 6)
 
                 Spacer(minLength: 0)
             }

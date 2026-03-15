@@ -24,7 +24,7 @@ struct GlobalGraphView: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             // Background
-            SynapseTheme.canvasTop.ignoresSafeArea()
+            SynapseTheme.canvas.ignoresSafeArea()
 
             if graph.nodes.isEmpty {
                 emptyState
@@ -158,9 +158,7 @@ struct GlobalGraphView: View {
     }
 
     private func nodeColor(isSelected: Bool, isGhost: Bool) -> Color {
-        if isSelected { return SynapseTheme.accent }
-        if isGhost { return SynapseTheme.textMuted.opacity(0.5) }
-        return Color(red: 0.47, green: 0.77, blue: 1.00).opacity(0.75)
+        graphNodeColor(isSelected: isSelected, isGhost: isGhost)
     }
 
     private func openNode(id: String) {

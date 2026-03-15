@@ -100,7 +100,7 @@ final class GitService {
     // MARK: Static helpers
 
     static func findGit() -> String? {
-        ["/usr/bin/git", "/usr/local/bin/git", "/opt/homebrew/bin/git"]
+        AppConstants.gitSearchPaths
             .first { FileManager.default.fileExists(atPath: $0) }
     }
 

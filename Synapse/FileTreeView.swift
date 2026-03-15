@@ -9,6 +9,14 @@ struct FileNode: Identifiable {
     let id = UUID()
     let url: URL
     var children: [FileNode]?
+    /// Cached modification date from when the tree was built, avoiding extra disk I/O during sort
+    let modificationDate: Date
+
+    init(url: URL, children: [FileNode]?, modificationDate: Date = .distantPast) {
+        self.url = url
+        self.children = children
+        self.modificationDate = modificationDate
+    }
 
     var name: String { url.lastPathComponent }
     var isDirectory: Bool { children != nil }
@@ -108,13 +116,13 @@ func buildFileTree(at url: URL, sortCriterion: SortCriterion, ascending: Bool, s
     return items.compactMap { item -> FileNode? in
         if item.isDirectory {
             let children = buildFileTree(at: item.url, sortCriterion: sortCriterion, ascending: ascending, settings: settings)
-            return FileNode(url: item.url, children: children)
+            return FileNode(url: item.url, children: children, modificationDate: item.modificationDate)
         } else {
             // Use SettingsManager to check if file should be shown
             if !settings.shouldShowFile(item.url) {
                 return nil
             }
-            return FileNode(url: item.url, children: nil)
+            return FileNode(url: item.url, children: nil, modificationDate: item.modificationDate)
         }
     }
 }
@@ -698,8 +706,8 @@ struct PinnedItemRow: View {
         .contextMenu {
             if item.isTag {
                 Button("Unpin") { appState.unpinTag(item.name) }
-            } else {
-                Button("Unpin") { appState.unpinItem(item.url!) }
+            } else if let url = item.url {
+                Button("Unpin") { appState.unpinItem(url) }
             }
             Divider()
             Button("Open") { handleTap() }
@@ -711,26 +719,25 @@ struct PinnedItemRow: View {
 
     private func handleTap() {
         if item.isTag {
-            // Open tag in new tab
             appState.openTagInNewTab(item.name)
-        } else if item.isFolder {
-            // Expand/collapse folder in tree and scroll to it
-            appState.expandAndScrollToFolder(item.url!)
-        } else {
-            appState.openFile(item.url!)
+        } else if let url = item.url {
+            if item.isFolder {
+                appState.expandAndScrollToFolder(url)
+            } else {
+                appState.openFile(url)
+            }
         }
     }
 
     private func handleCmdClick() {
         if item.isTag {
-            // Open tag in new tab
             appState.openTagInNewTab(item.name)
-        } else if item.isFolder {
-            // Just navigate to folder for cmd-click
-            appState.expandAndScrollToFolder(item.url!)
-        } else {
-            // Open in new tab for files
-            appState.openFileInNewTab(item.url!)
+        } else if let url = item.url {
+            if item.isFolder {
+                appState.expandAndScrollToFolder(url)
+            } else {
+                appState.openFileInNewTab(url)
+            }
         }
     }
 }

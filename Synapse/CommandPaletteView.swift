@@ -183,7 +183,7 @@ struct CommandPaletteView: View {
             }
             .padding(14)
             .frame(width: 640)
-            .SynapsePanel(radius: 6)
+            .synapsePanel(radius: 6)
             .shadow(color: .black.opacity(0.35), radius: 20, x: 0, y: 18)
         }
         .onAppear {
@@ -277,16 +277,16 @@ struct CommandPaletteView: View {
         removeEventMonitor()
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             switch event.keyCode {
-            case 125:
+            case KeyCode.downArrow:
                 moveSelection(by: 1)
                 return nil
-            case 126:
+            case KeyCode.upArrow:
                 moveSelection(by: -1)
                 return nil
-            case 36, 76:
+            case KeyCode.returnKey, KeyCode.numpadEnter:
                 openTopResult()
                 return nil
-            case 53:
+            case KeyCode.escape:
                 appState.dismissCommandPalette()
                 return nil
             default:

@@ -9,18 +9,20 @@ struct LocalTerminalView: NSViewRepresentable {
         let terminal = LocalProcessTerminalView(frame: .zero)
 
         var env = ProcessInfo.processInfo.environment
+        let shell = env["SHELL"] ?? "/bin/zsh"
         env["TERM"] = "xterm-256color"
         env["COLORTERM"] = "truecolor"
         env["LANG"] = env["LANG"] ?? "en_US.UTF-8"
-        env["SHELL"] = "/bin/zsh"
+        env["SHELL"] = shell
         env["PWD"] = workingDirectory
         let envArray = env.map { "\($0.key)=\($0.value)" }
+        let shellName = URL(fileURLWithPath: shell).lastPathComponent
 
         terminal.startProcess(
-            executable: "/bin/zsh",
+            executable: shell,
             args: ["-l"],
             environment: envArray,
-            execName: "zsh"
+            execName: shellName
         )
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {

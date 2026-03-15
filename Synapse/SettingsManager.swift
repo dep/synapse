@@ -93,6 +93,10 @@ class SettingsManager: ObservableObject {
     let vaultRootURL: URL?
     let globalConfigPath: String?
 
+    /// Debounced save work item to prevent excessive disk writes (e.g., during resize drags)
+    private var pendingSave: DispatchWorkItem?
+    private static let saveDebounceInterval: TimeInterval = 0.5
+
     /// Whether to use the legacy single-file mode (for backward compatibility)
     private var useLegacyMode: Bool {
         vaultRootURL == nil && globalConfigPath == nil
@@ -508,8 +512,23 @@ class SettingsManager: ObservableObject {
         return relativeComponents.contains { shouldHideItem(named: $0) }
     }
 
-    /// Save current settings to disk
+    /// Schedule a debounced save to disk, coalescing rapid mutations.
+    /// In test environments, saves are performed synchronously to avoid timing issues.
     private func save() {
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            performSave()
+            return
+        }
+        pendingSave?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.performSave()
+        }
+        pendingSave = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.saveDebounceInterval, execute: workItem)
+    }
+
+    /// Actually write settings to disk.
+    private func performSave() {
         if useLegacyMode {
             // Legacy mode: save everything to single config file
             let config = Config(

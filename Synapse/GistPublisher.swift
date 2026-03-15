@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import AppKit
 
 /// Represents a note to be published to a gist
 struct NoteContent {
@@ -19,16 +20,6 @@ class GistPublisher: ObservableObject {
         case publishing
         case success(url: String)
         case failed(error: String)
-
-        static func == (lhs: PublishState, rhs: PublishState) -> Bool {
-            switch (lhs, rhs) {
-            case (.idle, .idle): return true
-            case (.publishing, .publishing): return true
-            case (.success(let lhsUrl), .success(let rhsUrl)): return lhsUrl == rhsUrl
-            case (.failed(let lhsError), .failed(let rhsError)): return lhsError == rhsError
-            default: return false
-            }
-        }
     }
 
     @Published var state: PublishState = .idle
@@ -129,6 +120,3 @@ class GistPublisher: ObservableObject {
         state = .idle
     }
 }
-
-// Need to import AppKit for NSWorkspace
-import AppKit

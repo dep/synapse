@@ -191,7 +191,7 @@ class AppState: ObservableObject {
 
     // Git
     @Published var gitSyncStatus: GitSyncStatus = .notGitRepo
-    @Published var gitBranch: String = "main"
+    @Published var gitBranch: String = AppConstants.defaultBranchName
     @Published var gitAheadCount: Int = 0
 
     @AppStorage("sortCriterion") var sortCriterion: SortCriterion = .name
@@ -496,7 +496,7 @@ class AppState: ObservableObject {
         let trimmed = settings.templatesDirectory
             .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return trimmed.isEmpty ? "templates" : trimmed
+        return trimmed.isEmpty ? AppConstants.defaultTemplatesDirectory : trimmed
     }
 
     func templatesDirectoryURL() -> URL? {
@@ -525,7 +525,7 @@ class AppState: ObservableObject {
             .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
     }
 
-    func currentSynapseirectory() -> URL? {
+    func currentSynapseDirectory() -> URL? {
         if let selectedFile {
             return selectedFile.deletingLastPathComponent()
         }
@@ -921,7 +921,7 @@ class AppState: ObservableObject {
 
         // Clean up git service
         gitService = nil
-        gitBranch = "main"
+        gitBranch = AppConstants.defaultBranchName
         gitAheadCount = 0
         gitSyncStatus = .notGitRepo
 
@@ -971,7 +971,7 @@ class AppState: ObservableObject {
             startPullTimer()
         } else {
             gitService = nil
-            gitBranch = "main"
+            gitBranch = AppConstants.defaultBranchName
             gitAheadCount = 0
             gitSyncStatus = .notGitRepo
         }
@@ -1046,8 +1046,8 @@ class AppState: ObservableObject {
                 }
 
                 // Reset to idle after a brief pause so the user can see "up to date"
-                Thread.sleep(forTimeInterval: 3)
-                DispatchQueue.main.async {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                    guard let self else { return }
                     if case .upToDate = self.gitSyncStatus {
                         self.gitSyncStatus = .idle
                     }
@@ -1191,7 +1191,7 @@ class AppState: ObservableObject {
     func createNewUntitledNote(promptForRename: Bool = false) {
         guard let root = rootURL else { return }
 
-        var directory = targetDirectoryForTemplate ?? currentSynapseirectory() ?? root
+        var directory = targetDirectoryForTemplate ?? currentSynapseDirectory() ?? root
         if let templatesDir = templatesDirectoryURL(), directory.path.hasPrefix(templatesDir.path) {
             directory = root
         }
@@ -1214,7 +1214,7 @@ class AppState: ObservableObject {
     @discardableResult
     func createNamedNoteFromTemplate(_ templateURL: URL, named name: String, in directory: URL? = nil) throws -> URL {
         guard let root = rootURL else { throw FileBrowserError.noWorkspace }
-        let dest = directory ?? targetDirectoryForTemplate ?? currentSynapseirectory() ?? root
+        let dest = directory ?? targetDirectoryForTemplate ?? currentSynapseDirectory() ?? root
         let fileName = try prepareName(name, defaultExtension: "md")
         let url = standardized(dest.appendingPathComponent(fileName))
 
@@ -1241,7 +1241,7 @@ class AppState: ObservableObject {
 
         // Determine destination: use explicit target if requested, else current note directory.
         // If it's inside the templates folder itself, fall back to the root directory.
-        var directory = targetDirectoryForTemplate ?? currentSynapseirectory() ?? root
+        var directory = targetDirectoryForTemplate ?? currentSynapseDirectory() ?? root
         if let templatesDir = templatesDirectoryURL(), directory.path.hasPrefix(templatesDir.path) {
             directory = root
         }
@@ -1301,7 +1301,7 @@ class AppState: ObservableObject {
 
         let root = rootURL ?? FileManager.default.temporaryDirectory
         let folderName = settings.dailyNotesFolder.trimmingCharacters(in: .whitespacesAndNewlines)
-        let dailyFolderURL = standardized(root.appendingPathComponent(folderName.isEmpty ? "daily" : folderName, isDirectory: true))
+        let dailyFolderURL = standardized(root.appendingPathComponent(folderName.isEmpty ? AppConstants.defaultDailyNotesFolder : folderName, isDirectory: true))
 
         let fm = FileManager.default
         if !fm.fileExists(atPath: dailyFolderURL.path) {
@@ -1400,35 +1400,7 @@ class AppState: ObservableObject {
     }
 
     func openFile(_ url: URL) {
-        if isDirty {
-            saveCurrentFile(content: fileContent)
-            autoPushIfEnabled()
-        }
-        dismissCommandPalette()
-        dismissRootNoteSheet()
-        if !navigatingHistory {
-            if historyIndex < history.count - 1 {
-                history = Array(history.prefix(historyIndex + 1))
-            }
-            history.append(url)
-            historyIndex = history.count - 1
-        }
-        selectedFile = url
-        fileContent = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-        isDirty = false
-        startWatching(url)
-        updateHistoryState()
-        recentFiles.removeAll { $0 == url }
-        recentFiles.insert(url, at: 0)
-        if recentFiles.count > 40 { recentFiles = Array(recentFiles.prefix(40)) }
-
-        // Tab management: replace current tab (default behavior)
-        if let activeIndex = activeTabIndex {
-            tabs[activeIndex] = .file(url)
-        } else {
-            tabs.append(.file(url))
-            activeTabIndex = tabs.count - 1
-        }
+        loadFile(url, inNewTab: false)
     }
 
     // MARK: - Folder Navigation for Pinned Items
@@ -1441,28 +1413,45 @@ class AppState: ObservableObject {
     }
 
     func openFileInNewTab(_ url: URL) {
+        loadFile(url, inNewTab: true)
+    }
+
+    /// Shared implementation for opening a file in the current tab or a new tab.
+    private func loadFile(_ url: URL, inNewTab: Bool) {
+        // Save dirty state before switching
         if isDirty {
             saveCurrentFile(content: fileContent)
             autoPushIfEnabled()
         }
 
-        // If file already open in a tab, just switch to it
-        if let existingIndex = tabs.firstIndex(of: .file(url)) {
-            switchTab(to: existingIndex)
-            return
+        if inNewTab {
+            // If file already open in a tab, just switch to it
+            if let existingIndex = tabs.firstIndex(of: .file(url)) {
+                switchTab(to: existingIndex)
+                return
+            }
+            // Add new tab
+            tabs.append(.file(url))
+            activeTabIndex = tabs.count - 1
+        } else {
+            dismissCommandPalette()
+            dismissRootNoteSheet()
+            // Replace current tab
+            if let activeIndex = activeTabIndex {
+                tabs[activeIndex] = .file(url)
+            } else {
+                tabs.append(.file(url))
+                activeTabIndex = tabs.count - 1
+            }
         }
 
-        // Add new tab
-        tabs.append(.file(url))
-        activeTabIndex = tabs.count - 1
-
-        // Load file content directly (don't use openFile which replaces current tab)
+        // Load file content
         selectedFile = url
         fileContent = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
         isDirty = false
         startWatching(url)
 
-        // Update history
+        // Update navigation history
         if !navigatingHistory {
             if historyIndex < history.count - 1 {
                 history = Array(history.prefix(historyIndex + 1))
@@ -1475,8 +1464,11 @@ class AppState: ObservableObject {
         // Update recent files
         recentFiles.removeAll { $0 == url }
         recentFiles.insert(url, at: 0)
-        if recentFiles.count > 40 { recentFiles = Array(recentFiles.prefix(40)) }
-        recordTabRecency(for: .file(url))
+        if recentFiles.count > AppConstants.maxRecentFiles { recentFiles = Array(recentFiles.prefix(AppConstants.maxRecentFiles)) }
+
+        if inNewTab {
+            recordTabRecency(for: .file(url))
+        }
     }
 
     func openGraphTab() {
