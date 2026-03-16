@@ -886,7 +886,7 @@ export class GitService {
         const localContentBase64 = await FileSystem.readAsStringAsync(toExpoUri(targetPath), {
           encoding: FileSystem.EncodingType.Base64,
         });
-        const localHash = await this.simpleHash(localContentBase64);
+        const localHash = await this.computeBlobSha(localContentBase64);
 
         if (localHash === previousEntry.sha) {
           await this.downloadGitHubBlobToPath(metadata, blob.sha, targetPath);
@@ -944,7 +944,7 @@ export class GitService {
           encoding: FileSystem.EncodingType.Base64,
         });
         const existing = metadata.files[relativePath];
-        const contentHash = await this.simpleHash(contentBase64);
+        const contentHash = await this.computeBlobSha(contentBase64);
 
         if (!existing || existing.sha !== contentHash) {
           changedEntries.push({
@@ -976,7 +976,7 @@ export class GitService {
           encoding: FileSystem.EncodingType.Base64,
         });
         const existing = metadata.files[relativePath];
-        const contentHash = await this.simpleHash(contentBase64);
+        const contentHash = await this.computeBlobSha(contentBase64);
 
         if (!existing || existing.sha !== contentHash) {
           changedEntries.push({
@@ -1045,7 +1045,7 @@ export class GitService {
         type: 'blob',
         sha: createdBlob.sha,
       });
-      updatedFiles[entry.path] = { sha: entry.sha, mode: entry.mode, type: 'blob' };
+      updatedFiles[entry.path] = { sha: createdBlob.sha, mode: entry.mode, type: 'blob' };
     }
 
     for (const path of deletedEntries) {
@@ -1163,15 +1163,10 @@ export class GitService {
     return { pulled: true, committed: createdCommit.sha, pushed: true };
   }
 
-  private async simpleHash(content: string): Promise<string> {
-    // Simple hash for content comparison - not cryptographically secure but fast
-    let hash = 0;
-    for (let i = 0; i < content.length; i++) {
-      const char = content.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;
-    }
-    return hash.toString(16);
+  private async computeBlobSha(contentBase64: string): Promise<string> {
+    const bytes = base64ToUint8(contentBase64);
+    const { oid } = await git.hashBlob({ object: bytes });
+    return oid;
   }
 
   // Authentication Methods
