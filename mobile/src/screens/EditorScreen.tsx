@@ -1323,7 +1323,6 @@ const styles = StyleSheet.create({
   searchLine: {
     fontSize: 16,
     lineHeight: 26,
-    fontFamily: 'monospace',
     flexWrap: 'wrap',
   },
 });
