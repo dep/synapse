@@ -1,10 +1,12 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../src/theme/ThemeContext';
 import { EditorScreen } from '../../src/screens/EditorScreen';
 import { FileSystemService } from '../../src/services/FileSystemService';
 import { GitService } from '../../src/services/gitService';
 import { OnboardingStorage } from '../../src/services/onboardingStorage';
+
+let repositoryRefreshHandler: ((repositoryPath: string) => void | Promise<void>) | null = null;
 
 jest.mock('../../src/services/FileSystemService', () => ({
   FileSystemService: {
@@ -18,7 +20,16 @@ jest.mock('../../src/services/FileSystemService', () => ({
 jest.mock('../../src/services/gitService', () => ({
   GitService: {
     sync: jest.fn(),
+    refreshRemote: jest.fn(),
   },
+}));
+
+jest.mock('../../src/services/repositoryEvents', () => ({
+  subscribeToRepositoryRefresh: jest.fn((handler: (repositoryPath: string) => void | Promise<void>) => {
+    repositoryRefreshHandler = handler;
+    return jest.fn();
+  }),
+  emitRepositoryRefresh: jest.fn(),
 }));
 
 jest.mock('../../src/services/onboardingStorage', () => ({
@@ -28,7 +39,12 @@ jest.mock('../../src/services/onboardingStorage', () => ({
 }));
 
 jest.mock('@react-navigation/native', () => ({
-  useFocusEffect: jest.fn(),
+  useFocusEffect: (callback: () => void | (() => void)) => {
+    const React = require('react');
+    if (callback.toString().includes('loadFile()')) {
+      React.useEffect(() => callback(), [callback]);
+    }
+  },
 }));
 
 describe('EditorScreen', () => {
@@ -47,10 +63,12 @@ describe('EditorScreen', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    repositoryRefreshHandler = null;
     (FileSystemService.readFile as jest.Mock).mockResolvedValue('# Old note');
     (FileSystemService.writeFile as jest.Mock).mockResolvedValue(undefined);
     (FileSystemService.resolveWikilink as jest.Mock).mockResolvedValue(null);
     (GitService.sync as jest.Mock).mockResolvedValue({ pulled: true, committed: 'sha', pushed: true });
+    (GitService.refreshRemote as jest.Mock).mockResolvedValue(undefined);
     (OnboardingStorage.getActiveRepositoryPath as jest.Mock).mockResolvedValue('file:///vault/repo');
   });
 
@@ -158,4 +176,27 @@ describe('EditorScreen', () => {
       expect(FileSystemService.readFile).toHaveBeenCalledWith('file:///vault/repo/note.md');
     });
   });
+
+  it('reloads the current note after a repository refresh event', async () => {
+    (FileSystemService.readFile as jest.Mock)
+      .mockResolvedValueOnce('# Old note')
+      .mockResolvedValueOnce('# New note');
+
+    renderScreen();
+
+    await waitFor(() => {
+      expect(FileSystemService.readFile).toHaveBeenCalledTimes(2);
+    });
+
+    expect(repositoryRefreshHandler).not.toBeNull();
+
+    await act(async () => {
+      await repositoryRefreshHandler?.('file:///vault/repo');
+    });
+
+    await waitFor(() => {
+      expect(FileSystemService.readFile).toHaveBeenCalledTimes(3);
+    });
+  });
+
 });

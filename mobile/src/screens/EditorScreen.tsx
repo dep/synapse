@@ -19,6 +19,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { FileSystemService, FileNode } from '../services/FileSystemService';
 import { GitService } from '../services/gitService';
 import { OnboardingStorage } from '../services/onboardingStorage';
+import { subscribeToRepositoryRefresh } from '../services/repositoryEvents';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { useFocusEffect } from '@react-navigation/native';
@@ -68,6 +69,8 @@ export function EditorScreen({ route, navigation }: EditorScreenProps) {
   const [hasChanges, setHasChanges] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshStatus, setRefreshStatus] = useState<string | null>(null);
   
   // Wikilink picker state
   const [showWikilinkPicker, setShowWikilinkPicker] = useState(false);
@@ -76,6 +79,8 @@ export function EditorScreen({ route, navigation }: EditorScreenProps) {
   const [filteredNotes, setFilteredNotes] = useState<FileNode[]>([]);
   const [wikilinkStartPos, setWikilinkStartPos] = useState<number | null>(null);
   const textInputRef = React.useRef<TextInput>(null);
+  const shouldRestoreEditorFocusRef = React.useRef(false);
+  const hasChangesRef = React.useRef(false);
   
   // Navigation history for back button support
   const [navigationHistory, setNavigationHistory] = useState<string[]>([]);
@@ -84,21 +89,48 @@ export function EditorScreen({ route, navigation }: EditorScreenProps) {
     loadFile();
   }, [filePath]);
 
+  useEffect(() => {
+    hasChangesRef.current = hasChanges;
+  }, [hasChanges]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToRepositoryRefresh(async (repositoryPath) => {
+      if (!filePath.startsWith(repositoryPath)) {
+        return;
+      }
+
+      if (hasChanges) {
+        setRefreshStatus('Remote updates available; save or discard local edits to reload');
+        return;
+      }
+
+      try {
+        const fileContent = await FileSystemService.readFile(filePath);
+        setContent(fileContent);
+        setOriginalContent(fileContent);
+        setHasChanges(false);
+        setRefreshStatus('Updated from remote');
+        setTimeout(() => setRefreshStatus(null), 4000);
+      } catch (err) {
+        console.error('Failed to reload refreshed file:', err);
+      }
+    });
+
+    return unsubscribe;
+  }, [filePath, hasChanges]);
+
   const loadFile = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      // Get repository path and pull latest changes before opening file
       const repositoryPath = await OnboardingStorage.getActiveRepositoryPath();
       if (repositoryPath) {
         try {
-          await GitService.pull(repositoryPath);
+          await GitService.refreshRemote(repositoryPath);
         } catch (pullErr) {
-          // Log pull error but don't block file opening
-          console.warn('Git pull failed, opening local version:', pullErr);
+          console.warn('Git refresh failed, using local version:', pullErr);
         }
       }
-      
       const fileContent = await FileSystemService.readFile(filePath);
       setContent(fileContent);
       setOriginalContent(fileContent);
@@ -213,6 +245,12 @@ export function EditorScreen({ route, navigation }: EditorScreenProps) {
       setError('Failed to save file or sync repository');
     } finally {
       setIsSaving(false);
+      if (shouldRestoreEditorFocusRef.current && !isPreviewMode && !showWikilinkPicker) {
+        setTimeout(() => {
+          textInputRef.current?.focus();
+          shouldRestoreEditorFocusRef.current = false;
+        }, 0);
+      }
     }
   };
 
@@ -311,16 +349,13 @@ export function EditorScreen({ route, navigation }: EditorScreenProps) {
     }, [hasChanges, handleBackPress, navigation, navigationHistory])
   );
 
-  // Check for external changes when screen gains focus
+  // Pull and reload every time the screen gains focus, unless the user has unsaved edits.
   useFocusEffect(
     useCallback(() => {
-      // Small delay to let the UI settle before checking
-      const timer = setTimeout(() => {
-        checkForExternalChanges();
-      }, 500);
-      
-      return () => clearTimeout(timer);
-    }, [filePath, originalContent, content, hasChanges])
+      if (!hasChangesRef.current) {
+        loadFile();
+      }
+    }, [filePath])
   );
 
   // Intercept navigation before leaving
@@ -383,6 +418,30 @@ export function EditorScreen({ route, navigation }: EditorScreenProps) {
 
   const handleTogglePreview = () => {
     setIsPreviewMode(!isPreviewMode);
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    setRefreshStatus(null);
+    try {
+      const repositoryPath = await OnboardingStorage.getActiveRepositoryPath();
+      setRefreshStatus(`repo: ${repositoryPath ?? 'none'}`);
+      if (repositoryPath) {
+        setRefreshStatus(`pulling from: ${repositoryPath}`);
+        await GitService.refreshRemote(repositoryPath);
+        setRefreshStatus('pull done — reading file…');
+      }
+      const fileContent = await FileSystemService.readFile(filePath);
+      setContent(fileContent);
+      setOriginalContent(fileContent);
+      setHasChanges(false);
+      setRefreshStatus(`✓ loaded (${fileContent.length} chars)`);
+      setTimeout(() => setRefreshStatus(null), 4000);
+    } catch (err: any) {
+      setRefreshStatus(`✗ ${err?.message ?? String(err)}`);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   // Parse wiki links for custom rendering
@@ -658,16 +717,29 @@ export function EditorScreen({ route, navigation }: EditorScreenProps) {
           <MaterialIcons name="circle" size={12} color={theme.colors.primary} style={styles.unsavedIndicator} />
         )}
 
+        {/* Refresh Button */}
+        <TouchableOpacity
+          style={styles.previewToggleButton}
+          onPress={handleRefresh}
+          disabled={isRefreshing}
+          testID="refresh-button"
+        >
+          {isRefreshing
+            ? <ActivityIndicator size="small" color={theme.colors.primary} />
+            : <MaterialIcons name="refresh" size={24} color={theme.colors.primary} />
+          }
+        </TouchableOpacity>
+
         {/* Preview Toggle Button */}
         <TouchableOpacity
           style={styles.previewToggleButton}
           onPress={handleTogglePreview}
           testID="preview-toggle-button"
         >
-          <MaterialIcons 
-            name={isPreviewMode ? "edit" : "visibility"} 
-            size={24} 
-            color={theme.colors.text} 
+          <MaterialIcons
+            name={isPreviewMode ? "edit" : "visibility"}
+            size={24}
+            color={theme.colors.text}
           />
         </TouchableOpacity>
         
@@ -677,6 +749,9 @@ export function EditorScreen({ route, navigation }: EditorScreenProps) {
             styles.saveButton,
             { backgroundColor: hasChanges ? theme.colors.primary : theme.colors.border },
           ]}
+          onPressIn={() => {
+            shouldRestoreEditorFocusRef.current = textInputRef.current?.isFocused() ?? false;
+          }}
           onPress={handleSave}
           disabled={!hasChanges || isSaving}
         >
@@ -725,6 +800,7 @@ export function EditorScreen({ route, navigation }: EditorScreenProps) {
           <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
             <TextInput
               testID="editor-input"
+              ref={textInputRef}
               style={[
                 styles.editor,
                 {
