@@ -102,6 +102,7 @@
 		F0CC31A93376DEA4A2F12A95 /* SynapseApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48E13069F2D634A684FAE713 /* SynapseApp.swift */; };
 		F130A3AE3317CD34B8419BAA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CB8BA24E7E55C8EF0A3530F0 /* Assets.xcassets */; };
 		FA748D708DD0F029A45CA494 /* GraphPaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADBC72A6A85DB161568424D /* GraphPaneView.swift */; };
+		FFB20CCC7CDB7FD7D16E73EE /* AppStateSettingsPropagationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC2A24B73EE5F6505170332 /* AppStateSettingsPropagationTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -169,6 +170,7 @@
 		7F7186E8801E8BC8BAA0678D /* AppStateDailyNotesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateDailyNotesTests.swift; sourceTree = "<group>"; };
 		84754D16BCE7669177FF151A /* PinningFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinningFeatureTests.swift; sourceTree = "<group>"; };
 		879B52DC9366FD1D0BA57D20 /* AppStateTemplateVariablesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateTemplateVariablesTests.swift; sourceTree = "<group>"; };
+		8DC2A24B73EE5F6505170332 /* AppStateSettingsPropagationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateSettingsPropagationTests.swift; sourceTree = "<group>"; };
 		8E6A63BB6A6141AA83800A2E /* AppStateCloneRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateCloneRepositoryTests.swift; sourceTree = "<group>"; };
 		8F24B33A93487844014AF953 /* TabBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabBarView.swift; sourceTree = "<group>"; };
 		928B9D0E079FF89907F205E4 /* TagsPaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagsPaneView.swift; sourceTree = "<group>"; };
@@ -296,6 +298,7 @@
 				1609E933DF539DAC00406023 /* AppStateRelativePathTests.swift */,
 				D4482EC8C9915BC9A0022159 /* AppStateSaveTests.swift */,
 				35A600692EB7955AD6BF962D /* AppStateSearchTests.swift */,
+				8DC2A24B73EE5F6505170332 /* AppStateSettingsPropagationTests.swift */,
 				9D4F955DD37FCF31EA4E20E7 /* AppStateSplitPaneTests.swift */,
 				5A96D01FE3D3F9C3438D9E4A /* AppStateTabsTests.swift */,
 				EE1AEA1E774C98F1243030F5 /* AppStateTagsTests.swift */,
@@ -470,6 +473,7 @@
 				97EFC86461BB19D45F94FEED /* AppStateRelativePathTests.swift in Sources */,
 				99481587A828F0DD68358B09 /* AppStateSaveTests.swift in Sources */,
 				84CE3D3A60AFCABF88D62FFC /* AppStateSearchTests.swift in Sources */,
+				FFB20CCC7CDB7FD7D16E73EE /* AppStateSettingsPropagationTests.swift in Sources */,
 				374896C6C09F48147147D1BD /* AppStateSplitPaneTests.swift in Sources */,
 				CEC89756C5CC8F759BD67615 /* AppStateTabsTests.swift in Sources */,
 				1BC0B2F0938220AACB87EEE5 /* AppStateTagTabsTests.swift in Sources */,

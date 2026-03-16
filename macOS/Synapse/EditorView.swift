@@ -107,6 +107,7 @@ struct EditorView: View {
                             RawEditor(
                                 text: $appState.fileContent,
                                 isEditable: true,
+                                hideMarkdown: appState.settings.hideMarkdownWhileEditing,
                                 paneIndex: paneIndex,
                                 embeddedNotes: $embeddedNotes
                             )
@@ -244,6 +245,7 @@ struct EditorView: View {
 struct RawEditor: NSViewRepresentable {
     @Binding var text: String
     var isEditable: Bool = true
+    var hideMarkdown: Bool = false
     var paneIndex: Int = 0
     @Binding var embeddedNotes: [EmbeddedNoteInfo]
     @EnvironmentObject var appState: AppState
@@ -343,10 +345,13 @@ struct RawEditor: NSViewRepresentable {
             textView.setPlainText(text)
             textView.selectedRanges = selected
             context.coordinator.suppressSync = false
-        } else if !isEditable || appState.settings.hideMarkdownWhileEditing {
+        } else if !isEditable || hideMarkdown {
             // Re-apply preview styling when mode switches without a text change,
             // or when live-hide-markdown mode is active and the view re-renders.
             textView.applyPreviewStyling()
+        } else {
+            // hideMarkdownWhileEditing was just toggled off — restore full styling.
+            textView.applyMarkdownStyling()
         }
         textView.onOpenFile = { appState.openFile($0) }
         textView.onMatchCountUpdate = { count in appState.searchMatchCount = count }
@@ -452,6 +457,21 @@ struct RawEditor: NSViewRepresentable {
             tv.revealWikilinkAtCursor()
         }
     }
+}
+
+func refreshEditorForHideMarkdownToggle(_ textView: LinkAwareTextView, hideMarkdown: Bool) {
+    preserveScrollOffset(for: textView) {
+        textView.applyMarkdownStyling()
+        if hideMarkdown {
+            textView.applyPreviewStyling()
+        }
+    }
+}
+
+func refreshActiveEditorForHideMarkdownToggle(hideMarkdown: Bool) {
+    let responder = NSApp.keyWindow?.firstResponder ?? NSApp.mainWindow?.firstResponder
+    guard let textView = responder as? LinkAwareTextView else { return }
+    refreshEditorForHideMarkdownToggle(textView, hideMarkdown: hideMarkdown)
 }
 
 // MARK: - Markdown styling theme
@@ -721,6 +741,7 @@ extension LinkAwareTextView {
         }
 
         storage.endEditing()
+        requestImmediateRedraw(for: fullRange)
 
         // After hiding, reveal the wikilink the cursor is currently inside.
         if isEditable { revealWikilinkAtCursor() }
@@ -952,6 +973,7 @@ extension LinkAwareTextView {
 
         applyCollapsibleStyling(storage: storage)
         storage.endEditing()
+        requestImmediateRedraw(for: fullRange)
         reapplySearchHighlights()
         DispatchQueue.main.async { [weak self] in
             self?.refreshInlineImagePreviews()
@@ -986,6 +1008,16 @@ extension LinkAwareTextView {
         guard outerRange.length >= delimLen * 2 else { return }
         storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: NSRange(location: outerRange.location, length: delimLen))
         storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: NSRange(location: outerRange.location + outerRange.length - delimLen, length: delimLen))
+    }
+
+    private func requestImmediateRedraw(for range: NSRange) {
+        guard range.length > 0 else { return }
+        if let layoutManager, let textContainer {
+            layoutManager.invalidateDisplay(forCharacterRange: range)
+            layoutManager.ensureLayout(for: textContainer)
+        }
+        needsDisplay = true
+        setNeedsDisplay(bounds)
     }
 
     // MARK: - Collapsible section toggle buttons

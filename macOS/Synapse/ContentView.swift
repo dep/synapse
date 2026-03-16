@@ -165,7 +165,14 @@ struct ContentView: View {
                 Button("") { appState.splitHorizontally() }
                     .keyboardShortcut("d", modifiers: [.command, .shift])
                     .hidden()
-                Button("") { appState.settings.hideMarkdownWhileEditing.toggle() }
+                Button("") {
+                    appState.settings.hideMarkdownWhileEditing.toggle()
+                    DispatchQueue.main.async {
+                        refreshActiveEditorForHideMarkdownToggle(
+                            hideMarkdown: appState.settings.hideMarkdownWhileEditing
+                        )
+                    }
+                }
                     .keyboardShortcut("e", modifiers: .command)
                     .hidden()
                 Button("") {

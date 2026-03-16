@@ -239,6 +239,7 @@ class AppState: ObservableObject {
     private var fileWatcher: DispatchSourceFileSystemObject?
     private var filePollCancellable: AnyCancellable?
     private var hideMarkdownModeCancellable: AnyCancellable?
+    private var settingsObjectWillChangeCancellable: AnyCancellable?
     private var watchedFD: Int32 = -1
 
     private var gitService: GitService?
@@ -262,11 +263,18 @@ class AppState: ObservableObject {
     }
 
     private func bindSettingsObservers() {
+        settingsObjectWillChangeCancellable = settings.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+
         hideMarkdownModeCancellable = settings.$hideMarkdownWhileEditing.sink { [weak self] hideMarkdown in
             guard let self else { return }
             // Hide-markdown mode is edit-only; force edit mode to avoid read-only lockout.
             if hideMarkdown && !self.isEditMode {
                 self.isEditMode = true
+            }
+            DispatchQueue.main.async { [weak self] in
+                self?.objectWillChange.send()
             }
         }
     }

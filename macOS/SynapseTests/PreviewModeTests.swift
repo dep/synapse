@@ -142,4 +142,52 @@ final class PreviewModeTests: XCTestCase {
         let secondOpenRange = ns.range(of: "```", options: [], range: NSRange(location: 20, length: ns.length - 20))
         XCTAssertTrue(allHidden(in: NSRange(location: secondOpenRange.location, length: 3)), "Second opening fence should be hidden")
     }
+
+    func test_reapplyingMarkdownStyling_afterPreviewRequestsRedraw() {
+        let redrawTrackingTextView = RedrawTrackingTextView()
+        redrawTrackingTextView.isEditable = false
+        redrawTrackingTextView.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+        redrawTrackingTextView.setPlainText("# Heading\n\n**bold**")
+        redrawTrackingTextView.applyPreviewStyling()
+        redrawTrackingTextView.setNeedsDisplayCallCount = 0
+
+        redrawTrackingTextView.applyMarkdownStyling()
+
+        XCTAssertGreaterThan(redrawTrackingTextView.setNeedsDisplayCallCount, 0, "Restoring markdown styling should request a redraw immediately")
+    }
+
+    func test_refreshEditorForHideMarkdownToggle_restoresVisibleMarkdownWithoutTyping() {
+        let redrawTrackingTextView = RedrawTrackingTextView()
+        redrawTrackingTextView.isEditable = true
+        redrawTrackingTextView.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+        redrawTrackingTextView.setPlainText("# Heading")
+        redrawTrackingTextView.applyPreviewStyling()
+        XCTAssertTrue(storageIsHidden(in: redrawTrackingTextView, at: 0), "Precondition: preview mode hides markdown syntax")
+
+        redrawTrackingTextView.setNeedsDisplayCallCount = 0
+        refreshEditorForHideMarkdownToggle(redrawTrackingTextView, hideMarkdown: false)
+
+        XCTAssertFalse(storageIsHidden(in: redrawTrackingTextView, at: 0), "Toggling hide-markdown off should restore markdown immediately")
+        XCTAssertGreaterThan(redrawTrackingTextView.setNeedsDisplayCallCount, 0, "Refreshing after Cmd-E should request a redraw")
+    }
+}
+
+private final class RedrawTrackingTextView: LinkAwareTextView {
+    var setNeedsDisplayCallCount = 0
+
+    override func setNeedsDisplay(_ invalidRect: NSRect) {
+        setNeedsDisplayCallCount += 1
+        super.setNeedsDisplay(invalidRect)
+    }
+}
+
+private func storageIsHidden(in textView: LinkAwareTextView, at index: Int) -> Bool {
+    guard let storage = textView.textStorage, index < storage.length else { return false }
+    if let color = storage.attribute(.foregroundColor, at: index, effectiveRange: nil) as? NSColor {
+        return color.alphaComponent < 0.01
+    }
+    if let font = storage.attribute(.font, at: index, effectiveRange: nil) as? NSFont {
+        return font.pointSize < 0.1
+    }
+    return false
 }
