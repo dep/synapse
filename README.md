@@ -282,6 +282,7 @@ Type a slash command at the start of a line or after a space — it expands auto
 | Toggle Sidebar | Click sidebar icons |
 | Toggle Preview Mode | `⌘⇧P` |
 | Toggle Hide Markdown While Editing | `⌘E` |
+| **Git Pull** | `⌘R` |
 
 ## Markdown Guide
 

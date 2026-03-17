@@ -1092,6 +1092,57 @@ class AppState: ObservableObject {
         }
     }
 
+    /// Pull only (Cmd-R) — triggers a git pull without pushing.
+    /// On clean pull: refreshes files and shows upToDate briefly.
+    /// On merge conflict: stages conflicted files and commits with markers intact.
+    /// On error: sets error status for display in error modal.
+    func pullOnly() {
+        guard let git = gitService else { return }
+        guard case .idle = gitSyncStatus else { return }
+
+        gitQueue.async { [weak self] in
+            guard let self else { return }
+            do {
+                DispatchQueue.main.async { self.gitSyncStatus = .pulling }
+                try git.pullRebase()
+
+                if git.hasConflicts() {
+                    // Stage all files (including conflicts with markers)
+                    try git.stageAll()
+                    // Commit with a message indicating conflict resolution needed
+                    try git.commit(message: "WIP: Merge conflict - needs resolution")
+
+                    DispatchQueue.main.async {
+                        self.refreshAllFiles()
+                        self.lastContentChange = UUID()  // Signal UI refresh
+                        self.gitSyncStatus = .conflict("Merge conflict committed with conflict markers. Resolve in the editor, then save and push.")
+                    }
+                    return
+                }
+
+                // Clean pull - refresh files and show up to date
+                DispatchQueue.main.async {
+                    self.refreshAllFiles()
+                    self.lastContentChange = UUID()  // Signal UI refresh
+                    self.gitAheadCount = git.aheadCount()
+                    self.gitSyncStatus = .upToDate
+                }
+
+                // Reset to idle after a brief pause so the user can see "up to date"
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                    guard let self else { return }
+                    if case .upToDate = self.gitSyncStatus {
+                        self.gitSyncStatus = .idle
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.gitSyncStatus = .error(error.localizedDescription)
+                }
+            }
+        }
+    }
+
     func cloneRepository(remoteURL: String, to parentDirectory: URL, completion: @escaping (Result<Void, Error>) -> Void) {
         gitSyncStatus = .cloning
         let repoName = URL(string: remoteURL)?.deletingPathExtension().lastPathComponent ?? "repo"

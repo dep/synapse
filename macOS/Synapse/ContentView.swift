@@ -203,6 +203,9 @@ struct ContentView: View {
                 }
                 .keyboardShortcut(.downArrow, modifiers: [.command, .option])
                 .hidden()
+                Button("") { appState.pullOnly() }
+                    .keyboardShortcut("r", modifiers: .command)
+                    .hidden()
             }
         }
         .animation(.easeInOut(duration: 0.14), value: appState.isCommandPalettePresented)
