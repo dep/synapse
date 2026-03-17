@@ -150,7 +150,7 @@ Artifacts:
 - **Preview Mode** - Toggle a rendered preview that hides markdown syntax (`⌘⇧P`)
 - **Hide Markdown While Editing** - Optional mode (Settings → Editor) where syntax is hidden in real-time as you type, keeping the writing surface clean without switching modes
 - **Slash Commands** - Type `/time`, `/date`, `/todo`, or `/note` at the start of a line or after a space to insert content inline
-- **Wiki Links** - Link to other notes using `[[Note Name]]` syntax with automatic backlink tracking
+- **Wiki Links** - Link to other notes using `[[Note Name]]` syntax, or select text and press `⌘K` to wrap it as `[[Note Name|selected text]]`
 - **Embeddable Notes** - Include other notes inline using `![[Note Name]]` syntax
 - **Inline Image Previews** - View images directly in the editor
 - **Hashtag Support** - Tag notes with `#hashtag` syntax for organization
@@ -231,7 +231,7 @@ Settings automatically sync with your vault. When you open a vault, Synapse stor
 | Open Folder / Vault | `⇧⌘O` |
 | Close Vault / Exit | `⇧⌘N` |
 | Save | `⌘S` |
-| Command Palette / Quick Open | `⌘K` or `⌘P` |
+| Command Palette / Quick Open | `⌘K` or `⌘P` (`⌘K` on selected text opens the wiki link picker) |
 
 ### Search
 | Action | Shortcut |

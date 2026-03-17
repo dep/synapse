@@ -171,6 +171,7 @@ Wiki links are the foundation of connected notes in Synapse. They create bidirec
 - **Case-insensitive:** `[[My Note]]` matches `my note.md`, `MY NOTE.md`, etc.
 - **Automatic backlinks:** Synapse tracks which notes link to the current note
 - **Click to navigate:** Click a wiki link to open that note
+- **Link selected text quickly:** Highlight text and press `CMD + K`, then pick a note to insert `[[Note Title|highlighted text]]`
 - **Cmd+click:** Open in a new tab
 - **Unresolved links:** Links to non-existent notes appear as "ghost" links and are tracked
 

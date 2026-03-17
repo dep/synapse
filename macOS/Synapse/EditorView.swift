@@ -297,6 +297,10 @@ struct RawEditor: NSViewRepresentable {
         textView.installSearchObservers()
         textView.installFocusObserver()
         textView.installSaveCursorObserver(appState: context.coordinator.parent.appState)
+        textView.installCommandKObserver()
+        textView.onCommandPaletteFallback = { [weak appState] in
+            appState?.presentCommandPalette()
+        }
         
         // Set up wiki link callbacks
         textView.onWikiLinkRequest = { [weak appState, weak textView] in
@@ -313,6 +317,7 @@ struct RawEditor: NSViewRepresentable {
             textView?.insertLink(url)
         }
         textView.onWikiLinkDismiss = { [weak textView] in
+            textView?.clearPendingWikilinkInsertion()
             textView?.wikilinkPickerSuppressed = true
             // Restore focus to the editor so the user can keep typing.
             DispatchQueue.main.async {
@@ -348,8 +353,10 @@ struct RawEditor: NSViewRepresentable {
         } else if !isEditable || hideMarkdown {
             // Re-apply preview styling when mode switches without a text change,
             // or when live-hide-markdown mode is active and the view re-renders.
-            textView.applyPreviewStyling()
-        } else {
+            if textView.lastAppliedEditorDisplayMode != .preview {
+                textView.applyPreviewStyling()
+            }
+        } else if textView.lastAppliedEditorDisplayMode != .markdown {
             // hideMarkdownWhileEditing was just toggled off — restore full styling.
             textView.applyMarkdownStyling()
         }
@@ -615,6 +622,11 @@ func styleMarkdownContent(_ content: String, fontSize: CGFloat = 12) -> NSAttrib
 // MARK: - Markdown styling extension
 
 extension LinkAwareTextView {
+    func clearPendingWikilinkInsertion() {
+        pendingWikilinkAlias = nil
+        pendingWikilinkSelectionRange = nil
+    }
+
     func setPlainText(_ plain: String) {
         guard let storage = textStorage else { return }
         // Stale ranges from a previous file would crash reapplySearchHighlights
@@ -749,6 +761,7 @@ extension LinkAwareTextView {
 
         storage.endEditing()
         requestImmediateRedraw(for: fullRange)
+        lastAppliedEditorDisplayMode = .preview
 
         // After hiding, reveal the wikilink the cursor is currently inside.
         if isEditable { revealWikilinkAtCursor() }
@@ -801,6 +814,7 @@ extension LinkAwareTextView {
         guard let storage = textStorage else { return }
         let fullRange = NSRange(location: 0, length: storage.length)
         guard fullRange.length > 0 else {
+            lastAppliedEditorDisplayMode = .markdown
             clearInlineImagePreviews()
             for key in Array(collapsibleToggleButtons.keys) {
                 collapsibleToggleButtons[key]?.removeFromSuperview()
@@ -809,6 +823,7 @@ extension LinkAwareTextView {
             return
         }
         let text = storage.string as NSString
+        lastAppliedEditorDisplayMode = .markdown
 
         storage.beginEditing()
 
@@ -1192,6 +1207,11 @@ private func debugLog(_ msg: String) {
 // MARK: - LinkAwareTextView
 
 class LinkAwareTextView: NSTextView {
+    fileprivate enum EditorDisplayMode {
+        case markdown
+        case preview
+    }
+
     var allFiles: [URL] = []
     var onOpenFile: ((URL, Bool) -> Void)?
     var onActivatePane: (() -> Void)?
@@ -1203,6 +1223,8 @@ class LinkAwareTextView: NSTextView {
     var onWikiLinkDismiss: (() -> Void)?   // Called when the picker is dismissed via ESC
     var slashCommandNowProvider: () -> Date = Date.init
     var slashCommandTimeZone: TimeZone = .current
+    /// Called when CMD-K fires but the editor has no selection, so the normal command palette should open.
+    var onCommandPaletteFallback: (() -> Void)?
 
     private var completionPopover: NSPopover?
     private var completionVC: CompletionViewController?
@@ -1212,6 +1234,9 @@ class LinkAwareTextView: NSTextView {
     fileprivate var wikilinkPickerSuppressed = false
     /// Selected text captured before the wikilink palette opens; used to produce [[name|alias]].
     fileprivate var pendingWikilinkAlias: String? = nil
+    /// Original selection captured before the wikilink palette steals focus.
+    fileprivate var pendingWikilinkSelectionRange: NSRange? = nil
+    fileprivate var lastAppliedEditorDisplayMode: EditorDisplayMode? = nil
     private var eventMonitor: Any?
     private var inlineImageViews: [String: NSImageView] = [:]
     private var inlineVideoViews: [String: YouTubePreviewView] = [:]
@@ -1305,6 +1330,39 @@ class LinkAwareTextView: NSTextView {
             appState.pendingCursorRange = self.selectedRange()
             appState.pendingScrollOffsetY = self.enclosingScrollView?.contentView.bounds.origin.y ?? 0
         }
+    }
+
+    // MARK: - CMD-K observer
+
+    private var commandKObserver: Any?
+
+    func installCommandKObserver() {
+        guard commandKObserver == nil else { return }
+        commandKObserver = NotificationCenter.default.addObserver(
+            forName: .commandKPressed,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, self.isEditable else {
+                self?.onCommandPaletteFallback?()
+                return
+            }
+            let sel = self.selectedRange()
+            if sel.length > 0,
+               let selectedText = (self.string as NSString?)?.substring(with: sel),
+               !selectedText.isEmpty {
+                self.pendingWikilinkAlias = selectedText
+                self.pendingWikilinkSelectionRange = sel
+                self.onWikiLinkRequest?()
+            } else {
+                self.onCommandPaletteFallback?()
+            }
+        }
+    }
+
+    func removeCommandKObserver() {
+        if let obs = commandKObserver { NotificationCenter.default.removeObserver(obs) }
+        commandKObserver = nil
     }
 
     // MARK: - Search highlight support
@@ -1624,6 +1682,7 @@ class LinkAwareTextView: NSTextView {
             let sel = selectedRange()
             if sel.length > 0, let selectedText = (string as NSString?)?.substring(with: sel), !selectedText.isEmpty {
                 pendingWikilinkAlias = selectedText
+                pendingWikilinkSelectionRange = sel
                 onWikiLinkRequest?()
                 return true
             }
@@ -1787,16 +1846,25 @@ class LinkAwareTextView: NSTextView {
     func insertLink(_ url: URL) {
         let name = url.deletingPathExtension().lastPathComponent
         let alias = pendingWikilinkAlias
-        pendingWikilinkAlias = nil
+        let aliasRange = pendingWikilinkSelectionRange
+        clearPendingWikilinkInsertion()
 
         if linkTypingRange == nil, let alias, !alias.isEmpty {
             // CMD-K with selected text: replace the selection with [[name|alias]].
-            let selRange = selectedRange()
-            guard selRange.location != NSNotFound else { return }
+            let currentLength = (string as NSString).length
+            let selRange = aliasRange ?? selectedRange()
+            guard selRange.location != NSNotFound,
+                  selRange.location + selRange.length <= currentLength else { return }
             let linkText = "[[\(name)|\(alias)]]"
             if shouldChangeText(in: selRange, replacementString: linkText) {
                 replaceCharacters(in: selRange, with: linkText)
                 didChangeText()
+                let afterLink = selRange.location + (linkText as NSString).length
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.window?.makeFirstResponder(self)
+                    self.setSelectedRange(NSRange(location: afterLink, length: 0))
+                }
             }
             return
         }
