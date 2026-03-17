@@ -35,7 +35,7 @@ Synapse packs a robust set of features to boost your productivity.
 - **Preview Mode:** Toggle a clean rendered view that hides markdown syntax (`⌘⇧P`). The eye icon in the toolbar activates it.
 - **Hide Markdown While Editing:** Enable in Settings → Editor to keep syntax hidden as you type — a distraction-free writing mode with real-time rendering.
 - **Slash Commands:** Type `/time`, `/date`, `/todo`, or `/note` at the start of a line or after a space — expands instantly as you type.
-- **Wikilinks:** Easily link to other notes using `[[Note Name]]`.
+- **Wikilinks:** Easily link to other notes using `[[Note Name]]`, or highlight text and press `CMD + K` to turn it into a wikilink with that text as the display alias.
 - **Embedded Notes:** Include other notes directly using `![[Note Name]]`.
 - **Media Previews:** Inline support for image rendering and YouTube video previews.
 
@@ -127,7 +127,7 @@ Synapse relies heavily on keyboard shortcuts to help you navigate and edit quick
 | Open Folder / Vault | `CMD + O` |
 | Close Vault / Exit | `CMD + SHIFT + N` |
 | Save | `CMD + S` |
-| Command Palette | `CMD + K` or `CMD + P` |
+| Command Palette | `CMD + K` or `CMD + P` (`CMD + K` on selected text opens the wiki link picker) |
 
 ### Search
 | Action | Shortcut |

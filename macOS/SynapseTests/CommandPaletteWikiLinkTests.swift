@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 @testable import Synapse
 
 /// Tests for using command palette modal for wiki link picker
@@ -67,5 +68,56 @@ final class CommandPaletteWikiLinkTests: XCTestCase {
         // Then: The wiki link should be inserted
         // (Actual insertion logic would be tested in integration)
         XCTAssertFalse(sut.isCommandPalettePresented)
+    }
+
+    func test_commandKWithSelection_replacesOriginalSelectionEvenAfterFocusMoves() {
+        let textView = LinkAwareTextView()
+        let targetFile = tempDirectory.appendingPathComponent("TargetNote.md")
+        try? "Content".write(to: targetFile, atomically: true, encoding: .utf8)
+
+        var wikiLinkRequestCount = 0
+        textView.string = "Link this text please"
+        textView.setSelectedRange(NSRange(location: 5, length: 9))
+        textView.onWikiLinkRequest = { wikiLinkRequestCount += 1 }
+
+        let handled = textView.performKeyEquivalent(with: commandKEvent())
+
+        XCTAssertTrue(handled)
+        XCTAssertEqual(wikiLinkRequestCount, 1)
+
+        // Simulate focus moving into the command palette search field while it is open.
+        textView.setSelectedRange(NSRange(location: 0, length: 0))
+
+        textView.insertLink(targetFile)
+
+        XCTAssertEqual(textView.string, "Link [[TargetNote|this text]] please")
+    }
+
+    func test_commandKWithoutSelection_doesNotTriggerWikiLinkPicker() {
+        let textView = LinkAwareTextView()
+        var wikiLinkRequestCount = 0
+        textView.string = "Link this text please"
+        textView.setSelectedRange(NSRange(location: 5, length: 0))
+        textView.onWikiLinkRequest = { wikiLinkRequestCount += 1 }
+
+        let handled = textView.performKeyEquivalent(with: commandKEvent())
+
+        XCTAssertFalse(handled)
+        XCTAssertEqual(wikiLinkRequestCount, 0)
+    }
+
+    private func commandKEvent() -> NSEvent {
+        NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: .command,
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "k",
+            charactersIgnoringModifiers: "k",
+            isARepeat: false,
+            keyCode: 40
+        )!
     }
 }
