@@ -338,7 +338,10 @@ struct ContentView: View {
                     help: isRightSidebarVisible ? "Hide Right Sidebar" : "Show Right Sidebar"
                 )
                 
-                // Global Add Pane menu
+                // Global Add Pane menu with 6-pane limit
+                let totalPanes = appState.settings.leftSidebarPanes.count + appState.settings.rightSidebarPanes.count
+                let canAddPane = totalPanes < 6
+                
                 Menu {
                     let used = Set(appState.settings.leftSidebarPanes + appState.settings.rightSidebarPanes)
                     let available = SidebarPane.allCases.filter { !used.contains($0) }
@@ -380,9 +383,11 @@ struct ContentView: View {
                     }
                 } label: {
                     Image(systemName: "plus.rectangle")
+                        .opacity(canAddPane ? 1.0 : 0.4)
                 }
                 .buttonStyle(ChromeButtonStyle())
-                .help("Add or Remove Sidebar Panes")
+                .help(canAddPane ? "Add or Remove Sidebar Panes" : "Maximum 6 sidebars reached")
+                .disabled(!canAddPane)
 
                 Button(action: { appState.openGraphTab() }) {
                     Image(systemName: "circle.grid.2x2")
@@ -938,6 +943,7 @@ struct SidebarPaneWrapper: View {
     @State private var contentTargeted = false
     @State private var headerHovered = false
     @State private var isDraggingHeader = false
+    @State private var showingRemoveConfirmation = false
 
     private var isCollapsed: Bool {
         settings.collapsedPanes.contains(pane.rawValue)
@@ -951,6 +957,19 @@ struct SidebarPaneWrapper: View {
         }
     }
 
+    private func removePane() {
+        // Remove from the appropriate sidebar
+        if isLeft {
+            settings.leftSidebarPanes.removeAll { $0 == pane }
+        } else {
+            settings.rightSidebarPanes.removeAll { $0 == pane }
+        }
+        // Clean up any stored state for this pane
+        settings.leftPaneHeights.removeValue(forKey: pane.rawValue)
+        settings.rightPaneHeights.removeValue(forKey: pane.rawValue)
+        settings.collapsedPanes.remove(pane.rawValue)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Drop indicator above — visible while hovering over header
@@ -959,34 +978,47 @@ struct SidebarPaneWrapper: View {
                 .frame(height: 2)
                 .opacity(headerTargeted ? 1 : 0)
 
-            // Header — drag handle + collapse toggle
-            Button(action: toggleCollapsed) {
-                HStack(spacing: 6) {
-                    Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(SynapseTheme.textMuted)
-                        .frame(width: 14)
+            // Header — drag handle + collapse toggle + close button
+            HStack(spacing: 6) {
+                Button(action: toggleCollapsed) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(SynapseTheme.textMuted)
+                            .frame(width: 14)
 
-                    Text(pane.title)
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .tracking(1.8)
-                        .foregroundStyle(SynapseTheme.textMuted)
-                        .textCase(.uppercase)
+                        Text(pane.title)
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .tracking(1.8)
+                            .foregroundStyle(SynapseTheme.textMuted)
+                            .textCase(.uppercase)
 
-                    Spacer()
+                        Spacer()
 
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(SynapseTheme.textMuted)
-                        .rotationEffect(.degrees(isCollapsed ? 0 : 90))
-                        .animation(.easeInOut(duration: 0.18), value: isCollapsed)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(SynapseTheme.textMuted)
+                            .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                            .animation(.easeInOut(duration: 0.18), value: isCollapsed)
+                    }
+                    .contentShape(Rectangle())
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(SynapseTheme.panelElevated)
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+
+                // Close button - visible on hover
+                Button(action: { showingRemoveConfirmation = true }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(headerHovered ? SynapseTheme.textMuted : Color.clear)
+                        .frame(width: 20, height: 20)
+                        .background(headerHovered ? Color.white.opacity(0.06) : Color.clear, in: RoundedRectangle(cornerRadius: 4))
+                }
+                .buttonStyle(.plain)
+                .help("Close \(pane.title) sidebar")
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(SynapseTheme.panelElevated)
             .onHover { hovering in
                 headerHovered = hovering
                 if hovering {
@@ -1014,6 +1046,14 @@ struct SidebarPaneWrapper: View {
             }
             .onDrop(of: [.utf8PlainText], isTargeted: $headerTargeted) { providers, _ in
                 return loadAndMove(providers: providers, before: true)
+            }
+            .alert("Remove Sidebar?", isPresented: $showingRemoveConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Remove", role: .destructive) {
+                    removePane()
+                }
+            } message: {
+                Text("The \"\(pane.title)\" sidebar will be removed. You can add it back later from the sidebar menu.")
             }
 
             // Content — only rendered when expanded to avoid wasting resources

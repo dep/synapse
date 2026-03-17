@@ -58,10 +58,24 @@ class SettingsManager: ObservableObject {
         didSet { save() }
     }
     @Published var leftSidebarPanes: [SidebarPane] {
-        didSet { save() }
+        didSet {
+            // Remove duplicates while preserving order
+            if Set(leftSidebarPanes).count != leftSidebarPanes.count {
+                var seen = Set<SidebarPane>()
+                leftSidebarPanes = leftSidebarPanes.filter { seen.insert($0).inserted }
+            }
+            save()
+        }
     }
     @Published var rightSidebarPanes: [SidebarPane] {
-        didSet { save() }
+        didSet {
+            // Remove duplicates while preserving order
+            if Set(rightSidebarPanes).count != rightSidebarPanes.count {
+                var seen = Set<SidebarPane>()
+                rightSidebarPanes = rightSidebarPanes.filter { seen.insert($0).inserted }
+            }
+            save()
+        }
     }
     /// Persisted pane heights keyed by SidebarPane rawValue, for the left sidebar
     @Published var leftPaneHeights: [String: CGFloat] {
