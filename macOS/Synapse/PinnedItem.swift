@@ -1,51 +1,120 @@
 import Foundation
 
 /// Represents a pinned item (note, folder, or tag) for quick access
+/// Stores paths relative to the vault for portability across different machines
 struct PinnedItem: Codable, Equatable, Identifiable {
     let id: UUID
-    let url: URL?
     let name: String
     let isFolder: Bool
     let isTag: Bool
     let vaultPath: String
+    
+    /// Relative path from vault root to the item (for files/folders)
+    /// Nil for tags
+    private let relativePath: String?
+    
+    /// Legacy absolute URL for backward compatibility with old pinned items
+    /// This is only used when decoding legacy items that have absolute URLs
+    private let legacyURL: URL?
+    
+    /// The absolute URL to the item
+    /// For new items: computed from vaultPath + relativePath
+    /// For legacy items: uses the stored absolute URL
+    var url: URL? {
+        guard !isTag else { return nil }
+        
+        // If we have a legacy absolute URL, use it (for backward compatibility)
+        if let legacyURL = legacyURL {
+            return legacyURL
+        }
+        
+        // Otherwise, construct from vaultPath + relativePath
+        if let relativePath = relativePath, !relativePath.isEmpty {
+            // Use URL(fileURLWithPath:) to construct without adding trailing slashes
+            let fullPath = (vaultPath as NSString).appendingPathComponent(relativePath)
+            return URL(fileURLWithPath: fullPath)
+        }
+        
+        return nil
+    }
 
     private enum CodingKeys: String, CodingKey {
         case id
-        case url
+        case relativePath
         case name
         case isFolder
         case isTag
         case vaultPath
+        // Legacy key for backward compatibility
+        case url
     }
     
     /// Initialize for files/folders
     init(url: URL, isFolder: Bool, vaultURL: URL) {
         self.id = UUID()
-        self.url = url
         self.name = url.lastPathComponent
         self.isFolder = isFolder
         self.isTag = false
         self.vaultPath = vaultURL.path
+        self.legacyURL = nil  // New items don't use legacy URL
+        
+        // Calculate relative path from vault to item
+        let vaultPath = vaultURL.path
+        let urlPath = url.path
+        
+        // Check if urlPath starts with vaultPath
+        if urlPath.hasPrefix(vaultPath) {
+            // Remove the vault path prefix and any leading slash
+            var relative = String(urlPath.dropFirst(vaultPath.count))
+            if relative.hasPrefix("/") {
+                relative = String(relative.dropFirst())
+            }
+            self.relativePath = relative.isEmpty ? url.lastPathComponent : relative
+        } else {
+            // Fallback: just use the last path component
+            self.relativePath = url.lastPathComponent
+        }
     }
     
     /// Initialize for tags
     init(tagName: String, vaultURL: URL) {
         self.id = UUID()
-        self.url = nil
         self.name = tagName
         self.isFolder = false
         self.isTag = true
         self.vaultPath = vaultURL.path
+        self.relativePath = nil
+        self.legacyURL = nil
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
-        url = try container.decodeIfPresent(URL.self, forKey: .url)
         name = try container.decode(String.self, forKey: .name)
         isFolder = try container.decode(Bool.self, forKey: .isFolder)
         isTag = try container.decodeIfPresent(Bool.self, forKey: .isTag) ?? false
         vaultPath = try container.decode(String.self, forKey: .vaultPath)
+        
+        // Try to decode relativePath first (new format)
+        if let decodedRelativePath = try container.decodeIfPresent(String.self, forKey: .relativePath) {
+            relativePath = decodedRelativePath
+            legacyURL = nil
+        } else {
+            // Legacy format: decode absolute URL and preserve it
+            relativePath = nil
+            legacyURL = try container.decodeIfPresent(URL.self, forKey: .url)
+        }
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(isFolder, forKey: .isFolder)
+        try container.encode(isTag, forKey: .isTag)
+        try container.encode(vaultPath, forKey: .vaultPath)
+        try container.encode(relativePath, forKey: .relativePath)
+        // Don't encode legacyURL - new format uses relativePath only
     }
     
     /// Check if the item still exists (for files/folders)

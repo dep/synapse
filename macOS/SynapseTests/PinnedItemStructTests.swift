@@ -246,4 +246,92 @@ final class PinnedItemStructTests: XCTestCase {
         XCTAssertFalse(decoded.isTag, "Legacy pinned items should decode as non-tag items")
         XCTAssertEqual(decoded.url?.path, "/tmp/legacy-note.md")
     }
+    
+    // MARK: - Relative Path Tests
+    
+    func test_pinnedItem_usesRelativePathForPortability() throws {
+        // Create a file in the vault
+        let noteURL = tempDir.appendingPathComponent("Projects/my-note.md")
+        try FileManager.default.createDirectory(at: noteURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "".write(to: noteURL, atomically: true, encoding: .utf8)
+        
+        // Create pinned item
+        let item = PinnedItem(url: noteURL, isFolder: false, vaultURL: tempDir)
+        
+        // Encode to JSON
+        let data = try JSONEncoder().encode(item)
+        let jsonString = String(data: data, encoding: .utf8)!
+        
+        // The JSON should contain a relative path, not absolute
+        // The relative path should be "Projects/my-note.md"
+        // Note: JSONEncoder escapes forward slashes as \/
+        XCTAssertTrue(jsonString.contains("Projects") && jsonString.contains("my-note.md"), 
+                      "Should store relative path in JSON. Got: \(jsonString)")
+        
+        // Verify the item's URL is correctly computed from relativePath + vaultPath
+        XCTAssertEqual(item.url?.path, noteURL.path, 
+                       "URL should be computed from vaultPath + relativePath")
+        
+        // Verify the relative path is correctly calculated
+        XCTAssertTrue(item.url?.path.contains("Projects/my-note.md") ?? false,
+                      "URL should contain the relative path")
+    }
+    
+    func test_pinnedItem_folderUsesRelativePathForPortability() throws {
+        // Create a folder in the vault
+        let folderURL = tempDir.appendingPathComponent("Projects/Work")
+        try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+        
+        // Create pinned item
+        let item = PinnedItem(url: folderURL, isFolder: true, vaultURL: tempDir)
+        
+        // Encode to JSON
+        let data = try JSONEncoder().encode(item)
+        let jsonString = String(data: data, encoding: .utf8)!
+        
+        // The JSON should contain a relative path
+        XCTAssertTrue(jsonString.contains("Projects") && jsonString.contains("Work"), 
+                      "Should store relative path in JSON. Got: \(jsonString)")
+        
+        // Verify the item's URL is correctly computed
+        XCTAssertEqual(item.url?.path, folderURL.path,
+                       "URL should be computed from vaultPath + relativePath")
+    }
+    
+    func test_pinnedItem_decodesWithDifferentVaultPath() throws {
+        // Create a file in the original vault location
+        let noteURL = tempDir.appendingPathComponent("Projects/my-note.md")
+        try FileManager.default.createDirectory(at: noteURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "".write(to: noteURL, atomically: true, encoding: .utf8)
+        
+        // Create and encode pinned item
+        let item = PinnedItem(url: noteURL, isFolder: false, vaultURL: tempDir)
+        let data = try JSONEncoder().encode(item)
+        var jsonString = String(data: data, encoding: .utf8)!
+        
+        // Simulate moving vault to different location by modifying JSON
+        let newVaultLocation = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: newVaultLocation, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: newVaultLocation.appendingPathComponent("Projects"), withIntermediateDirectories: true)
+        try "".write(to: newVaultLocation.appendingPathComponent("Projects/my-note.md"), atomically: true, encoding: .utf8)
+        
+        // Replace vaultPath in JSON (handling escaped JSON paths)
+        let escapedOriginalPath = tempDir.path.replacingOccurrences(of: "/", with: "\\/")
+        let escapedNewPath = newVaultLocation.path.replacingOccurrences(of: "/", with: "\\/")
+        jsonString = jsonString.replacingOccurrences(of: escapedOriginalPath, with: escapedNewPath)
+        
+        // Decode with new vault path
+        let modifiedData = jsonString.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(PinnedItem.self, from: modifiedData)
+        
+        // The URL should now point to the new vault location
+        let expectedNewURL = newVaultLocation.appendingPathComponent("Projects/my-note.md")
+        XCTAssertEqual(decoded.url?.path, expectedNewURL.path,
+                       "Decoded item should have URL pointing to new vault location")
+        XCTAssertTrue(decoded.exists, "File should exist at new vault location")
+        
+        // Cleanup
+        try? FileManager.default.removeItem(at: newVaultLocation)
+    }
 }

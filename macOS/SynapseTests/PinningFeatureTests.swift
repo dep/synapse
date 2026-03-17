@@ -83,9 +83,9 @@ final class PinningFeatureTests: XCTestCase {
         appState.pinItem(folder)
         
         XCTAssertEqual(appState.pinnedItems.count, 3)
-        XCTAssertEqual(appState.pinnedItems[0].url, file1)
-        XCTAssertEqual(appState.pinnedItems[1].url, file2)
-        XCTAssertEqual(appState.pinnedItems[2].url, folder)
+        XCTAssertEqual(appState.pinnedItems[0].url?.path, file1.path)
+        XCTAssertEqual(appState.pinnedItems[1].url?.path, file2.path)
+        XCTAssertEqual(appState.pinnedItems[2].url?.path, folder.path)
     }
 
     func test_pinSameItemTwice_doesNotDuplicate() throws {
@@ -199,8 +199,8 @@ final class PinningFeatureTests: XCTestCase {
         appState.pinItem(fileURL)
         appState.pinItem(folderURL)
         
-        let filePin = appState.pinnedItems.first { $0.url == fileURL }
-        let folderPin = appState.pinnedItems.first { $0.url == folderURL }
+        let filePin = appState.pinnedItems.first { $0.url?.path == fileURL.path }
+        let folderPin = appState.pinnedItems.first { $0.url?.path == folderURL.path }
         
         XCTAssertNotNil(filePin)
         XCTAssertNotNil(folderPin)
