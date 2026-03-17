@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct SynapseApp: App {
     @StateObject private var appState = AppState()
+    @StateObject private var autoUpdater = AutoUpdater()
 
     var body: some Scene {
         WindowGroup {
@@ -15,9 +16,13 @@ struct SynapseApp: App {
             } else {
                 ContentView()
                     .environmentObject(appState)
+                    .environmentObject(autoUpdater)
                     .tint(SynapseTheme.accent)
                     .preferredColorScheme(.dark)
                     .frame(minWidth: 900, minHeight: 600)
+                    .onAppear {
+                        autoUpdater.checkForUpdatesOnLaunch()
+                    }
             }
         }
         .defaultSize(width: 1320, height: 820)
