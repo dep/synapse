@@ -307,12 +307,13 @@ class AppState: ObservableObject {
     /// Pin a file or folder
     func pinItem(_ url: URL) {
         guard let root = rootURL else { return }
+        let targetPath = url.path
 
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return }
 
-        // Check if already pinned
-        guard !settings.pinnedItems.contains(where: { $0.url == url && $0.vaultPath == root.path }) else { return }
+        // Check if already pinned (compare by path)
+        guard !settings.pinnedItems.contains(where: { $0.url?.path == targetPath && $0.vaultPath == root.path }) else { return }
 
         let item = PinnedItem(url: url, isFolder: isDirectory.boolValue, vaultURL: root)
         settings.pinnedItems.append(item)
@@ -332,7 +333,8 @@ class AppState: ObservableObject {
     /// Unpin a file, folder, or tag
     func unpinItem(_ url: URL) {
         guard let root = rootURL else { return }
-        settings.pinnedItems.removeAll { $0.url == url && $0.vaultPath == root.path }
+        let targetPath = url.path
+        settings.pinnedItems.removeAll { $0.url?.path == targetPath && $0.vaultPath == root.path }
     }
 
     /// Unpin a tag
@@ -344,7 +346,10 @@ class AppState: ObservableObject {
     /// Check if an item is pinned
     func isPinned(_ url: URL) -> Bool {
         guard let root = rootURL else { return false }
-        return settings.pinnedItems.contains { $0.url == url && $0.vaultPath == root.path && $0.exists }
+        let targetPath = url.path
+        return settings.pinnedItems.contains { 
+            $0.url?.path == targetPath && $0.vaultPath == root.path && $0.exists 
+        }
     }
 
     /// Check if a tag is pinned
