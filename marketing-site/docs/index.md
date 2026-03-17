@@ -124,7 +124,6 @@ Synapse relies heavily on keyboard shortcuts to help you navigate and edit quick
 | --- | --- |
 | New Note | `CMD + N` |
 | New Untitled Note | `CMD + T` |
-| Open Folder / Vault | `CMD + O` |
 | Close Vault / Exit | `CMD + SHIFT + N` |
 | Save | `CMD + S` |
 | Command Palette | `CMD + K` or `CMD + P` (`CMD + K` on selected text opens the wiki link picker) |

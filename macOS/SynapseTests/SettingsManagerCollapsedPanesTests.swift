@@ -75,62 +75,19 @@ final class SettingsManagerCollapsedPanesTests: XCTestCase {
         XCTAssertTrue(reloaded.collapsedPanes.isEmpty, "Missing collapsedPanes key should default to empty set")
     }
 
-    // MARK: - leftPaneHeights defaults
+    // MARK: - sidebarPaneHeights persistence
 
-    func test_leftPaneHeights_defaultsToEmpty() {
-        XCTAssertTrue(sut.leftPaneHeights.isEmpty, "leftPaneHeights should default to [:]")
-    }
-
-    func test_rightPaneHeights_defaultsToEmpty() {
-        XCTAssertTrue(sut.rightPaneHeights.isEmpty, "rightPaneHeights should default to [:]")
-    }
-
-    // MARK: - leftPaneHeights persistence
-
-    func test_leftPaneHeights_setValuePersists() {
-        sut.leftPaneHeights[SidebarPane.files.rawValue] = 200
+    func test_sidebarPaneHeights_setValuePersists() {
+        sut.sidebarPaneHeights[SidebarPane.files.rawValue] = 200
         let reloaded = SettingsManager(configPath: configFilePath)
-        XCTAssertEqual(reloaded.leftPaneHeights[SidebarPane.files.rawValue], 200)
+        XCTAssertEqual(reloaded.sidebarPaneHeights[SidebarPane.files.rawValue], 200)
     }
 
-    func test_leftPaneHeights_multipleValuesPersist() {
-        sut.leftPaneHeights[SidebarPane.files.rawValue] = 150
-        sut.leftPaneHeights[SidebarPane.tags.rawValue] = 300
+    func test_sidebarPaneHeights_updateValuePersists() {
+        sut.sidebarPaneHeights[SidebarPane.files.rawValue] = 100
+        sut.sidebarPaneHeights[SidebarPane.files.rawValue] = 250
         let reloaded = SettingsManager(configPath: configFilePath)
-        XCTAssertEqual(reloaded.leftPaneHeights[SidebarPane.files.rawValue], 150)
-        XCTAssertEqual(reloaded.leftPaneHeights[SidebarPane.tags.rawValue], 300)
-    }
-
-    func test_leftPaneHeights_updateValuePersists() {
-        sut.leftPaneHeights[SidebarPane.files.rawValue] = 100
-        sut.leftPaneHeights[SidebarPane.files.rawValue] = 250
-        let reloaded = SettingsManager(configPath: configFilePath)
-        XCTAssertEqual(reloaded.leftPaneHeights[SidebarPane.files.rawValue], 250)
-    }
-
-    // MARK: - rightPaneHeights persistence
-
-    func test_rightPaneHeights_setValuePersists() {
-        sut.rightPaneHeights[SidebarPane.terminal.rawValue] = 400
-        let reloaded = SettingsManager(configPath: configFilePath)
-        XCTAssertEqual(reloaded.rightPaneHeights[SidebarPane.terminal.rawValue], 400)
-    }
-
-    // MARK: - JSON fallback for pane heights
-
-    func test_leftPaneHeights_missingKeyInJSON_defaultsToEmpty() {
-        let config: [String: Any] = [
-            "onBootCommand": "",
-            "fileExtensionFilter": "*.md, *.txt",
-            "autoSave": false,
-            "autoPush": false
-        ]
-        let data = try! JSONSerialization.data(withJSONObject: config)
-        try! data.write(to: URL(fileURLWithPath: configFilePath))
-
-        let reloaded = SettingsManager(configPath: configFilePath)
-        XCTAssertTrue(reloaded.leftPaneHeights.isEmpty, "Missing leftPaneHeights should default to [:]")
-        XCTAssertTrue(reloaded.rightPaneHeights.isEmpty, "Missing rightPaneHeights should default to [:]")
+        XCTAssertEqual(reloaded.sidebarPaneHeights[SidebarPane.files.rawValue], 250)
     }
 
     // MARK: - Change notifications
@@ -143,10 +100,10 @@ final class SettingsManagerCollapsedPanesTests: XCTestCase {
         cancellable.cancel()
     }
 
-    func test_leftPaneHeights_triggersSaveNotification() {
+    func test_sidebarPaneHeights_triggersSaveNotification() {
         var notifyCount = 0
         let cancellable = sut.objectWillChange.sink { _ in notifyCount += 1 }
-        sut.leftPaneHeights["files"] = 100
+        sut.sidebarPaneHeights["files"] = 100
         XCTAssertGreaterThanOrEqual(notifyCount, 1)
         cancellable.cancel()
     }

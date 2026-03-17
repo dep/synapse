@@ -34,7 +34,6 @@ struct SynapseApp: App {
                 Button("Open Folder…") {
                     appState.pickFolder()
                 }
-                .keyboardShortcut("o", modifiers: [.command, .shift])
 
                 Button("Close Vault") {
                     appState.exitVault()

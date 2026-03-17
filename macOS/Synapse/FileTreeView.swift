@@ -129,12 +129,17 @@ func buildFileTree(at url: URL, sortCriterion: SortCriterion, ascending: Bool, s
 
 struct FileTreeView: View {
     @EnvironmentObject var appState: AppState
-    @ObservedObject var settings: SettingsManager
+    let settings: SettingsManager
     @State private var nodes: [FileNode] = []
     @State private var expandedDirs: Set<URL> = []
     @State private var editorAction: BrowserEditorAction?
     @State private var deleteTarget: BrowserDeleteTarget?
     @State private var errorMessage: String?
+    @State private var fileTreeMode: FileTreeMode = .folder
+    @State private var dailyNotesEnabled = false
+    @State private var fileExtensionFilter = ""
+    @State private var hiddenFileFolderFilter = ""
+    @State private var templatesDirectory = "templates"
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -178,7 +183,7 @@ struct FileTreeView: View {
                 }
             }
 
-                if settings.dailyNotesEnabled, appState.rootURL != nil {
+                if dailyNotesEnabled, appState.rootURL != nil {
                     Button(action: { appState.openTodayNote() }) {
                         HStack(spacing: 6) {
                             Image(systemName: "calendar")
@@ -226,12 +231,15 @@ struct FileTreeView: View {
                 // Folder / File view toggle
                 HStack(spacing: 0) {
                     ForEach([FileTreeMode.folder, .file], id: \.self) { mode in
-                        Button(action: { settings.fileTreeMode = mode }) {
+                        Button(action: {
+                            fileTreeMode = mode
+                            settings.fileTreeMode = mode
+                        }) {
                             Image(systemName: mode == .folder ? "folder" : "list.bullet")
                                 .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(settings.fileTreeMode == mode ? SynapseTheme.textPrimary : SynapseTheme.textMuted)
+                                .foregroundStyle(fileTreeMode == mode ? SynapseTheme.textPrimary : SynapseTheme.textMuted)
                                 .frame(width: 28, height: 24)
-                                .background(settings.fileTreeMode == mode ? SynapseTheme.row : Color.clear)
+                                .background(fileTreeMode == mode ? SynapseTheme.row : Color.clear)
                         }
                         .buttonStyle(.plain)
                         .help(mode == .folder ? "Folder View" : "File View")
@@ -295,7 +303,7 @@ struct FileTreeView: View {
                 .frame(height: 1)
 
                 ScrollView {
-                    if settings.fileTreeMode == .file {
+                    if fileTreeMode == .file {
                         let flatFiles = flatSortedFiles()
                         if flatFiles.isEmpty {
                             Text("No notes yet")
@@ -367,6 +375,7 @@ struct FileTreeView: View {
             .padding(12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .onAppear {
+                syncLocalSettings()
                 refresh()
                 revealSelection(with: proxy, animated: false)
             }
@@ -387,14 +396,29 @@ struct FileTreeView: View {
                 focusPinnedFolder(folder, proxy: proxy)
                 appState.focusPinnedFolder = nil
             }
-            .onChange(of: settings.fileExtensionFilter) { _, _ in
+            .onChange(of: fileExtensionFilter) { _, _ in
                 refresh()
             }
-            .onChange(of: settings.hiddenFileFolderFilter) { _, _ in
+            .onChange(of: hiddenFileFolderFilter) { _, _ in
                 refresh()
             }
-            .onChange(of: settings.templatesDirectory) { _, _ in
+            .onChange(of: templatesDirectory) { _, _ in
                 refresh()
+            }
+            .onReceive(settings.$fileTreeMode) { value in
+                fileTreeMode = value
+            }
+            .onReceive(settings.$dailyNotesEnabled) { value in
+                dailyNotesEnabled = value
+            }
+            .onReceive(settings.$fileExtensionFilter) { value in
+                fileExtensionFilter = value
+            }
+            .onReceive(settings.$hiddenFileFolderFilter) { value in
+                hiddenFileFolderFilter = value
+            }
+            .onReceive(settings.$templatesDirectory) { value in
+                templatesDirectory = value
             }
             .onChange(of: appState.isNewNotePromptRequested) { _, requested in
                 guard requested else { return }
@@ -458,6 +482,14 @@ struct FileTreeView: View {
         }
         nodes = buildFileTree(at: root, sortCriterion: appState.sortCriterion, ascending: appState.sortAscending, settings: settings)
         expandPath(to: appState.selectedFile)
+    }
+
+    private func syncLocalSettings() {
+        fileTreeMode = settings.fileTreeMode
+        dailyNotesEnabled = settings.dailyNotesEnabled
+        fileExtensionFilter = settings.fileExtensionFilter
+        hiddenFileFolderFilter = settings.hiddenFileFolderFilter
+        templatesDirectory = settings.templatesDirectory
     }
 
     private func focusPinnedFolder(_ folder: URL, proxy: ScrollViewProxy) {
