@@ -22,6 +22,42 @@ enum SidebarPane: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// Position of a sidebar container (left or right side of the window)
+enum SidebarPosition: String, Codable, CaseIterable {
+    case left = "left"
+    case right = "right"
+}
+
+/// A sidebar container that can hold multiple panes and be positioned on left or right
+struct Sidebar: Identifiable, Codable, Equatable {
+    let id: UUID
+    var position: SidebarPosition
+    var panes: [SidebarPane]
+    
+    init(id: UUID, position: SidebarPosition, panes: [SidebarPane] = []) {
+        self.id = id
+        self.position = position
+        self.panes = panes
+    }
+}
+
+/// The app always has exactly 3 sidebars with stable IDs so collapse state
+/// persists reliably across restarts without needing to store the sidebar list.
+enum FixedSidebar {
+    /// Left sidebar: Files + Related panes
+    static let leftID   = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    /// Right sidebar #1: Terminal + Tags panes
+    static let right1ID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+    /// Right sidebar #2: empty, collapsed by default
+    static let right2ID = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
+
+    static let all: [Sidebar] = [
+        Sidebar(id: leftID,   position: .left,  panes: [.files, .links]),
+        Sidebar(id: right1ID, position: .right, panes: [.terminal, .tags]),
+        Sidebar(id: right2ID, position: .right, panes: []),
+    ]
+}
+
 /// Manages application settings with persistence to a local JSON config file
 class SettingsManager: ObservableObject {
     private static let vaultSettingsFilename = "settings.yml"
@@ -57,22 +93,21 @@ class SettingsManager: ObservableObject {
     @Published var autoPush: Bool {
         didSet { save() }
     }
-    @Published var leftSidebarPanes: [SidebarPane] {
+    /// The 3 fixed sidebars. Structure (IDs/positions) never changes; pane assignments are mutable.
+    @Published var sidebars: [Sidebar] {
         didSet { save() }
     }
-    @Published var rightSidebarPanes: [SidebarPane] {
-        didSet { save() }
-    }
-    /// Persisted pane heights keyed by SidebarPane rawValue, for the left sidebar
-    @Published var leftPaneHeights: [String: CGFloat] {
-        didSet { save() }
-    }
-    /// Persisted pane heights keyed by SidebarPane rawValue, for the right sidebar
-    @Published var rightPaneHeights: [String: CGFloat] {
+
+    /// Pane heights keyed by SidebarPane rawValue (shared across all sidebars)
+    @Published var sidebarPaneHeights: [String: CGFloat] {
         didSet { save() }
     }
     /// Set of pane rawValues that are currently collapsed
     @Published var collapsedPanes: Set<String> {
+        didSet { save() }
+    }
+    /// Set of sidebar UUID strings that are currently collapsed into rails
+    @Published var collapsedSidebarIDs: Set<String> {
         didSet { save() }
     }
     @Published var githubPAT: String {
@@ -91,9 +126,100 @@ class SettingsManager: ObservableObject {
         didSet { save() }
     }
 
+    // MARK: - Sidebar Helpers
+
+    var leftSidebars:  [Sidebar] { sidebars.filter { $0.position == .left  } }
+    var rightSidebars: [Sidebar] { sidebars.filter { $0.position == .right } }
+
+    /// Panes not assigned to any sidebar
+    var availablePanes: [SidebarPane] {
+        let used = Set(sidebars.flatMap { $0.panes })
+        return SidebarPane.allCases.filter { !used.contains($0) }
+    }
+
+    /// Move a pane to a sidebar (removes it from wherever it currently lives first)
+    func assignPane(_ pane: SidebarPane, toSidebar id: UUID) {
+        var updated = sidebars
+        for i in updated.indices { updated[i].panes.removeAll { $0 == pane } }
+        if let i = updated.firstIndex(where: { $0.id == id }),
+           !updated[i].panes.contains(pane) {
+            updated[i].panes.append(pane)
+        }
+        sidebars = updated
+    }
+
+    /// Move a pane to a sidebar at a specific insertion index.
+    func movePane(_ pane: SidebarPane, toSidebar id: UUID, at insertionIndex: Int) {
+        var updated = sidebars
+        var removedFromSameSidebarBeforeTarget = false
+
+        for i in updated.indices {
+            if updated[i].id == id,
+               let existingIndex = updated[i].panes.firstIndex(of: pane) {
+                updated[i].panes.remove(at: existingIndex)
+                removedFromSameSidebarBeforeTarget = true
+            } else {
+                updated[i].panes.removeAll { $0 == pane }
+            }
+        }
+
+        if let targetSidebarIndex = updated.firstIndex(where: { $0.id == id }) {
+            let panes = updated[targetSidebarIndex].panes
+            let adjustedIndex = min(
+                max(0, insertionIndex - (removedFromSameSidebarBeforeTarget ? 1 : 0)),
+                panes.count
+            )
+            updated[targetSidebarIndex].panes.insert(pane, at: adjustedIndex)
+        }
+
+        sidebars = updated
+    }
+
+    /// Remove a pane from a specific sidebar
+    func removePane(_ pane: SidebarPane, fromSidebar id: UUID) {
+        var updated = sidebars
+        if let i = updated.firstIndex(where: { $0.id == id }) {
+            updated[i].panes.removeAll { $0 == pane }
+        }
+        sidebars = updated
+    }
+
+    func isSidebarCollapsed(_ id: UUID) -> Bool {
+        collapsedSidebarIDs.contains(id.uuidString)
+    }
+
+    func toggleSidebarCollapsed(_ id: UUID) {
+        let key = id.uuidString
+        if collapsedSidebarIDs.contains(key) {
+            collapsedSidebarIDs.remove(key)
+        } else {
+            collapsedSidebarIDs.insert(key)
+        }
+    }
+
     var hasGitHubPAT: Bool {
         !githubPAT.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+
+    /// Apply a saved pane-assignment dictionary to the fixed sidebar list.
+    static func applyPaneAssignments(_ assignments: [String: [SidebarPane]]?) -> [Sidebar] {
+        guard let assignments else { return FixedSidebar.all }
+        return FixedSidebar.all.map { sidebar in
+            let key = sidebar.id.uuidString
+            if let panes = assignments[key] {
+                return Sidebar(id: sidebar.id, position: sidebar.position, panes: panes)
+            }
+            return sidebar
+        }
+    }
+
+    static let defaultPaneHeights: [String: CGFloat] = [
+        "files":    400,
+        "links":    200,
+        "terminal": 300,
+        "tags":     200,
+        "graph":    300,
+    ]
 
     let configPath: String
     let vaultRootURL: URL?
@@ -119,60 +245,16 @@ class SettingsManager: ObservableObject {
         var dailyNotesOpenOnStartup: Bool?
         var autoSave: Bool
         var autoPush: Bool
-        var leftSidebarPanes: [SidebarPane]?
-        var rightSidebarPanes: [SidebarPane]?
-        var leftPaneHeights: [String: CGFloat]?
-        var rightPaneHeights: [String: CGFloat]?
+        var sidebarPaneHeights: [String: CGFloat]?
         var collapsedPanes: [String]?
+        var collapsedSidebarIDs: [String]?
+        /// Pane assignments: maps sidebar UUID string -> [SidebarPane]
+        var sidebarPaneAssignments: [String: [SidebarPane]]?
         var githubPAT: String?
         var fileTreeMode: String?
         var pinnedItems: [PinnedItem]?
         var defaultEditMode: Bool?
         var hideMarkdownWhileEditing: Bool?
-
-        init(
-            onBootCommand: String,
-            fileExtensionFilter: String,
-            hiddenFileFolderFilter: String?,
-            templatesDirectory: String,
-            dailyNotesEnabled: Bool?,
-            dailyNotesFolder: String?,
-            dailyNotesTemplate: String?,
-            dailyNotesOpenOnStartup: Bool?,
-            autoSave: Bool,
-            autoPush: Bool,
-            leftSidebarPanes: [SidebarPane]?,
-            rightSidebarPanes: [SidebarPane]?,
-            leftPaneHeights: [String: CGFloat]?,
-            rightPaneHeights: [String: CGFloat]?,
-            collapsedPanes: [String]?,
-            githubPAT: String?,
-            fileTreeMode: String?,
-            pinnedItems: [PinnedItem]?,
-            defaultEditMode: Bool?,
-            hideMarkdownWhileEditing: Bool?
-        ) {
-            self.onBootCommand = onBootCommand
-            self.fileExtensionFilter = fileExtensionFilter
-            self.hiddenFileFolderFilter = hiddenFileFolderFilter
-            self.templatesDirectory = templatesDirectory
-            self.dailyNotesEnabled = dailyNotesEnabled
-            self.dailyNotesFolder = dailyNotesFolder
-            self.dailyNotesTemplate = dailyNotesTemplate
-            self.dailyNotesOpenOnStartup = dailyNotesOpenOnStartup
-            self.autoSave = autoSave
-            self.autoPush = autoPush
-            self.leftSidebarPanes = leftSidebarPanes
-            self.rightSidebarPanes = rightSidebarPanes
-            self.leftPaneHeights = leftPaneHeights
-            self.rightPaneHeights = rightPaneHeights
-            self.collapsedPanes = collapsedPanes
-            self.githubPAT = githubPAT
-            self.fileTreeMode = fileTreeMode
-            self.pinnedItems = pinnedItems
-            self.defaultEditMode = defaultEditMode
-            self.hideMarkdownWhileEditing = hideMarkdownWhileEditing
-        }
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -186,11 +268,10 @@ class SettingsManager: ObservableObject {
             dailyNotesOpenOnStartup = try container.decodeIfPresent(Bool.self, forKey: .dailyNotesOpenOnStartup)
             autoSave = try container.decodeIfPresent(Bool.self, forKey: .autoSave) ?? false
             autoPush = try container.decodeIfPresent(Bool.self, forKey: .autoPush) ?? false
-            leftSidebarPanes = try container.decodeIfPresent([SidebarPane].self, forKey: .leftSidebarPanes)
-            rightSidebarPanes = try container.decodeIfPresent([SidebarPane].self, forKey: .rightSidebarPanes)
-            leftPaneHeights = try container.decodeIfPresent([String: CGFloat].self, forKey: .leftPaneHeights)
-            rightPaneHeights = try container.decodeIfPresent([String: CGFloat].self, forKey: .rightPaneHeights)
+            sidebarPaneHeights = try container.decodeIfPresent([String: CGFloat].self, forKey: .sidebarPaneHeights)
             collapsedPanes = try container.decodeIfPresent([String].self, forKey: .collapsedPanes)
+            collapsedSidebarIDs = try container.decodeIfPresent([String].self, forKey: .collapsedSidebarIDs)
+            sidebarPaneAssignments = try container.decodeIfPresent([String: [SidebarPane]].self, forKey: .sidebarPaneAssignments)
             githubPAT = try container.decodeIfPresent(String.self, forKey: .githubPAT)
             fileTreeMode = try container.decodeIfPresent(String.self, forKey: .fileTreeMode)
             pinnedItems = try container.decodeIfPresent([PinnedItem].self, forKey: .pinnedItems)
@@ -266,28 +347,25 @@ class SettingsManager: ObservableObject {
     /// Config for machine-local settings only
     private struct GlobalConfig: Codable {
         var githubPAT: String?
-        var leftSidebarPanes: [SidebarPane]?
-        var rightSidebarPanes: [SidebarPane]?
-        var leftPaneHeights: [String: CGFloat]?
-        var rightPaneHeights: [String: CGFloat]?
+        var sidebarPaneHeights: [String: CGFloat]?
         var collapsedPanes: [String]?
+        var collapsedSidebarIDs: [String]?
+        var sidebarPaneAssignments: [String: [SidebarPane]]?
         var fileTreeMode: String?
 
         init(
             githubPAT: String?,
-            leftSidebarPanes: [SidebarPane]?,
-            rightSidebarPanes: [SidebarPane]?,
-            leftPaneHeights: [String: CGFloat]?,
-            rightPaneHeights: [String: CGFloat]?,
+            sidebarPaneHeights: [String: CGFloat]?,
             collapsedPanes: [String]?,
+            collapsedSidebarIDs: [String]?,
+            sidebarPaneAssignments: [String: [SidebarPane]]?,
             fileTreeMode: String?
         ) {
             self.githubPAT = githubPAT
-            self.leftSidebarPanes = leftSidebarPanes
-            self.rightSidebarPanes = rightSidebarPanes
-            self.leftPaneHeights = leftPaneHeights
-            self.rightPaneHeights = rightPaneHeights
+            self.sidebarPaneHeights = sidebarPaneHeights
             self.collapsedPanes = collapsedPanes
+            self.collapsedSidebarIDs = collapsedSidebarIDs
+            self.sidebarPaneAssignments = sidebarPaneAssignments
             self.fileTreeMode = fileTreeMode
         }
     }
@@ -319,11 +397,10 @@ class SettingsManager: ObservableObject {
             self.dailyNotesOpenOnStartup = config.dailyNotesOpenOnStartup ?? false
             self.autoSave = config.autoSave
             self.autoPush = config.autoPush
-            self.leftSidebarPanes = config.leftSidebarPanes ?? [.files, .tags, .links]
-            self.rightSidebarPanes = config.rightSidebarPanes ?? [.terminal]
-            self.leftPaneHeights = config.leftPaneHeights ?? [:]
-            self.rightPaneHeights = config.rightPaneHeights ?? [:]
+            self.sidebars = Self.applyPaneAssignments(config.sidebarPaneAssignments)
+            self.sidebarPaneHeights = config.sidebarPaneHeights ?? Self.defaultPaneHeights
             self.collapsedPanes = Set(config.collapsedPanes ?? [])
+            self.collapsedSidebarIDs = Set(config.collapsedSidebarIDs ?? [FixedSidebar.right2ID.uuidString])
             self.githubPAT = config.githubPAT ?? ""
             self.fileTreeMode = FileTreeMode(rawValue: config.fileTreeMode ?? "") ?? .folder
             self.pinnedItems = config.pinnedItems ?? []
@@ -340,11 +417,10 @@ class SettingsManager: ObservableObject {
             self.dailyNotesOpenOnStartup = false
             self.autoSave = false
             self.autoPush = false
-            self.leftSidebarPanes = [.files, .tags, .links]
-            self.rightSidebarPanes = [.terminal]
-            self.leftPaneHeights = [:]
-            self.rightPaneHeights = [:]
+            self.sidebars = FixedSidebar.all
+            self.sidebarPaneHeights = Self.defaultPaneHeights
             self.collapsedPanes = []
+            self.collapsedSidebarIDs = [FixedSidebar.right2ID.uuidString]
             self.githubPAT = ""
             self.fileTreeMode = .folder
             self.pinnedItems = []
@@ -417,27 +493,25 @@ class SettingsManager: ObservableObject {
                 self.hideMarkdownWhileEditing = false
             }
 
-            self.leftSidebarPanes = [.files, .tags, .links]
-            self.rightSidebarPanes = [.terminal]
-            self.leftPaneHeights = [:]
-            self.rightPaneHeights = [:]
+            self.sidebars = FixedSidebar.all
+            self.sidebarPaneHeights = Self.defaultPaneHeights
             self.collapsedPanes = []
+            self.collapsedSidebarIDs = [FixedSidebar.right2ID.uuidString]
             self.fileTreeMode = .folder
 
             // Load global/machine-local settings
             if let globalConfig = Self.loadGlobalConfig(from: globalConfigPath) {
                 self.githubPAT = globalConfig.githubPAT ?? ""
-                self.leftSidebarPanes = globalConfig.leftSidebarPanes ?? self.leftSidebarPanes
-                self.rightSidebarPanes = globalConfig.rightSidebarPanes ?? self.rightSidebarPanes
-                self.leftPaneHeights = globalConfig.leftPaneHeights ?? self.leftPaneHeights
-                self.rightPaneHeights = globalConfig.rightPaneHeights ?? self.rightPaneHeights
-                self.collapsedPanes = Set(globalConfig.collapsedPanes ?? Array(self.collapsedPanes))
+                self.sidebars = Self.applyPaneAssignments(globalConfig.sidebarPaneAssignments)
+                self.sidebarPaneHeights = globalConfig.sidebarPaneHeights ?? Self.defaultPaneHeights
+                self.collapsedPanes = Set(globalConfig.collapsedPanes ?? [])
+                self.collapsedSidebarIDs = Set(globalConfig.collapsedSidebarIDs ?? [FixedSidebar.right2ID.uuidString])
                 self.fileTreeMode = FileTreeMode(rawValue: globalConfig.fileTreeMode ?? "") ?? self.fileTreeMode
             } else {
                 self.githubPAT = ""
             }
         } else {
-            // No vault mode: use all defaults, including empty githubPAT
+            // No vault mode: use all defaults
             self.onBootCommand = ""
             self.fileExtensionFilter = "*.md, *.txt"
             self.hiddenFileFolderFilter = ""
@@ -448,11 +522,10 @@ class SettingsManager: ObservableObject {
             self.dailyNotesOpenOnStartup = false
             self.autoSave = false
             self.autoPush = false
-            self.leftSidebarPanes = [.files, .tags, .links]
-            self.rightSidebarPanes = [.terminal]
-            self.leftPaneHeights = [:]
-            self.rightPaneHeights = [:]
+            self.sidebars = FixedSidebar.all
+            self.sidebarPaneHeights = Self.defaultPaneHeights
             self.collapsedPanes = []
+            self.collapsedSidebarIDs = [FixedSidebar.right2ID.uuidString]
             self.githubPAT = ""
             self.fileTreeMode = .folder
             self.pinnedItems = []
@@ -545,25 +618,109 @@ class SettingsManager: ObservableObject {
     }
 
     /// Schedule a debounced save to disk, coalescing rapid mutations.
-    /// In test environments, saves are performed synchronously to avoid timing issues.
+    /// Snapshot all values on the main thread, then serialize on a background thread.
     private func save() {
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
-            performSave()
-            return
+            flush(); return
         }
         pendingSave?.cancel()
-        let workItem = DispatchWorkItem { [weak self] in
-            self?.performSave()
+        let snap = SaveSnapshot(from: self)
+        let work = DispatchWorkItem {
+            DispatchQueue.global(qos: .utility).async { snap.write() }
         }
-        pendingSave = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.saveDebounceInterval, execute: workItem)
+        pendingSave = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.saveDebounceInterval, execute: work)
     }
 
-    /// Actually write settings to disk.
-    private func performSave() {
-        if useLegacyMode {
-            // Legacy mode: save everything to single config file
-            let config = Config(
+    private func flush() {
+        SaveSnapshot(from: self).write()
+    }
+
+    // Value-type snapshot so background thread never touches SettingsManager.
+    private struct SaveSnapshot {
+        let useLegacyMode: Bool
+        let onBootCommand: String
+        let fileExtensionFilter: String
+        let hiddenFileFolderFilter: String
+        let templatesDirectory: String
+        let dailyNotesEnabled: Bool
+        let dailyNotesFolder: String
+        let dailyNotesTemplate: String
+        let dailyNotesOpenOnStartup: Bool
+        let autoSave: Bool
+        let autoPush: Bool
+        let sidebarPaneAssignments: [String: [SidebarPane]]
+        let sidebarPaneHeights: [String: CGFloat]
+        let collapsedPanes: [String]
+        let collapsedSidebarIDs: [String]
+        let githubPAT: String
+        let fileTreeMode: FileTreeMode
+        let pinnedItems: [PinnedItem]
+        let defaultEditMode: Bool
+        let hideMarkdownWhileEditing: Bool
+        let configPath: String
+        let vaultRootURL: URL?
+        let globalConfigPath: String?
+
+        init(from s: SettingsManager) {
+            useLegacyMode         = s.useLegacyMode
+            onBootCommand         = s.onBootCommand
+            fileExtensionFilter   = s.fileExtensionFilter
+            hiddenFileFolderFilter = s.hiddenFileFolderFilter
+            templatesDirectory    = s.templatesDirectory
+            dailyNotesEnabled     = s.dailyNotesEnabled
+            dailyNotesFolder      = s.dailyNotesFolder
+            dailyNotesTemplate    = s.dailyNotesTemplate
+            dailyNotesOpenOnStartup = s.dailyNotesOpenOnStartup
+            autoSave              = s.autoSave
+            autoPush              = s.autoPush
+            // Snapshot pane assignments as a dict keyed by sidebar UUID string
+            sidebarPaneAssignments = Dictionary(uniqueKeysWithValues: s.sidebars.map { ($0.id.uuidString, $0.panes) })
+            sidebarPaneHeights    = s.sidebarPaneHeights
+            collapsedPanes        = Array(s.collapsedPanes)
+            collapsedSidebarIDs   = Array(s.collapsedSidebarIDs)
+            githubPAT             = s.githubPAT
+            fileTreeMode          = s.fileTreeMode
+            pinnedItems           = s.pinnedItems
+            defaultEditMode       = s.defaultEditMode
+            hideMarkdownWhileEditing = s.hideMarkdownWhileEditing
+            configPath            = s.configPath
+            vaultRootURL          = s.vaultRootURL
+            globalConfigPath      = s.globalConfigPath
+        }
+
+        func write() {
+            if useLegacyMode {
+                writeLegacy()
+            } else if vaultRootURL != nil {
+                writeVault()
+            }
+        }
+
+        private func writeLegacy() {
+            // Encode a minimal Codable struct so we don't need the full Config init chain.
+            struct LegacyFile: Encodable {
+                var onBootCommand: String
+                var fileExtensionFilter: String
+                var hiddenFileFolderFilter: String?
+                var templatesDirectory: String
+                var dailyNotesEnabled: Bool?
+                var dailyNotesFolder: String?
+                var dailyNotesTemplate: String?
+                var dailyNotesOpenOnStartup: Bool?
+                var autoSave: Bool
+                var autoPush: Bool
+                var sidebarPaneAssignments: [String: [SidebarPane]]?
+                var sidebarPaneHeights: [String: CGFloat]?
+                var collapsedPanes: [String]?
+                var collapsedSidebarIDs: [String]?
+                var githubPAT: String?
+                var fileTreeMode: String?
+                var pinnedItems: [PinnedItem]?
+                var defaultEditMode: Bool?
+                var hideMarkdownWhileEditing: Bool?
+            }
+            let file = LegacyFile(
                 onBootCommand: onBootCommand,
                 fileExtensionFilter: fileExtensionFilter,
                 hiddenFileFolderFilter: hiddenFileFolderFilter.isEmpty ? nil : hiddenFileFolderFilter,
@@ -574,25 +731,26 @@ class SettingsManager: ObservableObject {
                 dailyNotesOpenOnStartup: dailyNotesOpenOnStartup,
                 autoSave: autoSave,
                 autoPush: autoPush,
-                leftSidebarPanes: leftSidebarPanes,
-                rightSidebarPanes: rightSidebarPanes,
-                leftPaneHeights: leftPaneHeights,
-                rightPaneHeights: rightPaneHeights,
-                collapsedPanes: Array(collapsedPanes),
+                sidebarPaneAssignments: sidebarPaneAssignments,
+                sidebarPaneHeights: sidebarPaneHeights.isEmpty ? nil : sidebarPaneHeights,
+                collapsedPanes: collapsedPanes.isEmpty ? nil : collapsedPanes,
+                collapsedSidebarIDs: collapsedSidebarIDs.isEmpty ? nil : collapsedSidebarIDs,
                 githubPAT: githubPAT.isEmpty ? nil : githubPAT,
                 fileTreeMode: fileTreeMode.rawValue,
                 pinnedItems: pinnedItems.isEmpty ? nil : pinnedItems,
                 defaultEditMode: defaultEditMode,
                 hideMarkdownWhileEditing: hideMarkdownWhileEditing ? true : nil
             )
-            let encoder = Self.makePrettyJSONEncoder()
-            guard let data = try? encoder.encode(config) else { return }
-            let configURL = URL(fileURLWithPath: configPath)
-            let parentDir = configURL.deletingLastPathComponent()
-            try? FileManager.default.createDirectory(at: parentDir, withIntermediateDirectories: true)
-            try? data.write(to: configURL)
-        } else if let vaultRootURL = vaultRootURL {
-            // Vault mode: save vault settings to .noted/settings.yml
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            guard let data = try? encoder.encode(file) else { return }
+            let url = URL(fileURLWithPath: configPath)
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? data.write(to: url)
+        }
+
+        private func writeVault() {
+            guard let vaultRootURL else { return }
             let vaultConfig = VaultConfig(
                 onBootCommand: onBootCommand,
                 fileExtensionFilter: fileExtensionFilter,
@@ -608,34 +766,26 @@ class SettingsManager: ObservableObject {
                 defaultEditMode: defaultEditMode,
                 hideMarkdownWhileEditing: hideMarkdownWhileEditing ? true : nil
             )
-
-            // Save vault-specific settings to .noted/settings.yml
             let notedDir = vaultRootURL.appendingPathComponent(".noted")
             try? FileManager.default.createDirectory(at: notedDir, withIntermediateDirectories: true)
-            let vaultConfigPath = notedDir.appendingPathComponent(Self.vaultSettingsFilename)
-
+            let vaultConfigURL = notedDir.appendingPathComponent(SettingsManager.vaultSettingsFilename)
             guard let vaultYAML = try? YAMLEncoder().encode(vaultConfig) else { return }
-            try? vaultYAML.write(to: vaultConfigPath, atomically: true, encoding: .utf8)
+            try? vaultYAML.write(to: vaultConfigURL, atomically: true, encoding: .utf8)
 
-            // Save machine-local settings to global config
-            if let globalConfigPath = globalConfigPath {
-                let globalConfig = GlobalConfig(
-                    githubPAT: githubPAT.isEmpty ? nil : githubPAT,
-                    leftSidebarPanes: leftSidebarPanes,
-                    rightSidebarPanes: rightSidebarPanes,
-                    leftPaneHeights: leftPaneHeights,
-                    rightPaneHeights: rightPaneHeights,
-                    collapsedPanes: Array(collapsedPanes),
-                    fileTreeMode: fileTreeMode.rawValue
-                )
-                guard let globalYAML = try? YAMLEncoder().encode(globalConfig) else { return }
-                let globalConfigURL = URL(fileURLWithPath: globalConfigPath)
-                let globalParentDir = globalConfigURL.deletingLastPathComponent()
-                try? FileManager.default.createDirectory(at: globalParentDir, withIntermediateDirectories: true)
-                try? globalYAML.write(to: globalConfigURL, atomically: true, encoding: .utf8)
-            }
+            guard let globalConfigPath else { return }
+            let globalConfig = GlobalConfig(
+                githubPAT: githubPAT.isEmpty ? nil : githubPAT,
+                sidebarPaneHeights: sidebarPaneHeights.isEmpty ? nil : sidebarPaneHeights,
+                collapsedPanes: collapsedPanes.isEmpty ? nil : collapsedPanes,
+                collapsedSidebarIDs: collapsedSidebarIDs.isEmpty ? nil : collapsedSidebarIDs,
+                sidebarPaneAssignments: sidebarPaneAssignments,
+                fileTreeMode: fileTreeMode.rawValue
+            )
+            guard let globalYAML = try? YAMLEncoder().encode(globalConfig) else { return }
+            let globalURL = URL(fileURLWithPath: globalConfigPath)
+            try? FileManager.default.createDirectory(at: globalURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? globalYAML.write(to: globalURL, atomically: true, encoding: .utf8)
         }
-        // If no vault and not legacy mode, don't save anything (use defaults in memory)
     }
 
     /// Load legacy config from disk
@@ -644,8 +794,11 @@ class SettingsManager: ObservableObject {
               let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
             return nil
         }
-
-        return try? JSONDecoder().decode(Config.self, from: data)
+        // Try JSON first, then YAML (older format)
+        if let config = try? JSONDecoder().decode(Config.self, from: data) { return config }
+        if let yaml = String(data: data, encoding: .utf8),
+           let config = try? YAMLDecoder().decode(Config.self, from: yaml) { return config }
+        return nil
     }
 
     /// Load vault-specific config from disk
@@ -673,10 +826,5 @@ class SettingsManager: ObservableObject {
         return try? JSONDecoder().decode(GlobalConfig.self, from: data)
     }
 
-    /// Create a JSON encoder with pretty printing enabled
-    private static func makePrettyJSONEncoder() -> JSONEncoder {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return encoder
-    }
+
 }

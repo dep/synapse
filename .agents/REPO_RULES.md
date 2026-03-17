@@ -175,6 +175,5 @@ Tests live in `SynapseTests/`. `AppStateTabsTests.swift` covers tab management a
 | CMD-[ / CMD-] | Go back / forward in history |
 | CMD-Shift-[ / CMD-Shift-] | Previous / next tab |
 | CMD-S | Save current file |
-| CMD-Shift-O | Open folder |
 | CMD-Shift-N | Exit vault |
 | Ctrl-Tab | Cycle tabs in MRU order |

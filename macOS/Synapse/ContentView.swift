@@ -26,11 +26,10 @@ func shouldConsumePaneSwitchShortcut(
 
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
-    @State private var isLeftSidebarVisible = true
-    @State private var isRightSidebarVisible = true
     @State private var keyEventMonitor: Any?
     @State private var leftSidebarWidth: CGFloat = 280
-    @State private var rightSidebarWidth: CGFloat = 340
+    @State private var rightSidebarPrimaryWidth: CGFloat = 340
+    @State private var rightSidebarSecondaryWidth: CGFloat = 300
 
     var body: some View {
         ZStack {
@@ -41,27 +40,48 @@ struct ContentView: View {
                 Rectangle().fill(SynapseTheme.border).frame(height: 1)
 
                 HStack(spacing: 0) {
-                    if isLeftSidebarVisible {
-                        leftSidebar
-                            .frame(width: leftSidebarWidth)
-                            .background(SynapseTheme.panel)
-                        ResizeDivider(axis: .vertical) { delta in
-                            leftSidebarWidth = max(SynapseTheme.Layout.minLeftSidebarWidth, min(SynapseTheme.Layout.maxLeftSidebarWidth, leftSidebarWidth + delta))
-                        }
+                    // Fixed left sidebar
+                    SidebarSlotView(
+                        sidebarID: FixedSidebar.leftID,
+                        settings: appState.settings,
+                        expandedWidth: leftSidebarWidth
+                    )
+                    ResizeDivider(axis: .vertical) { delta in
+                        leftSidebarWidth = max(SynapseTheme.Layout.minLeftSidebarWidth, min(SynapseTheme.Layout.maxLeftSidebarWidth, leftSidebarWidth + delta))
                     }
 
                     SplitPaneEditorView()
                         .environmentObject(appState)
                         .frame(minWidth: 420)
 
-                    if isRightSidebarVisible {
-                        ResizeDivider(axis: .vertical) { delta in
-                            rightSidebarWidth = max(SynapseTheme.Layout.minRightSidebarWidth, min(SynapseTheme.Layout.maxRightSidebarWidth, rightSidebarWidth - delta))
-                        }
-                        SidebarContainerView(settings: appState.settings, isLeft: false)
-                            .frame(width: rightSidebarWidth)
-                            .background(SynapseTheme.panel)
+                    ResizeDivider(axis: .vertical) { delta in
+                        rightSidebarPrimaryWidth = max(
+                            SynapseTheme.Layout.minRightSidebarWidth,
+                            min(SynapseTheme.Layout.maxRightSidebarWidth, rightSidebarPrimaryWidth - delta)
+                        )
                     }
+
+                    // Fixed right sidebars
+                    SidebarSlotView(
+                        sidebarID: FixedSidebar.right1ID,
+                        settings: appState.settings,
+                        expandedWidth: rightSidebarPrimaryWidth
+                    )
+                    ResizeDivider(axis: .vertical) { delta in
+                        let newPrimary = rightSidebarPrimaryWidth + delta
+                        let newSecondary = rightSidebarSecondaryWidth - delta
+                        guard newPrimary >= SynapseTheme.Layout.minRightSidebarWidth,
+                              newPrimary <= SynapseTheme.Layout.maxRightSidebarWidth,
+                              newSecondary >= SynapseTheme.Layout.minRightSidebarWidth,
+                              newSecondary <= SynapseTheme.Layout.maxRightSidebarWidth else { return }
+                        rightSidebarPrimaryWidth = newPrimary
+                        rightSidebarSecondaryWidth = newSecondary
+                    }
+                    SidebarSlotView(
+                        sidebarID: FixedSidebar.right2ID,
+                        settings: appState.settings,
+                        expandedWidth: rightSidebarSecondaryWidth
+                    )
                 }
             }
 
@@ -259,11 +279,6 @@ struct ContentView: View {
         }
     }
 
-    @ViewBuilder
-    private var leftSidebar: some View {
-        SidebarContainerView(settings: appState.settings, isLeft: true)
-    }
-
     private var headerBar: some View {
         HStack(spacing: 12) {
             // Left side: Title, folder, and navigation
@@ -324,79 +339,12 @@ struct ContentView: View {
 
             // Right side: Other toolbar buttons (without back/forward)
             HStack(spacing: 8) {
-                headerToggleButton(
-                    systemName: isLeftSidebarVisible ? "sidebar.left" : "sidebar.left",
-                    isActive: isLeftSidebarVisible,
-                    action: { isLeftSidebarVisible.toggle() },
-                    help: isLeftSidebarVisible ? "Hide Left Sidebar" : "Show Left Sidebar"
-                )
-
-                headerToggleButton(
-                    systemName: isRightSidebarVisible ? "sidebar.right" : "sidebar.right",
-                    isActive: isRightSidebarVisible,
-                    action: { isRightSidebarVisible.toggle() },
-                    help: isRightSidebarVisible ? "Hide Right Sidebar" : "Show Right Sidebar"
-                )
-                
-                // Global Add Pane menu
-                Menu {
-                    let used = Set(appState.settings.leftSidebarPanes + appState.settings.rightSidebarPanes)
-                    let available = SidebarPane.allCases.filter { !used.contains($0) }
-                    
-                    if available.isEmpty {
-                        Text("All panes are visible")
-                            .foregroundStyle(SynapseTheme.textMuted)
-                    } else {
-                        ForEach(available) { pane in
-                            Button(pane.title) {
-                                // Add to right sidebar by default, or left if right is hidden
-                                if isRightSidebarVisible {
-                                    appState.settings.rightSidebarPanes.append(pane)
-                                } else if isLeftSidebarVisible {
-                                    appState.settings.leftSidebarPanes.append(pane)
-                                } else {
-                                    // If both hidden, show right sidebar and add there
-                                    isRightSidebarVisible = true
-                                    appState.settings.rightSidebarPanes.append(pane)
-                                }
-                            }
-                        }
-                    }
-                    
-                    Divider()
-                    
-                    // Show current panes with option to hide
-                    if !appState.settings.leftSidebarPanes.isEmpty || !appState.settings.rightSidebarPanes.isEmpty {
-                        Text("Current Panes")
-                            .font(.caption)
-                            .foregroundStyle(SynapseTheme.textMuted)
-                        
-                        ForEach(appState.settings.leftSidebarPanes + appState.settings.rightSidebarPanes) { pane in
-                            Button("Hide \(pane.title)") {
-                                appState.settings.leftSidebarPanes.removeAll { $0 == pane }
-                                appState.settings.rightSidebarPanes.removeAll { $0 == pane }
-                            }
-                        }
-                    }
-                } label: {
-                    Image(systemName: "plus.rectangle")
-                }
-                .buttonStyle(ChromeButtonStyle())
-                .help("Add or Remove Sidebar Panes")
-
                 Button(action: { appState.openGraphTab() }) {
                     Image(systemName: "circle.grid.2x2")
                 }
                 .buttonStyle(ChromeButtonStyle())
                 .keyboardShortcut("g", modifiers: [.command, .shift])
                 .help("Open Graph View (⌘⇧G)")
-
-                Button(action: appState.pickFolder) {
-                    Image(systemName: "folder.badge.plus")
-                }
-                .buttonStyle(ChromeButtonStyle())
-                .keyboardShortcut("o", modifiers: [.command, .shift])
-                .help("Open Folder (⇧⌘O)")
 
                 if appState.gitSyncStatus != .notGitRepo {
                     GitSyncIndicator()
@@ -449,6 +397,36 @@ struct ContentView: View {
                 .stroke(isActive ? SynapseTheme.accent.opacity(0.45) : Color.clear, lineWidth: 1)
         }
         .help(help)
+    }
+
+}
+
+private struct SidebarSlotView: View {
+    let sidebarID: UUID
+    @ObservedObject var settings: SettingsManager
+    let expandedWidth: CGFloat
+
+    private let collapsedRailWidth: CGFloat = 28
+
+    private var sidebar: Sidebar? {
+        settings.sidebars.first { $0.id == sidebarID }
+    }
+
+    private var width: CGFloat {
+        settings.isSidebarCollapsed(sidebarID) ? collapsedRailWidth : expandedWidth
+    }
+
+    var body: some View {
+        Group {
+            if let sidebar {
+                DynamicSidebarView(sidebar: sidebar, settings: settings)
+            } else {
+                Color.clear
+            }
+        }
+        .frame(width: width)
+        .background(SynapseTheme.panel)
+        .animation(.easeInOut(duration: 0.18), value: width)
     }
 }
 
@@ -739,95 +717,7 @@ private struct RootNoteSheet: View {
     }
 }
 
-// MARK: - Sidebar Framework
 
-struct SidebarContainerView: View {
-    @EnvironmentObject var appState: AppState
-    @ObservedObject private var settings: SettingsManager
-    let isLeft: Bool
-
-    init(settings: SettingsManager, isLeft: Bool) {
-        self.settings = settings
-        self.isLeft = isLeft
-    }
-
-    var panes: [SidebarPane] {
-        isLeft ? settings.leftSidebarPanes : settings.rightSidebarPanes
-    }
-
-    private var heights: [String: CGFloat] {
-        get { isLeft ? settings.leftPaneHeights : settings.rightPaneHeights }
-        nonmutating set {
-            if isLeft { settings.leftPaneHeights = newValue }
-            else { settings.rightPaneHeights = newValue }
-        }
-    }
-
-    /// Panes not currently in either sidebar — available to add
-    private var availablePanes: [SidebarPane] {
-        let used = Set(settings.leftSidebarPanes + settings.rightSidebarPanes)
-        return SidebarPane.allCases.filter { !used.contains($0) }
-    }
-
-    var body: some View {
-        GeometryReader { geo in
-            if panes.isEmpty {
-                EmptyDropZone(settings: settings, isLeft: isLeft)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(panes.enumerated()), id: \.element.id) { index, pane in
-                        let collapsed = settings.collapsedPanes.contains(pane.rawValue)
-                        let h = collapsed
-                            ? SidebarPaneWrapper.headerHeight
-                            : expandedHeight(for: pane, total: geo.size.height)
-
-                        SidebarPaneWrapper(pane: pane, settings: settings, isLeft: isLeft)
-                            .frame(height: h)
-
-                        if index < panes.count - 1 {
-                            let nextPane = panes[index + 1]
-                            let eitherCollapsed = collapsed || settings.collapsedPanes.contains(nextPane.rawValue)
-                            ResizeDivider(disabled: eitherCollapsed) { delta in
-                                let currentH = expandedHeight(for: pane, total: geo.size.height)
-                                let nextH = expandedHeight(for: nextPane, total: geo.size.height)
-                                let minH: CGFloat = 80
-                                let newCurrent = currentH + delta
-                                let newNext = nextH - delta
-                                guard newCurrent >= minH && newNext >= minH else { return }
-                                heights[pane.rawValue] = newCurrent
-                                heights[nextPane.rawValue] = newNext
-                            }
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .onChange(of: panes) { _ in
-                    // Clear stored heights when layout changes so panes get a fresh equal split
-                    if isLeft { settings.leftPaneHeights = [:] }
-                    else { settings.rightPaneHeights = [:] }
-                }
-            }
-        }
-        .background(SynapseTheme.panel)
-    }
-
-    private func expandedHeight(for pane: SidebarPane, total: CGFloat) -> CGFloat {
-        let expandedPanes = panes.filter { !settings.collapsedPanes.contains($0.rawValue) }
-        let collapsedCount = panes.count - expandedPanes.count
-        let dividerSpace = CGFloat(max(0, panes.count - 1)) * 6
-        let collapsedSpace = CGFloat(collapsedCount) * SidebarPaneWrapper.headerHeight
-        let available = max(0, total - dividerSpace - collapsedSpace)
-
-        guard !expandedPanes.isEmpty else { return SidebarPaneWrapper.headerHeight }
-
-        // Distribute available space proportionally using stored ratios, or equally as default
-        let totalStoredHeight = expandedPanes.compactMap { heights[$0.rawValue] }.reduce(0, +)
-        if totalStoredHeight > 0, let stored = heights[pane.rawValue] {
-            return max(80, available * (stored / totalStoredHeight))
-        }
-        return max(80, available / CGFloat(expandedPanes.count))
-    }
-}
 
 struct ResizeDivider: View {
     var disabled: Bool = false
@@ -882,200 +772,321 @@ struct ResizeDivider: View {
     }
 }
 
-// Empty sidebar drop target
-struct EmptyDropZone: View {
+
+
+/// Stub kept only to satisfy SidebarPaneWrapper.headerHeight references in DynamicSidebarView.
+enum SidebarPaneWrapper {
+    static let headerHeight: CGFloat = 33
+}
+
+// MARK: - Sidebar View
+
+/// Renders one of the three fixed sidebar containers.
+struct DynamicSidebarView: View {
+    let sidebar: Sidebar
     @ObservedObject var settings: SettingsManager
-    let isLeft: Bool
-    @State private var isTargeted = false
+    @State private var isDropTarget = false
+
+    private var isCollapsedToRail: Bool { settings.isSidebarCollapsed(sidebar.id) }
+    private var railAlignment: Alignment { sidebar.position == .left ? .trailing : .leading }
+    private var collapseIcon: String {
+        switch (sidebar.position, isCollapsedToRail) {
+        case (.left,  false): return "chevron.left"
+        case (.left,  true):  return "chevron.right"
+        case (.right, false): return "chevron.right"
+        case (.right, true):  return "chevron.left"
+        }
+    }
+    private var availablePanes: [SidebarPane] { settings.availablePanes }
 
     var body: some View {
-        VStack {
-            Spacer()
-            Text("Drop panels here")
-                .font(.system(size: 12, weight: .medium, design: .rounded))
-                .foregroundStyle(isTargeted ? SynapseTheme.accent : SynapseTheme.textMuted)
-            Spacer()
+        ZStack(alignment: railAlignment) {
+            expandedSidebar
+                .opacity(isCollapsedToRail ? 0 : 1)
+                .allowsHitTesting(!isCollapsedToRail)
+
+            if isCollapsedToRail {
+                railToggle(compact: true).padding(.horizontal, 4)
+            }
         }
-        .frame(maxWidth: .infinity, minHeight: 200)
-        .background(isTargeted ? SynapseTheme.accent.opacity(0.08) : Color.clear)
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(isTargeted ? SynapseTheme.accent.opacity(0.5) : Color.clear, lineWidth: 1)
-                .padding(4)
-        )
-        .onDrop(of: [.utf8PlainText], isTargeted: $isTargeted) { providers in
-            loadAndMove(providers: providers, insertIndex: 0)
+        .clipped()
+    }
+
+    private var expandedSidebar: some View {
+        VStack(spacing: 0) {
+            // Header strip: "Add Pane" button
+            if !availablePanes.isEmpty {
+                HStack {
+                    Spacer()
+                    Menu {
+                        ForEach(availablePanes) { pane in
+                            Button(pane.title) {
+                                settings.assignPane(pane, toSidebar: sidebar.id)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 10))
+                            .foregroundStyle(SynapseTheme.textMuted)
+                            .frame(width: 28, height: 22)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Add pane to this sidebar")
+                }
+                .padding(.horizontal, 6)
+                .background(SynapseTheme.panelElevated)
+            }
+
+            Rectangle().fill(isDropTarget ? SynapseTheme.accent : SynapseTheme.border).frame(height: 1)
+
+            GeometryReader { geo in
+                Group {
+                    if sidebar.panes.isEmpty {
+                        VStack(spacing: 14) {
+                            Spacer(minLength: 0)
+                            Image(systemName: "square.stack.3d.up.slash")
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundStyle(SynapseTheme.textMuted)
+                            Text("This sidebar is empty")
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundStyle(SynapseTheme.textSecondary)
+                            Text("Add a pane to start using this space.")
+                                .font(.system(size: 11))
+                                .foregroundStyle(SynapseTheme.textMuted)
+                            if !availablePanes.isEmpty {
+                                Menu {
+                                    ForEach(availablePanes) { pane in
+                                        Button(pane.title) {
+                                            settings.assignPane(pane, toSidebar: sidebar.id)
+                                        }
+                                    }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "plus.circle.fill")
+                                            .font(.system(size: 12, weight: .semibold))
+                                        Text("Add Pane")
+                                            .font(.system(size: 11, weight: .semibold))
+                                    }
+                                    .foregroundStyle(SynapseTheme.accent)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 7)
+                                    .background(SynapseTheme.panelElevated, in: Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    } else {
+                        VStack(spacing: 0) {
+                            ForEach(Array(sidebar.panes.enumerated()), id: \.element) { index, pane in
+                                let collapsed = settings.collapsedPanes.contains(pane.rawValue)
+                                let paneH = collapsed
+                                    ? SidebarPaneWrapper.headerHeight
+                                    : expandedHeight(for: pane, total: geo.size.height)
+
+                                SidebarPaneInContainer(pane: pane, sidebarId: sidebar.id, settings: settings)
+                                    .frame(height: paneH)
+
+                                if index < sidebar.panes.count - 1 {
+                                    let next = sidebar.panes[index + 1]
+                                    let eitherCollapsed = collapsed || settings.collapsedPanes.contains(next.rawValue)
+                                    ResizeDivider(disabled: eitherCollapsed, axis: .horizontal) { delta in
+                                        let cur  = expandedHeight(for: pane, total: geo.size.height)
+                                        let nxt  = expandedHeight(for: next, total: geo.size.height)
+                                        let newCur = cur + delta; let newNxt = nxt - delta
+                                        guard newCur >= 80 && newNxt >= 80 else { return }
+                                        settings.sidebarPaneHeights[pane.rawValue] = newCur
+                                        settings.sidebarPaneHeights[next.rawValue] = newNxt
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
+        }
+        .background(isDropTarget ? SynapseTheme.accent.opacity(0.06) : SynapseTheme.panel)
+        .overlay(alignment: railAlignment) {
+            railToggle(compact: false)
+                .offset(x: sidebar.position == .left ? 9 : -9)
+        }
+        .onDrop(of: [.plainText], isTargeted: $isDropTarget) { providers in
+            guard let provider = providers.first else { return false }
+            provider.loadItem(forTypeIdentifier: "public.plain-text", options: nil) { item, _ in
+                let raw: String?
+                if let data = item as? Data { raw = String(data: data, encoding: .utf8) }
+                else if let s = item as? String { raw = s }
+                else { raw = nil }
+                guard let raw, let pane = SidebarPane(rawValue: raw),
+                      !sidebar.panes.contains(pane) else { return }
+                DispatchQueue.main.async { settings.assignPane(pane, toSidebar: sidebar.id) }
+            }
+            return true
         }
     }
 
-    private func loadAndMove(providers: [NSItemProvider], insertIndex: Int) -> Bool {
-        guard let provider = providers.first else { return false }
-        provider.loadItem(forTypeIdentifier: "public.utf8-plain-text", options: nil) { item, _ in
-            guard let data = item as? Data,
-                  let id = String(data: data, encoding: .utf8),
-                  let draggedPane = SidebarPane(rawValue: id) else { return }
-            DispatchQueue.main.async {
-                settings.leftSidebarPanes.removeAll { $0 == draggedPane }
-                settings.rightSidebarPanes.removeAll { $0 == draggedPane }
-                var target = isLeft ? settings.leftSidebarPanes : settings.rightSidebarPanes
-                target.insert(draggedPane, at: min(insertIndex, target.count))
-                if isLeft { settings.leftSidebarPanes = target }
-                else { settings.rightSidebarPanes = target }
+    @ViewBuilder
+    private func railToggle(compact: Bool) -> some View {
+        VStack {
+            Spacer(minLength: 0)
+            Button { settings.toggleSidebarCollapsed(sidebar.id) } label: {
+                Image(systemName: collapseIcon)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(SynapseTheme.textMuted)
+                    .frame(width: compact ? 20 : 18, height: compact ? 56 : 52)
+                    .background(SynapseTheme.panelElevated, in: RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(SynapseTheme.border, lineWidth: 1))
             }
+            .buttonStyle(.plain)
+            .help(isCollapsedToRail ? "Expand Sidebar" : "Collapse Sidebar")
+            Spacer(minLength: 0)
         }
-        return true
+        .padding(.horizontal, compact ? 4 : 0)
+    }
+
+    private func expandedHeight(for pane: SidebarPane, total: CGFloat) -> CGFloat {
+        let expanded = sidebar.panes.filter { !settings.collapsedPanes.contains($0.rawValue) }
+        let collapsedCount = sidebar.panes.count - expanded.count
+        let divSpace    = CGFloat(max(0, sidebar.panes.count - 1)) * 6
+        let collSpace   = CGFloat(collapsedCount) * SidebarPaneWrapper.headerHeight
+        let available   = max(0, total - divSpace - collSpace)
+        guard !expanded.isEmpty else { return SidebarPaneWrapper.headerHeight }
+        let totalStored = expanded.compactMap { settings.sidebarPaneHeights[$0.rawValue] }.reduce(0, +)
+        if totalStored > 0, let stored = settings.sidebarPaneHeights[pane.rawValue] {
+            return max(80, available * (stored / totalStored))
+        }
+        return max(80, available / CGFloat(expanded.count))
     }
 }
 
-struct SidebarPaneWrapper: View {
-    @ObservedObject var settings: SettingsManager
+/// Renders a single pane within a fixed sidebar.
+/// Uses a plain (non-@ObservedObject) SettingsManager ref so mutations elsewhere
+/// don't re-evaluate the expensive pane body.
+struct SidebarPaneInContainer: View {
     let pane: SidebarPane
-    let isLeft: Bool
+    let sidebarId: UUID
+    let settings: SettingsManager   // plain ref — no observation
 
-    static let headerHeight: CGFloat = 33
-
-    @State private var headerTargeted = false
-    @State private var contentTargeted = false
-    @State private var headerHovered = false
-    @State private var isDraggingHeader = false
-
-    private var isCollapsed: Bool {
-        settings.collapsedPanes.contains(pane.rawValue)
-    }
-
-    private func toggleCollapsed() {
-        if settings.collapsedPanes.contains(pane.rawValue) {
-            settings.collapsedPanes.remove(pane.rawValue)
-        } else {
-            settings.collapsedPanes.insert(pane.rawValue)
-        }
-    }
+    @State private var isCollapsed: Bool = false
+    @State private var headerHovered: Bool = false
+    @State private var showRemoveConfirmation = false
+    @State private var isDropTarget = false
 
     var body: some View {
         VStack(spacing: 0) {
-            // Drop indicator above — visible while hovering over header
-            Rectangle()
-                .fill(SynapseTheme.accent)
-                .frame(height: 2)
-                .opacity(headerTargeted ? 1 : 0)
+            // Header: drag handle + collapse + remove button
+            HStack(spacing: 6) {
+                Button(action: toggleCollapsed) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(SynapseTheme.textMuted)
 
-            // Header — drag handle + collapse toggle
-            Button(action: toggleCollapsed) {
-                HStack(spacing: 6) {
-                    Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(SynapseTheme.textMuted)
-                        .frame(width: 14)
+                        Text(pane.title)
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .tracking(1.8)
+                            .foregroundStyle(SynapseTheme.textMuted)
+                            .textCase(.uppercase)
 
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(SynapseTheme.textMuted)
+                            .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                            .animation(.easeInOut(duration: 0.18), value: isCollapsed)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .onDrag {
+                    NSItemProvider(object: pane.rawValue as NSString)
+                } preview: {
                     Text(pane.title)
                         .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .tracking(1.8)
-                        .foregroundStyle(SynapseTheme.textMuted)
-                        .textCase(.uppercase)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(SynapseTheme.accent, in: RoundedRectangle(cornerRadius: 6))
+                }
 
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
+                // Remove button — visible on hover
+                Button { showRemoveConfirmation = true } label: {
+                    Image(systemName: "xmark")
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(SynapseTheme.textMuted)
-                        .rotationEffect(.degrees(isCollapsed ? 0 : 90))
-                        .animation(.easeInOut(duration: 0.18), value: isCollapsed)
+                        .opacity(headerHovered ? 1 : 0)
+                        .frame(width: 18, height: 18)
+                        .contentShape(Rectangle())
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(SynapseTheme.panelElevated)
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .help("Remove \(pane.title)")
             }
-            .buttonStyle(.plain)
-            .onHover { hovering in
-                headerHovered = hovering
-                if hovering {
-                    NSCursor.openHand.push()
-                } else {
-                    NSCursor.pop()
-                }
-            }
-            .onDrag {
-                NSCursor.closedHand.push()
-                return NSItemProvider(object: pane.rawValue as NSString)
-            } preview: {
-                HStack(spacing: 8) {
-                    Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 10, weight: .bold))
-                    Text(pane.title)
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .tracking(1.2)
-                        .textCase(.uppercase)
-                }
-                .foregroundColor(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(SynapseTheme.accent, in: RoundedRectangle(cornerRadius: 6))
-            }
-            .onDrop(of: [.utf8PlainText], isTargeted: $headerTargeted) { providers, _ in
-                return loadAndMove(providers: providers, before: true)
-            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(isDropTarget ? SynapseTheme.accent.opacity(0.10) : SynapseTheme.panelElevated)
+            .onHover { headerHovered = $0 }
 
-            // Content — only rendered when expanded to avoid wasting resources
-            if !isCollapsed {
-                Group {
-                    switch pane {
-                    case .files:
-                        FileTreeView(settings: settings)
-                            .frame(minHeight: 150)
-                    case .tags:
-                        TagsPaneView()
-                            .frame(minHeight: 100)
-                    case .links:
-                        RelatedLinksPaneView()
-                            .frame(minHeight: 150)
-                    case .terminal:
-                        TerminalPaneView()
-                            .frame(minHeight: 150)
-                    case .graph:
-                        GraphPaneView()
-                            .frame(minHeight: 150)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onDrop(of: [.utf8PlainText], isTargeted: $contentTargeted) { providers, _ in
-                    return loadAndMove(providers: providers, before: false)
-                }
-            }
-
-            // Drop indicator below — visible while hovering over content
-            Rectangle()
-                .fill(SynapseTheme.accent)
-                .frame(height: 2)
-                .opacity(contentTargeted ? 1 : 0)
+            // Content — kept mounted so Terminal doesn't restart on collapse
+            paneContent
+                .frame(maxWidth: .infinity, maxHeight: isCollapsed ? 0 : .infinity)
+                .clipped()
+                .allowsHitTesting(!isCollapsed)
+                .opacity(isCollapsed ? 0 : 1)
         }
-        .background(SynapseTheme.panel)
+        .contentShape(Rectangle())
+        .background(isDropTarget ? SynapseTheme.accent.opacity(0.10) : Color.clear)
+        .onDrop(of: [.plainText], isTargeted: $isDropTarget) { providers in
+            insertDroppedPane(providers: providers)
+        }
+        .onAppear { isCollapsed = settings.collapsedPanes.contains(pane.rawValue) }
+        .alert("Remove Pane?", isPresented: $showRemoveConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Remove", role: .destructive) {
+                settings.removePane(pane, fromSidebar: sidebarId)
+            }
+        } message: {
+            Text("\"\(pane.title)\" will be removed from this sidebar.")
+        }
     }
 
-    init(pane: SidebarPane, settings: SettingsManager, isLeft: Bool) {
-        self.pane = pane
-        self.settings = settings
-        self.isLeft = isLeft
+    @ViewBuilder
+    private var paneContent: some View {
+        switch pane {
+        case .files:    FileTreeView(settings: settings)
+        case .tags:     TagsPaneView()
+        case .links:    RelatedLinksPaneView()
+        case .terminal: TerminalPaneView()
+        case .graph:    GraphPaneView()
+        }
     }
 
-    private func loadAndMove(providers: [NSItemProvider], before: Bool) -> Bool {
+    private func toggleCollapsed() {
+        isCollapsed.toggle()
+        if isCollapsed {
+            settings.collapsedPanes.insert(pane.rawValue)
+        } else {
+            settings.collapsedPanes.remove(pane.rawValue)
+        }
+    }
+
+    private func insertDroppedPane(providers: [NSItemProvider]) -> Bool {
         guard let provider = providers.first else { return false }
-        provider.loadItem(forTypeIdentifier: "public.utf8-plain-text", options: nil) { item, _ in
-            guard let data = item as? Data,
-                  let id = String(data: data, encoding: .utf8),
-                  let draggedPane = SidebarPane(rawValue: id),
-                  draggedPane != pane else { return }
+        provider.loadItem(forTypeIdentifier: "public.plain-text", options: nil) { item, _ in
+            let raw: String?
+            if let data = item as? Data {
+                raw = String(data: data, encoding: .utf8)
+            } else if let string = item as? String {
+                raw = string
+            } else {
+                raw = nil
+            }
+
+            guard let raw, let draggedPane = SidebarPane(rawValue: raw) else { return }
             DispatchQueue.main.async {
-                settings.leftSidebarPanes.removeAll { $0 == draggedPane }
-                settings.rightSidebarPanes.removeAll { $0 == draggedPane }
-                var target = isLeft ? settings.leftSidebarPanes : settings.rightSidebarPanes
-                if let idx = target.firstIndex(of: pane) {
-                    target.insert(draggedPane, at: before ? idx : idx + 1)
-                } else {
-                    target.append(draggedPane)
-                }
-                if isLeft { settings.leftSidebarPanes = target }
-                else { settings.rightSidebarPanes = target }
+                guard let sidebar = settings.sidebars.first(where: { $0.id == sidebarId }),
+                      let targetIndex = sidebar.panes.firstIndex(of: pane) else { return }
+                settings.movePane(draggedPane, toSidebar: sidebarId, at: targetIndex)
             }
         }
         return true

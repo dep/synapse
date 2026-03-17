@@ -338,62 +338,49 @@ final class SettingsManagerTests: XCTestCase {
         cancellable.cancel()
     }
 
-    // MARK: - Sidebar Panes
+    // MARK: - Fixed Sidebar Layout
 
-    func test_initialState_defaultSidebarPanes() {
-        XCTAssertEqual(sut.leftSidebarPanes, [.files, .tags, .links])
-        XCTAssertEqual(sut.rightSidebarPanes, [.terminal])
+    func test_fixedSidebars_alwaysHaveThree() {
+        XCTAssertEqual(sut.sidebars.count, 3)
     }
 
-    func test_leftSidebarPanes_canBeModified() {
-        sut.leftSidebarPanes = [.files]
-        XCTAssertEqual(sut.leftSidebarPanes, [.files])
+    func test_fixedSidebars_leftSidebarHasFilesAndLinks() {
+        let left = sut.leftSidebars
+        XCTAssertEqual(left.count, 1)
+        XCTAssertTrue(left[0].panes.contains(.files))
+        XCTAssertTrue(left[0].panes.contains(.links))
     }
 
-    func test_rightSidebarPanes_canBeModified() {
-        sut.rightSidebarPanes = [.links, .tags]
-        XCTAssertEqual(sut.rightSidebarPanes, [.links, .tags])
+    func test_fixedSidebars_right1HasTerminalAndTags() {
+        let right = sut.rightSidebars
+        XCTAssertGreaterThanOrEqual(right.count, 1)
+        let r1 = right[0]
+        XCTAssertTrue(r1.panes.contains(.terminal))
+        XCTAssertTrue(r1.panes.contains(.tags))
     }
 
-    func test_sidebarPanes_persistToDisk() {
-        sut.leftSidebarPanes = [.tags, .files]
-        sut.rightSidebarPanes = [.links]
-
-        let newManager = SettingsManager(configPath: configFilePath)
-        XCTAssertEqual(newManager.leftSidebarPanes, [.tags, .files])
-        XCTAssertEqual(newManager.rightSidebarPanes, [.links])
+    func test_fixedSidebars_right2CollapsedByDefault() {
+        XCTAssertTrue(sut.collapsedSidebarIDs.contains(FixedSidebar.right2ID.uuidString))
     }
 
-    func test_sidebarPanes_movingPaneFromLeftToRight() {
-        // Start: left=[files, tags, links], right=[terminal]
-        sut.leftSidebarPanes.removeAll { $0 == .links }
-        sut.rightSidebarPanes.append(.links)
-
-        XCTAssertFalse(sut.leftSidebarPanes.contains(.links))
-        XCTAssertTrue(sut.rightSidebarPanes.contains(.links))
+    func test_removePane_removesPaneFromSidebar() {
+        sut.removePane(.links, fromSidebar: FixedSidebar.leftID)
+        let left = sut.sidebars.first { $0.id == FixedSidebar.leftID }
+        XCTAssertEqual(left?.panes, [.files])
     }
 
-    func test_sidebarPanes_emptyLeftPanes_persistAndLoad() {
-        sut.leftSidebarPanes = []
-
-        let newManager = SettingsManager(configPath: configFilePath)
-        XCTAssertEqual(newManager.leftSidebarPanes, [])
+    func test_assignPane_movesPaneToAnotherSidebar() {
+        sut.assignPane(.links, toSidebar: FixedSidebar.right1ID)
+        let left = sut.sidebars.first { $0.id == FixedSidebar.leftID }
+        let right1 = sut.sidebars.first { $0.id == FixedSidebar.right1ID }
+        XCTAssertFalse(left?.panes.contains(.links) ?? true)
+        XCTAssertTrue(right1?.panes.contains(.links) ?? false)
     }
 
-    func test_load_missingSidebarPanesUsesDefaults() {
-        let config: [String: Any] = [
-            "onBootCommand": "",
-            "fileExtensionFilter": "*.md, *.txt",
-            "templatesDirectory": "templates",
-            "autoSave": false,
-            "autoPush": false
-        ]
-        let data = try! JSONSerialization.data(withJSONObject: config)
-        try! data.write(to: URL(fileURLWithPath: configFilePath))
-
-        let newManager = SettingsManager(configPath: configFilePath)
-        XCTAssertEqual(newManager.leftSidebarPanes, [.files, .tags, .links])
-        XCTAssertEqual(newManager.rightSidebarPanes, [.terminal])
+    func test_movePane_reordersWithinSameSidebar() {
+        sut.movePane(.tags, toSidebar: FixedSidebar.right1ID, at: 0)
+        let right1 = sut.sidebars.first { $0.id == FixedSidebar.right1ID }
+        XCTAssertEqual(right1?.panes, [.tags, .terminal])
     }
 
     // MARK: - Default Config Path
@@ -413,16 +400,6 @@ final class SettingsManagerTests: XCTestCase {
 
     // MARK: - Graph Pane
 
-    func test_graphPane_canBeAddedToLeftSidebar() {
-        sut.leftSidebarPanes.append(.graph)
-        XCTAssertTrue(sut.leftSidebarPanes.contains(.graph))
-    }
-
-    func test_graphPane_canBeAddedToRightSidebar() {
-        sut.rightSidebarPanes.append(.graph)
-        XCTAssertTrue(sut.rightSidebarPanes.contains(.graph))
-    }
-
     func test_graphPane_titleIsGraph() {
         XCTAssertEqual(SidebarPane.graph.title, "Graph")
     }
@@ -431,14 +408,18 @@ final class SettingsManagerTests: XCTestCase {
         XCTAssertEqual(SidebarPane.graph.rawValue, "graph")
     }
 
-    func test_graphPane_persistsToDisk() {
-        sut.leftSidebarPanes = [.graph]
-        let newManager = SettingsManager(configPath: configFilePath)
-        XCTAssertEqual(newManager.leftSidebarPanes, [.graph])
-    }
-
     func test_graphPane_includedInCaseIterable() {
         XCTAssertTrue(SidebarPane.allCases.contains(.graph))
+    }
+
+    func test_right2Sidebar_startsEmpty() {
+        let right2 = sut.sidebars.first { $0.id == FixedSidebar.right2ID }
+        XCTAssertNotNil(right2)
+        XCTAssertEqual(right2!.panes, [])
+    }
+
+    func test_graphPane_startsAvailable() {
+        XCTAssertTrue(sut.availablePanes.contains(.graph))
     }
 
     // MARK: - Vault-Specific Settings (.noted)
@@ -521,32 +502,19 @@ final class SettingsManagerTests: XCTestCase {
         let globalConfigPath = appSupportDir.appendingPathComponent("settings.yml").path
 
         let manager = SettingsManager(vaultRoot: vaultDir, globalConfigPath: globalConfigPath)
-        manager.leftSidebarPanes = [.files, .links]
-        manager.rightSidebarPanes = [.terminal, .tags]
-        manager.leftPaneHeights = [:]
-        manager.rightPaneHeights = [:]
+        manager.sidebarPaneHeights = ["files": 400]
         manager.collapsedPanes = []
         manager.fileTreeMode = .folder
 
         let vaultText = try! String(contentsOf: vaultDir.appendingPathComponent(".noted/settings.yml"), encoding: .utf8)
         let globalText = try! String(contentsOfFile: globalConfigPath, encoding: .utf8)
 
-        XCTAssertFalse(vaultText.contains("leftSidebarPanes:"))
-        XCTAssertFalse(vaultText.contains("rightSidebarPanes:"))
-        XCTAssertFalse(vaultText.contains("leftPaneHeights:"))
-        XCTAssertFalse(vaultText.contains("rightPaneHeights:"))
+        // Vault file should NOT contain layout settings
+        XCTAssertFalse(vaultText.contains("sidebarPaneHeights:"))
         XCTAssertFalse(vaultText.contains("collapsedPanes:"))
         XCTAssertFalse(vaultText.contains("fileTreeMode:"))
 
-        XCTAssertTrue(globalText.contains("leftSidebarPanes:"))
-        XCTAssertTrue(globalText.contains("- files"))
-        XCTAssertTrue(globalText.contains("- links"))
-        XCTAssertTrue(globalText.contains("rightSidebarPanes:"))
-        XCTAssertTrue(globalText.contains("- terminal"))
-        XCTAssertTrue(globalText.contains("- tags"))
-        XCTAssertTrue(globalText.contains("leftPaneHeights: {}"))
-        XCTAssertTrue(globalText.contains("rightPaneHeights: {}"))
-        XCTAssertTrue(globalText.contains("collapsedPanes: []"))
+        // Global config should contain layout settings
         XCTAssertTrue(globalText.contains("fileTreeMode: folder"))
     }
 
@@ -571,14 +539,6 @@ final class SettingsManagerTests: XCTestCase {
 
         let globalYAML = """
         githubPAT: ghp_test_token
-        leftSidebarPanes:
-          - files
-          - links
-        rightSidebarPanes:
-          - terminal
-          - tags
-        leftPaneHeights: {}
-        rightPaneHeights: {}
         collapsedPanes: []
         fileTreeMode: folder
         """
@@ -586,10 +546,6 @@ final class SettingsManagerTests: XCTestCase {
 
         let manager = SettingsManager(vaultRoot: vaultDir, globalConfigPath: globalConfigPath.path)
 
-        XCTAssertEqual(manager.leftSidebarPanes, [.files, .links])
-        XCTAssertEqual(manager.rightSidebarPanes, [.terminal, .tags])
-        XCTAssertEqual(manager.leftPaneHeights, [:])
-        XCTAssertEqual(manager.rightPaneHeights, [:])
         XCTAssertEqual(manager.collapsedPanes, [])
         XCTAssertEqual(manager.fileTreeMode, .folder)
         XCTAssertEqual(manager.githubPAT, "ghp_test_token")
@@ -702,8 +658,8 @@ final class SettingsManagerTests: XCTestCase {
         XCTAssertEqual(manager.hiddenFileFolderFilter, ".git")
         XCTAssertTrue(manager.dailyNotesEnabled)
         XCTAssertTrue(manager.autoSave)
-        XCTAssertEqual(manager.leftSidebarPanes, [.files, .tags, .links])
-        XCTAssertEqual(manager.rightSidebarPanes, [.terminal])
+        // Fixed sidebars always have 3 entries
+        XCTAssertEqual(manager.sidebars.count, 3)
     }
 
     private func makeGlobalConfigPath(named name: String) -> String {
