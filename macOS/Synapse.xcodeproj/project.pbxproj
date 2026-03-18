@@ -110,6 +110,7 @@
 		DC6C566BCC20D6F619A926CB /* FileTreeSortingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD983D6D3F278E0AD47E0D1 /* FileTreeSortingTests.swift */; };
 		E0730BEEF94695E2F06AFE72 /* GraphNodeColorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C55EAAB85AA800B037CDF588 /* GraphNodeColorTests.swift */; };
 		E08D238D2FCB17F5749FD3C1 /* AppStateCloneRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E6A63BB6A6141AA83800A2E /* AppStateCloneRepositoryTests.swift */; };
+		E7F2A859E55A23EA28421B0B /* MiniBrowserPaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB7D2020A789C4C8007B9F /* MiniBrowserPaneView.swift */; };
 		E84D8DF773FF8BED5152D2BC /* CollapsibleSectionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A307C880E354FA57E8BFEB62 /* CollapsibleSectionsTests.swift */; };
 		EA0BACF7C14159B75533C9F5 /* PinnedItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69131C0C1C0EAB9BC5CADE83 /* PinnedItem.swift */; };
 		F03FCDD03015035E226FE7CD /* GitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF3182DCA96C9518DC154E22 /* GitService.swift */; };
@@ -199,6 +200,7 @@
 		928B9D0E079FF89907F205E4 /* TagsPaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagsPaneView.swift; sourceTree = "<group>"; };
 		9573DDE37ACEA626605DC7AF /* FileTreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTreeView.swift; sourceTree = "<group>"; };
 		96B6C4ABA47C666C37524C4A /* AppStatePendingSearchQueryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStatePendingSearchQueryTests.swift; sourceTree = "<group>"; };
+		9CEB7D2020A789C4C8007B9F /* MiniBrowserPaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniBrowserPaneView.swift; sourceTree = "<group>"; };
 		9D419E073C2917DEE1A85E20 /* NoteGraphModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteGraphModelTests.swift; sourceTree = "<group>"; };
 		9D4F955DD37FCF31EA4E20E7 /* AppStateSplitPaneTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateSplitPaneTests.swift; sourceTree = "<group>"; };
 		9D9C3A2B05AAC380C1B9F486 /* GistPublisherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GistPublisherTests.swift; sourceTree = "<group>"; };
@@ -278,6 +280,7 @@
 				C3CE451A43640282F817405D /* GlobalGraphView.swift */,
 				2ADBC72A6A85DB161568424D /* GraphPaneView.swift */,
 				0E15235537B931DCAA752074 /* Info.plist */,
+				9CEB7D2020A789C4C8007B9F /* MiniBrowserPaneView.swift */,
 				69131C0C1C0EAB9BC5CADE83 /* PinnedItem.swift */,
 				62C26BB5AD5C76352C46111E /* RelatedLinksPaneView.swift */,
 				7F44B71BBF17A11D40E4AF68 /* SearchView.swift */,
@@ -597,6 +600,7 @@
 				F03FCDD03015035E226FE7CD /* GitService.swift in Sources */,
 				399BAD4F8D874258D0F43EBB /* GlobalGraphView.swift in Sources */,
 				FA748D708DD0F029A45CA494 /* GraphPaneView.swift in Sources */,
+				E7F2A859E55A23EA28421B0B /* MiniBrowserPaneView.swift in Sources */,
 				EA0BACF7C14159B75533C9F5 /* PinnedItem.swift in Sources */,
 				299185049C56A7F7C6A8EB93 /* RelatedLinksPaneView.swift in Sources */,
 				8E6D96059DE60DF6F6A8EB1F /* SearchView.swift in Sources */,

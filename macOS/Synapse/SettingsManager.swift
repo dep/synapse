@@ -8,6 +8,7 @@ enum SidebarPane: String, Codable, CaseIterable, Identifiable {
     case links = "links"
     case terminal = "terminal"
     case graph = "graph"
+    case browser = "browser"
 
     var id: String { rawValue }
 
@@ -18,6 +19,7 @@ enum SidebarPane: String, Codable, CaseIterable, Identifiable {
         case .links: return "Related"
         case .terminal: return "Terminal"
         case .graph: return "Graph"
+        case .browser: return "Browser"
         }
     }
 }
@@ -48,13 +50,13 @@ enum FixedSidebar {
     static let leftID   = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
     /// Right sidebar #1: Terminal + Tags panes
     static let right1ID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
-    /// Right sidebar #2: empty, collapsed by default
+    /// Right sidebar #2: Browser pane (default)
     static let right2ID = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
 
     static let all: [Sidebar] = [
         Sidebar(id: leftID,   position: .left,  panes: [.files, .links]),
         Sidebar(id: right1ID, position: .right, panes: [.terminal, .tags]),
-        Sidebar(id: right2ID, position: .right, panes: []),
+        Sidebar(id: right2ID, position: .right, panes: [.browser]),
     ]
 }
 
@@ -123,6 +125,9 @@ class SettingsManager: ObservableObject {
         didSet { save() }
     }
     @Published var hideMarkdownWhileEditing: Bool {
+        didSet { save() }
+    }
+    @Published var browserStartupURL: String {
         didSet { save() }
     }
 
@@ -255,6 +260,7 @@ class SettingsManager: ObservableObject {
         var pinnedItems: [PinnedItem]?
         var defaultEditMode: Bool?
         var hideMarkdownWhileEditing: Bool?
+        var browserStartupURL: String?
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -277,6 +283,7 @@ class SettingsManager: ObservableObject {
             pinnedItems = try container.decodeIfPresent([PinnedItem].self, forKey: .pinnedItems)
             defaultEditMode = try container.decodeIfPresent(Bool.self, forKey: .defaultEditMode)
             hideMarkdownWhileEditing = try container.decodeIfPresent(Bool.self, forKey: .hideMarkdownWhileEditing)
+            browserStartupURL = try container.decodeIfPresent(String.self, forKey: .browserStartupURL)
         }
     }
 
@@ -295,6 +302,7 @@ class SettingsManager: ObservableObject {
         var pinnedItems: [PinnedItem]?
         var defaultEditMode: Bool?
         var hideMarkdownWhileEditing: Bool?
+        var browserStartupURL: String?
 
         init(
             onBootCommand: String,
@@ -309,7 +317,8 @@ class SettingsManager: ObservableObject {
             autoPush: Bool,
             pinnedItems: [PinnedItem]?,
             defaultEditMode: Bool?,
-            hideMarkdownWhileEditing: Bool?
+            hideMarkdownWhileEditing: Bool?,
+            browserStartupURL: String?
         ) {
             self.onBootCommand = onBootCommand
             self.fileExtensionFilter = fileExtensionFilter
@@ -324,6 +333,7 @@ class SettingsManager: ObservableObject {
             self.pinnedItems = pinnedItems
             self.defaultEditMode = defaultEditMode
             self.hideMarkdownWhileEditing = hideMarkdownWhileEditing
+            self.browserStartupURL = browserStartupURL
         }
 
         init(from decoder: Decoder) throws {
@@ -341,6 +351,7 @@ class SettingsManager: ObservableObject {
             pinnedItems = try container.decodeIfPresent([PinnedItem].self, forKey: .pinnedItems)
             defaultEditMode = try container.decodeIfPresent(Bool.self, forKey: .defaultEditMode)
             hideMarkdownWhileEditing = try container.decodeIfPresent(Bool.self, forKey: .hideMarkdownWhileEditing)
+            browserStartupURL = try container.decodeIfPresent(String.self, forKey: .browserStartupURL)
         }
     }
 
@@ -406,6 +417,7 @@ class SettingsManager: ObservableObject {
             self.pinnedItems = config.pinnedItems ?? []
             self.defaultEditMode = config.defaultEditMode ?? true
             self.hideMarkdownWhileEditing = config.hideMarkdownWhileEditing ?? false
+            self.browserStartupURL = config.browserStartupURL ?? ""
         } else {
             self.onBootCommand = ""
             self.fileExtensionFilter = "*.md, *.txt"
@@ -426,6 +438,7 @@ class SettingsManager: ObservableObject {
             self.pinnedItems = []
             self.defaultEditMode = true
             self.hideMarkdownWhileEditing = false
+            self.browserStartupURL = ""
         }
     }
 
@@ -476,6 +489,7 @@ class SettingsManager: ObservableObject {
                 self.pinnedItems = vaultConfig.pinnedItems ?? []
                 self.defaultEditMode = vaultConfig.defaultEditMode ?? true
                 self.hideMarkdownWhileEditing = vaultConfig.hideMarkdownWhileEditing ?? false
+                self.browserStartupURL = vaultConfig.browserStartupURL ?? ""
             } else {
                 // No vault config exists yet - use defaults
                 self.onBootCommand = ""
@@ -491,6 +505,7 @@ class SettingsManager: ObservableObject {
                 self.pinnedItems = []
                 self.defaultEditMode = true
                 self.hideMarkdownWhileEditing = false
+                self.browserStartupURL = ""
             }
 
             self.sidebars = FixedSidebar.all
@@ -531,6 +546,7 @@ class SettingsManager: ObservableObject {
             self.pinnedItems = []
             self.defaultEditMode = true
             self.hideMarkdownWhileEditing = false
+            self.browserStartupURL = ""
         }
     }
 
@@ -658,6 +674,7 @@ class SettingsManager: ObservableObject {
         let pinnedItems: [PinnedItem]
         let defaultEditMode: Bool
         let hideMarkdownWhileEditing: Bool
+        let browserStartupURL: String
         let configPath: String
         let vaultRootURL: URL?
         let globalConfigPath: String?
@@ -684,6 +701,7 @@ class SettingsManager: ObservableObject {
             pinnedItems           = s.pinnedItems
             defaultEditMode       = s.defaultEditMode
             hideMarkdownWhileEditing = s.hideMarkdownWhileEditing
+            browserStartupURL     = s.browserStartupURL
             configPath            = s.configPath
             vaultRootURL          = s.vaultRootURL
             globalConfigPath      = s.globalConfigPath
@@ -719,6 +737,7 @@ class SettingsManager: ObservableObject {
                 var pinnedItems: [PinnedItem]?
                 var defaultEditMode: Bool?
                 var hideMarkdownWhileEditing: Bool?
+                var browserStartupURL: String?
             }
             let file = LegacyFile(
                 onBootCommand: onBootCommand,
@@ -739,7 +758,8 @@ class SettingsManager: ObservableObject {
                 fileTreeMode: fileTreeMode.rawValue,
                 pinnedItems: pinnedItems.isEmpty ? nil : pinnedItems,
                 defaultEditMode: defaultEditMode,
-                hideMarkdownWhileEditing: hideMarkdownWhileEditing ? true : nil
+                hideMarkdownWhileEditing: hideMarkdownWhileEditing ? true : nil,
+                browserStartupURL: browserStartupURL.isEmpty ? nil : browserStartupURL
             )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -764,7 +784,8 @@ class SettingsManager: ObservableObject {
                 autoPush: autoPush,
                 pinnedItems: pinnedItems.isEmpty ? nil : pinnedItems,
                 defaultEditMode: defaultEditMode,
-                hideMarkdownWhileEditing: hideMarkdownWhileEditing ? true : nil
+                hideMarkdownWhileEditing: hideMarkdownWhileEditing ? true : nil,
+                browserStartupURL: browserStartupURL.isEmpty ? nil : browserStartupURL
             )
             let notedDir = vaultRootURL.appendingPathComponent(".noted")
             try? FileManager.default.createDirectory(at: notedDir, withIntermediateDirectories: true)

@@ -412,10 +412,10 @@ final class SettingsManagerTests: XCTestCase {
         XCTAssertTrue(SidebarPane.allCases.contains(.graph))
     }
 
-    func test_right2Sidebar_startsEmpty() {
+    func test_right2Sidebar_startsWithBrowser() {
         let right2 = sut.sidebars.first { $0.id == FixedSidebar.right2ID }
         XCTAssertNotNil(right2)
-        XCTAssertEqual(right2!.panes, [])
+        XCTAssertEqual(right2!.panes, [.browser])
     }
 
     func test_graphPane_startsAvailable() {
