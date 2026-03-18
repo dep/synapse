@@ -1081,6 +1081,7 @@ struct SidebarPaneInContainer: View {
         case .links:    RelatedLinksPaneView()
         case .terminal: TerminalPaneView()
         case .graph:    GraphPaneView()
+        case .browser:  MiniBrowserPaneView()
         }
     }
 

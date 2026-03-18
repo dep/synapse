@@ -29,7 +29,11 @@ final class SidebarPaneTitleTests: XCTestCase {
         XCTAssertEqual(SidebarPane.graph.title, "Graph")
     }
 
-    // MARK: - rawValue (all 5 cases)
+    func test_browser_titleIsBrowser() {
+        XCTAssertEqual(SidebarPane.browser.title, "Browser")
+    }
+
+    // MARK: - rawValue (all 6 cases)
 
     func test_files_rawValueIsFiles() {
         XCTAssertEqual(SidebarPane.files.rawValue, "files")
@@ -47,6 +51,10 @@ final class SidebarPaneTitleTests: XCTestCase {
         XCTAssertEqual(SidebarPane.terminal.rawValue, "terminal")
     }
 
+    func test_browser_rawValueIsBrowser() {
+        XCTAssertEqual(SidebarPane.browser.rawValue, "browser")
+    }
+
     func test_graph_rawValueIsGraph() {
         XCTAssertEqual(SidebarPane.graph.rawValue, "graph")
     }
@@ -60,14 +68,14 @@ final class SidebarPaneTitleTests: XCTestCase {
         }
     }
 
-    // MARK: - CaseIterable — exactly 5 known cases
+    // MARK: - CaseIterable — exactly 6 known cases
 
-    func test_allCases_containsExactlyFiveCases() {
-        XCTAssertEqual(SidebarPane.allCases.count, 5)
+    func test_allCases_containsExactlySixCases() {
+        XCTAssertEqual(SidebarPane.allCases.count, 6)
     }
 
     func test_allCases_containsAllExpectedValues() {
-        let expected: [SidebarPane] = [.files, .tags, .links, .terminal, .graph]
+        let expected: [SidebarPane] = [.files, .tags, .links, .terminal, .browser, .graph]
         for pane in expected {
             XCTAssertTrue(SidebarPane.allCases.contains(pane),
                 "allCases should contain .\(pane.rawValue)")
@@ -113,6 +121,10 @@ final class SidebarPaneTitleTests: XCTestCase {
 
     func test_rawValueInit_terminalString_returnsTerminalPane() {
         XCTAssertEqual(SidebarPane(rawValue: "terminal"), .terminal)
+    }
+
+    func test_rawValueInit_browserString_returnsBrowserPane() {
+        XCTAssertEqual(SidebarPane(rawValue: "browser"), .browser)
     }
 
     func test_rawValueInit_unknownString_returnsNil() {

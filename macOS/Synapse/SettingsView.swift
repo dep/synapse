@@ -75,6 +75,40 @@ struct SettingsView: View {
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
             }
 
+            // MARK: - Browser Section
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Startup URL")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.secondary)
+
+                    TextField("", text: $settings.browserStartupURL)
+                        .font(.system(.body, design: .monospaced))
+                        .textFieldStyle(.roundedBorder)
+                        .placeholder(when: settings.browserStartupURL.isEmpty) {
+                            Text("https://")
+                                .foregroundStyle(.tertiary)
+                        }
+
+                    if !settings.browserStartupURL.isEmpty {
+                        Button("Clear") {
+                            settings.browserStartupURL = ""
+                        }
+                        .font(.system(size: 11))
+                        .foregroundStyle(.red)
+                    }
+
+                    Text("The mini-browser will open this URL on launch. Leave empty to restore the last visited URL.")
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 4)
+            } header: {
+                Text("Browser")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+            }
+
             // MARK: - File Extension Filter Section
             Section {
                 VStack(alignment: .leading, spacing: 10) {
