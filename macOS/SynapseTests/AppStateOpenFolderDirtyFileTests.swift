@@ -123,18 +123,23 @@ final class AppStateOpenFolderDirtyFileTests: XCTestCase {
         XCTAssertEqual(sut.rootURL?.standardizedFileURL, vault2.standardizedFileURL)
     }
 
-    func test_openFolder_clearsTabs() {
+    func test_openFolder_preservesTabsFromPreviousVault() {
+        // openFolder() does NOT clear the tab bar — it only resets selectedFile,
+        // fileContent, and history.  Tabs from the previous vault remain until
+        // explicitly closed by the user.  This test documents that behaviour.
         let note = vault1.appendingPathComponent("note.md")
         FileManager.default.createFile(atPath: note.path, contents: Data())
 
         sut.openFolder(vault1)
         sut.openFileInNewTab(note)
-        XCTAssertFalse(sut.tabs.isEmpty, "Precondition: a tab is open")
+        XCTAssertEqual(sut.tabs.count, 1, "Precondition: one tab is open")
 
         sut.openFolder(vault2)
 
-        XCTAssertTrue(sut.tabs.isEmpty,
-                      "All tabs should be closed when opening a different vault")
+        XCTAssertEqual(sut.tabs.count, 1,
+                       "openFolder does not clear the tab bar; stale tabs from the previous vault remain")
+        XCTAssertNil(sut.selectedFile,
+                     "selectedFile is cleared even though the tab bar is preserved")
     }
 
     func test_openFolder_resetsNavigationHistory() {
