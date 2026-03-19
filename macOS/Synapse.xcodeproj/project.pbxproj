@@ -91,6 +91,7 @@
 		9E9FB2AC8B6C764F7F4DD366 /* AppStatePinnedFolderFocusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE443AECAB749CEBD9058E7C /* AppStatePinnedFolderFocusTests.swift */; };
 		A033139B390220EE576027A0 /* AppStateCurrentDirectoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A59692ED432DF0BD26FADE0 /* AppStateCurrentDirectoryTests.swift */; };
 		A53D5765ED8F922A5A619336 /* AppStateGitGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA805EB6CC28162C169B222D /* AppStateGitGuardTests.swift */; };
+		A705156086FB98B0A5CF55A0 /* SettingsManagerExternalReloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DE7FCFD3435A1C3998E1299 /* SettingsManagerExternalReloadTests.swift */; };
 		AA87DDE9D7A227F45AFF75F0 /* SlashCommandsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0584EC822EFEC9CD5AA1241C /* SlashCommandsTests.swift */; };
 		AB321E7C9F6DEF1D8296BBD2 /* EmbeddableNotesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24898CF86DAC494714686ED0 /* EmbeddableNotesTests.swift */; };
 		ABF3038429B24C3FAF0AEB70 /* SettingsManagerPaneHeightsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC200C902B321AE32F2F634C /* SettingsManagerPaneHeightsTests.swift */; };
@@ -185,6 +186,7 @@
 		58B5194AC3C7EE4980499F00 /* SplitPaneKeyboardAndCursorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplitPaneKeyboardAndCursorTests.swift; sourceTree = "<group>"; };
 		5A96D01FE3D3F9C3438D9E4A /* AppStateTabsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateTabsTests.swift; sourceTree = "<group>"; };
 		5D10844594863C142A8C7D08 /* Synapse.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Synapse.entitlements; sourceTree = "<group>"; };
+		5DE7FCFD3435A1C3998E1299 /* SettingsManagerExternalReloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsManagerExternalReloadTests.swift; sourceTree = "<group>"; };
 		618D96D297FAC05857339878 /* SettingsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsManager.swift; sourceTree = "<group>"; };
 		625A829CF8CCA20BA72C67E4 /* SlashCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlashCommands.swift; sourceTree = "<group>"; };
 		625B7F4419FE877A036D3664 /* ListContinuationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListContinuationTests.swift; sourceTree = "<group>"; };
@@ -403,6 +405,7 @@
 				380760DBBA1A62E71C1C9D15 /* SettingsManagerBareExtensionsTests.swift */,
 				26693477A455D0812BEF659A /* SettingsManagerBrowserStartupURLTests.swift */,
 				0BCDAA7EF51BC5642E126414 /* SettingsManagerCollapsedPanesTests.swift */,
+				5DE7FCFD3435A1C3998E1299 /* SettingsManagerExternalReloadTests.swift */,
 				A4CC0773A494F79664F79AD7 /* SettingsManagerFileTreeModeTests.swift */,
 				12936BAA078D86D1DC91F861 /* SettingsManagerGitHubPATTests.swift */,
 				AC200C902B321AE32F2F634C /* SettingsManagerPaneHeightsTests.swift */,
@@ -599,6 +602,7 @@
 				7A972695B65AFE2D1DA7A523 /* SettingsManagerBareExtensionsTests.swift in Sources */,
 				FD54F8F02EEBBF560E956885 /* SettingsManagerBrowserStartupURLTests.swift in Sources */,
 				B350FF53B5BEBCBDD6C35B00 /* SettingsManagerCollapsedPanesTests.swift in Sources */,
+				A705156086FB98B0A5CF55A0 /* SettingsManagerExternalReloadTests.swift in Sources */,
 				0384CE53BF62B97AAFF7D4EC /* SettingsManagerFileTreeModeTests.swift in Sources */,
 				27A417FEB8C3977F970C53BD /* SettingsManagerGitHubPATTests.swift in Sources */,
 				ABF3038429B24C3FAF0AEB70 /* SettingsManagerPaneHeightsTests.swift in Sources */,

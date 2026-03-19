@@ -334,4 +334,35 @@ final class PinnedItemStructTests: XCTestCase {
         // Cleanup
         try? FileManager.default.removeItem(at: newVaultLocation)
     }
+
+    func test_pinnedItem_decodesVaultPathsArray_usesMatchingExistingVault() throws {
+        let alternateVault = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: alternateVault, withIntermediateDirectories: true)
+
+        let noteURL = tempDir.appendingPathComponent("Pages/Weight Log.md")
+        try FileManager.default.createDirectory(at: noteURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "".write(to: noteURL, atomically: true, encoding: .utf8)
+
+        let json = """
+        {
+          "id": "159CE250-1812-480B-8695-6937583EDF42",
+          "name": "Weight Log.md",
+          "isFolder": false,
+          "isTag": false,
+          "vaultPaths": [
+            "\(alternateVault.path)",
+            "\(tempDir.path)"
+          ],
+          "relativePath": "Pages/Weight Log.md"
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(PinnedItem.self, from: Data(json.utf8))
+
+        XCTAssertEqual(decoded.vaultPaths, [alternateVault.path, tempDir.path])
+        XCTAssertEqual(decoded.url?.path, noteURL.path)
+
+        try? FileManager.default.removeItem(at: alternateVault)
+    }
 }

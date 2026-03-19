@@ -7,7 +7,7 @@ struct PinnedItem: Codable, Equatable, Identifiable {
     let name: String
     let isFolder: Bool
     let isTag: Bool
-    let vaultPath: String
+    let vaultPaths: [String]
     
     /// Relative path from vault root to the item (for files/folders)
     /// Nil for tags
@@ -28,10 +28,10 @@ struct PinnedItem: Codable, Equatable, Identifiable {
             return legacyURL
         }
         
-        // Otherwise, construct from vaultPath + relativePath
+        // Otherwise, construct from vault path + relativePath
         if let relativePath = relativePath, !relativePath.isEmpty {
-            // Use URL(fileURLWithPath:) to construct without adding trailing slashes
-            let fullPath = (vaultPath as NSString).appendingPathComponent(relativePath)
+            let resolvedVaultPath = existingVaultPathForRelativeItem() ?? vaultPath
+            let fullPath = (resolvedVaultPath as NSString).appendingPathComponent(relativePath)
             return URL(fileURLWithPath: fullPath)
         }
         
@@ -44,9 +44,16 @@ struct PinnedItem: Codable, Equatable, Identifiable {
         case name
         case isFolder
         case isTag
+        case vaultPaths
         case vaultPath
         // Legacy key for backward compatibility
         case url
+    }
+
+    var vaultPath: String { vaultPaths.first ?? "" }
+
+    func matchesVaultPath(_ path: String) -> Bool {
+        vaultPaths.contains(path)
     }
     
     /// Initialize for files/folders
@@ -55,7 +62,7 @@ struct PinnedItem: Codable, Equatable, Identifiable {
         self.name = url.lastPathComponent
         self.isFolder = isFolder
         self.isTag = false
-        self.vaultPath = vaultURL.path
+        self.vaultPaths = [vaultURL.path]
         self.legacyURL = nil  // New items don't use legacy URL
         
         // Calculate relative path from vault to item
@@ -82,7 +89,7 @@ struct PinnedItem: Codable, Equatable, Identifiable {
         self.name = tagName
         self.isFolder = false
         self.isTag = true
-        self.vaultPath = vaultURL.path
+        self.vaultPaths = [vaultURL.path]
         self.relativePath = nil
         self.legacyURL = nil
     }
@@ -93,7 +100,12 @@ struct PinnedItem: Codable, Equatable, Identifiable {
         name = try container.decode(String.self, forKey: .name)
         isFolder = try container.decode(Bool.self, forKey: .isFolder)
         isTag = try container.decodeIfPresent(Bool.self, forKey: .isTag) ?? false
-        vaultPath = try container.decode(String.self, forKey: .vaultPath)
+        if let decodedVaultPaths = try container.decodeIfPresent([String].self, forKey: .vaultPaths),
+           !decodedVaultPaths.isEmpty {
+            vaultPaths = decodedVaultPaths
+        } else {
+            vaultPaths = [try container.decode(String.self, forKey: .vaultPath)]
+        }
         
         // Try to decode relativePath first (new format)
         if let decodedRelativePath = try container.decodeIfPresent(String.self, forKey: .relativePath) {
@@ -112,9 +124,20 @@ struct PinnedItem: Codable, Equatable, Identifiable {
         try container.encode(name, forKey: .name)
         try container.encode(isFolder, forKey: .isFolder)
         try container.encode(isTag, forKey: .isTag)
-        try container.encode(vaultPath, forKey: .vaultPath)
+        try container.encode(vaultPaths, forKey: .vaultPaths)
         try container.encode(relativePath, forKey: .relativePath)
         // Don't encode legacyURL - new format uses relativePath only
+    }
+
+    private func existingVaultPathForRelativeItem() -> String? {
+        guard let relativePath, !relativePath.isEmpty else { return nil }
+        for path in vaultPaths {
+            let candidate = (path as NSString).appendingPathComponent(relativePath)
+            if FileManager.default.fileExists(atPath: candidate) {
+                return path
+            }
+        }
+        return nil
     }
     
     /// Check if the item still exists (for files/folders)

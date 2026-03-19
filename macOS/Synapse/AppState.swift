@@ -302,7 +302,7 @@ class AppState: ObservableObject {
     /// Returns all pinned items that exist in the current vault
     var pinnedItems: [PinnedItem] {
         guard let root = rootURL else { return [] }
-        return settings.pinnedItems.filter { $0.vaultPath == root.path && $0.exists }
+        return settings.pinnedItems.filter { $0.matchesVaultPath(root.path) && $0.exists }
     }
 
     /// Pin a file or folder
@@ -314,7 +314,7 @@ class AppState: ObservableObject {
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return }
 
         // Check if already pinned (compare by path)
-        guard !settings.pinnedItems.contains(where: { $0.url?.path == targetPath && $0.vaultPath == root.path }) else { return }
+        guard !settings.pinnedItems.contains(where: { $0.url?.path == targetPath && $0.matchesVaultPath(root.path) }) else { return }
 
         let item = PinnedItem(url: url, isFolder: isDirectory.boolValue, vaultURL: root)
         settings.pinnedItems.append(item)
@@ -325,7 +325,7 @@ class AppState: ObservableObject {
         guard let root = rootURL else { return }
 
         // Check if tag is already pinned
-        guard !settings.pinnedItems.contains(where: { $0.isTag && $0.name == tagName && $0.vaultPath == root.path }) else { return }
+        guard !settings.pinnedItems.contains(where: { $0.isTag && $0.name == tagName && $0.matchesVaultPath(root.path) }) else { return }
 
         let item = PinnedItem(tagName: tagName, vaultURL: root)
         settings.pinnedItems.append(item)
@@ -335,13 +335,13 @@ class AppState: ObservableObject {
     func unpinItem(_ url: URL) {
         guard let root = rootURL else { return }
         let targetPath = url.path
-        settings.pinnedItems.removeAll { $0.url?.path == targetPath && $0.vaultPath == root.path }
+        settings.pinnedItems.removeAll { $0.url?.path == targetPath && $0.matchesVaultPath(root.path) }
     }
 
     /// Unpin a tag
     func unpinTag(_ tagName: String) {
         guard let root = rootURL else { return }
-        settings.pinnedItems.removeAll { $0.isTag && $0.name == tagName && $0.vaultPath == root.path }
+        settings.pinnedItems.removeAll { $0.isTag && $0.name == tagName && $0.matchesVaultPath(root.path) }
     }
 
     /// Check if an item is pinned
@@ -349,14 +349,14 @@ class AppState: ObservableObject {
         guard let root = rootURL else { return false }
         let targetPath = url.path
         return settings.pinnedItems.contains { 
-            $0.url?.path == targetPath && $0.vaultPath == root.path && $0.exists 
+            $0.url?.path == targetPath && $0.matchesVaultPath(root.path) && $0.exists 
         }
     }
 
     /// Check if a tag is pinned
     func isTagPinned(_ tagName: String) -> Bool {
         guard let root = rootURL else { return false }
-        return settings.pinnedItems.contains { $0.isTag && $0.name == tagName && $0.vaultPath == root.path }
+        return settings.pinnedItems.contains { $0.isTag && $0.name == tagName && $0.matchesVaultPath(root.path) }
     }
 
     @objc private func handleAppTermination() {
@@ -1165,6 +1165,9 @@ class AppState: ObservableObject {
             allProjectFiles = []
             return
         }
+
+        settings.reloadFromDisk()
+
         let fm = FileManager.default
         guard let enumerator = fm.enumerator(
             at: root,

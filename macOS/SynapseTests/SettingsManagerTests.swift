@@ -696,6 +696,191 @@ final class SettingsManagerTests: XCTestCase {
         XCTAssertEqual(manager.sidebars.count, 3)
     }
 
+    func test_vaultSpecificSettings_loadsPinnedItemsWithVaultPathsArray() {
+        let vaultDir = tempDir.appendingPathComponent("VaultYAMLWithPins", isDirectory: true)
+        let notedDir = vaultDir.appendingPathComponent(".synapse", isDirectory: true)
+        try! FileManager.default.createDirectory(at: notedDir, withIntermediateDirectories: true)
+        let globalConfigPath = makeGlobalConfigPath(named: "VaultYAMLWithPins")
+
+        let noteURL = vaultDir.appendingPathComponent("Pages/Weight Log.md")
+        try! FileManager.default.createDirectory(at: noteURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try! "".write(to: noteURL, atomically: true, encoding: .utf8)
+
+        let otherVault = tempDir.appendingPathComponent("OtherVault", isDirectory: true)
+        try! FileManager.default.createDirectory(at: otherVault, withIntermediateDirectories: true)
+
+        let yaml = """
+        onBootCommand: ''
+        fileExtensionFilter: '*.md, *.txt, *.yml, *.json'
+        templatesDirectory: .templates
+        dailyNotesEnabled: true
+        autoSave: true
+        autoPush: true
+        pinnedItems:
+        - id: 159CE250-1812-480B-8695-6937583EDF42
+          name: Weight Log.md
+          isFolder: false
+          isTag: false
+          vaultPaths:
+            - \(otherVault.path)
+            - \(vaultDir.path)
+          relativePath: Pages/Weight Log.md
+        defaultEditMode: true
+        hideMarkdownWhileEditing: true
+        browserStartupURL: tasks.google.com
+        """
+        try! yaml.write(to: notedDir.appendingPathComponent("settings.yml"), atomically: true, encoding: .utf8)
+
+        let manager = SettingsManager(vaultRoot: vaultDir, globalConfigPath: globalConfigPath)
+
+        XCTAssertEqual(manager.fileExtensionFilter, "*.md, *.txt, *.yml, *.json")
+        XCTAssertEqual(manager.templatesDirectory, ".templates")
+        XCTAssertTrue(manager.dailyNotesEnabled)
+        XCTAssertTrue(manager.autoSave)
+        XCTAssertTrue(manager.autoPush)
+        XCTAssertEqual(manager.pinnedItems.count, 1)
+        XCTAssertEqual(manager.pinnedItems[0].url?.path, noteURL.path)
+    }
+
+    // MARK: - Vault Paths Discovery
+
+    func test_vaultPaths_loadsFromGlobalConfig() {
+        // Create global config with vaultPaths array
+        let globalYAML = """
+        githubPAT: secret-token
+        vaultPaths:
+          - /Users/alice/Documents/Vaults
+          - /home/alice/obsidian-vaults
+          - "C:\\\\Users\\\\alice\\\\Documents\\\\Vaults"
+        """
+        let globalConfigPath = makeGlobalConfigPath(named: "vaultpaths-test")
+        try? FileManager.default.createDirectory(at: URL(fileURLWithPath: globalConfigPath).deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? globalYAML.write(to: URL(fileURLWithPath: globalConfigPath), atomically: true, encoding: .utf8)
+
+        let manager = SettingsManager(vaultRoot: nil, globalConfigPath: globalConfigPath)
+
+        XCTAssertEqual(manager.vaultPaths.count, 3)
+        XCTAssertEqual(manager.vaultPaths[0], "/Users/alice/Documents/Vaults")
+        XCTAssertEqual(manager.vaultPaths[1], "/home/alice/obsidian-vaults")
+        XCTAssertEqual(manager.vaultPaths[2], "C:\\Users\\alice\\Documents\\Vaults")
+    }
+
+    func test_vaultPaths_discoveryFindsFirstExistingPath() throws {
+        // Create temp directories simulating different vault paths
+        let vault1 = tempDir.appendingPathComponent("vault1", isDirectory: true)
+        let vault2 = tempDir.appendingPathComponent("vault2", isDirectory: true)
+        try FileManager.default.createDirectory(at: vault1, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: vault2, withIntermediateDirectories: true)
+
+        // Create global config with multiple vault paths
+        let globalYAML = """
+        vaultPaths:
+          - \(vault1.path)
+          - \(vault2.path)
+          - /nonexistent/vault/path
+        """
+        let globalConfigPath = makeGlobalConfigPath(named: "discovery-test")
+        try? FileManager.default.createDirectory(at: URL(fileURLWithPath: globalConfigPath).deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? globalYAML.write(to: URL(fileURLWithPath: globalConfigPath), atomically: true, encoding: .utf8)
+
+        // The first existing path should be discovered
+        let discoveredPath = SettingsManager.discoverVaultPath(from: globalConfigPath)
+        XCTAssertEqual(discoveredPath, vault1.path, "Should discover first existing vault path")
+    }
+
+    func test_vaultPaths_discoverySkipsNonexistentPaths() throws {
+        // Create only the second vault path
+        let vault2 = tempDir.appendingPathComponent("vault2", isDirectory: true)
+        try FileManager.default.createDirectory(at: vault2, withIntermediateDirectories: true)
+
+        let globalYAML = """
+        vaultPaths:
+          - /nonexistent/path/1
+          - \(vault2.path)
+          - /nonexistent/path/2
+        """
+        let globalConfigPath = makeGlobalConfigPath(named: "skip-test")
+        try? FileManager.default.createDirectory(at: URL(fileURLWithPath: globalConfigPath).deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? globalYAML.write(to: URL(fileURLWithPath: globalConfigPath), atomically: true, encoding: .utf8)
+
+        let discoveredPath = SettingsManager.discoverVaultPath(from: globalConfigPath)
+        XCTAssertEqual(discoveredPath, vault2.path, "Should skip nonexistent paths and find existing one")
+    }
+
+    func test_vaultPaths_returnsNilWhenNoPathsExist() {
+        let globalYAML = """
+        vaultPaths:
+          - /nonexistent/path/1
+          - /nonexistent/path/2
+        """
+        let globalConfigPath = makeGlobalConfigPath(named: "noexist-test")
+        try? FileManager.default.createDirectory(at: URL(fileURLWithPath: globalConfigPath).deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? globalYAML.write(to: URL(fileURLWithPath: globalConfigPath), atomically: true, encoding: .utf8)
+
+        let discoveredPath = SettingsManager.discoverVaultPath(from: globalConfigPath)
+        XCTAssertNil(discoveredPath, "Should return nil when no vault paths exist")
+    }
+
+    func test_vaultPath_backwardCompatibility_singleString() {
+        // Legacy config with single vaultPath string
+        let globalYAML = """
+        githubPAT: secret-token
+        vaultPath: /legacy/vault/path
+        """
+        let globalConfigPath = makeGlobalConfigPath(named: "legacy-test")
+        try? FileManager.default.createDirectory(at: URL(fileURLWithPath: globalConfigPath).deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? globalYAML.write(to: URL(fileURLWithPath: globalConfigPath), atomically: true, encoding: .utf8)
+
+        let manager = SettingsManager(vaultRoot: nil, globalConfigPath: globalConfigPath)
+
+        // Should be migrated to vaultPaths array
+        XCTAssertEqual(manager.vaultPaths.count, 1)
+        XCTAssertEqual(manager.vaultPaths[0], "/legacy/vault/path")
+    }
+
+    func test_vaultPaths_persistsToDisk() throws {
+        let globalConfigPath = makeGlobalConfigPath(named: "persist-test")
+        let manager = SettingsManager(vaultRoot: nil, globalConfigPath: globalConfigPath)
+
+        // Set vault paths
+        manager.vaultPaths = ["/path/one", "/path/two"]
+
+        // Create new manager pointing to same config
+        let newManager = SettingsManager(vaultRoot: nil, globalConfigPath: globalConfigPath)
+        XCTAssertEqual(newManager.vaultPaths, ["/path/one", "/path/two"], "vaultPaths should persist to disk")
+    }
+
+    func test_vaultPaths_emptyArrayWhenNotConfigured() {
+        let globalConfigPath = makeGlobalConfigPath(named: "empty-test")
+        // No vaultPaths in config
+        let manager = SettingsManager(vaultRoot: nil, globalConfigPath: globalConfigPath)
+        XCTAssertTrue(manager.vaultPaths.isEmpty, "Should default to empty array when not configured")
+    }
+
+    func test_vaultPath_backwardCompatibility_deprecatedWarning() {
+        // This test verifies that when both vaultPath and vaultPaths exist,
+        // vaultPaths takes precedence and vaultPath is ignored
+        let globalYAML = """
+        githubPAT: secret-token
+        vaultPath: /legacy/path
+        vaultPaths:
+          - /new/path/one
+          - /new/path/two
+        """
+        let globalConfigPath = makeGlobalConfigPath(named: "both-test")
+        try? FileManager.default.createDirectory(at: URL(fileURLWithPath: globalConfigPath).deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? globalYAML.write(to: URL(fileURLWithPath: globalConfigPath), atomically: true, encoding: .utf8)
+
+        let manager = SettingsManager(vaultRoot: nil, globalConfigPath: globalConfigPath)
+
+        // vaultPaths should take precedence
+        XCTAssertEqual(manager.vaultPaths.count, 2)
+        XCTAssertEqual(manager.vaultPaths[0], "/new/path/one")
+        XCTAssertEqual(manager.vaultPaths[1], "/new/path/two")
+        // Legacy vaultPath should not be in the array
+        XCTAssertFalse(manager.vaultPaths.contains("/legacy/path"))
+    }
+
     private func makeGlobalConfigPath(named name: String) -> String {
         let appSupportDir = tempDir.appendingPathComponent("AppSupport-\(name)", isDirectory: true)
         try! FileManager.default.createDirectory(at: appSupportDir, withIntermediateDirectories: true)

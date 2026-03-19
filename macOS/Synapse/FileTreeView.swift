@@ -175,7 +175,7 @@ struct FileTreeView: View {
                     .buttonStyle(ChromeButtonStyle())
                     .help("Create")
 
-                    Button(action: refresh) {
+                    Button(action: appState.refreshAllFiles) {
                         Image(systemName: "arrow.clockwise")
                     }
                     .buttonStyle(ChromeButtonStyle())

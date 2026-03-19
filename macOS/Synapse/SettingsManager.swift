@@ -244,8 +244,13 @@ class SettingsManager: ObservableObject {
     @Published var browserStartupURL: String {
         didSet { save() }
     }
+    /// Array of vault path candidates for cross-machine syncing
+    /// First existing path is used when opening the app
+    @Published var vaultPaths: [String] {
+        didSet { save() }
+    }
 
-    // MARK: - Sidebar Helpers
+    // MARK: - Vault Path Discovery
 
     var leftSidebars:  [Sidebar] { sidebars.filter { $0.position == .left  } }
     var rightSidebars: [Sidebar] { sidebars.filter { $0.position == .right } }
@@ -383,6 +388,10 @@ class SettingsManager: ObservableObject {
         vaultRootURL == nil && globalConfigPath == nil
     }
 
+    /// Flag to suppress saves during initialization to avoid overwriting files with incomplete state
+    private var isInitializing: Bool = false
+    private var isApplyingExternalChange: Bool = false
+
     private struct Config: Codable {
         var onBootCommand: String
         var fileExtensionFilter: String
@@ -507,6 +516,10 @@ class SettingsManager: ObservableObject {
         var collapsedSidebarIDs: [String]?
         var sidebarPaneAssignments: [String: [SidebarPaneItem]]?
         var fileTreeMode: String?
+        /// Array of vault path candidates - first existing path is used
+        var vaultPaths: [String]?
+        /// Legacy single vault path for backward compatibility (deprecated)
+        var vaultPath: String?
 
         init(
             githubPAT: String?,
@@ -514,7 +527,8 @@ class SettingsManager: ObservableObject {
             collapsedPanes: [String]?,
             collapsedSidebarIDs: [String]?,
             sidebarPaneAssignments: [String: [SidebarPaneItem]]?,
-            fileTreeMode: String?
+            fileTreeMode: String?,
+            vaultPaths: [String]? = nil
         ) {
             self.githubPAT = githubPAT
             self.sidebarPaneHeights = sidebarPaneHeights
@@ -522,6 +536,20 @@ class SettingsManager: ObservableObject {
             self.collapsedSidebarIDs = collapsedSidebarIDs
             self.sidebarPaneAssignments = sidebarPaneAssignments
             self.fileTreeMode = fileTreeMode
+            self.vaultPaths = vaultPaths
+            self.vaultPath = nil  // New format doesn't use legacy field
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            githubPAT = try container.decodeIfPresent(String.self, forKey: .githubPAT)
+            sidebarPaneHeights = try container.decodeIfPresent([String: CGFloat].self, forKey: .sidebarPaneHeights)
+            collapsedPanes = try container.decodeIfPresent([String].self, forKey: .collapsedPanes)
+            collapsedSidebarIDs = try container.decodeIfPresent([String].self, forKey: .collapsedSidebarIDs)
+            sidebarPaneAssignments = try container.decodeIfPresent([String: [SidebarPaneItem]].self, forKey: .sidebarPaneAssignments)
+            fileTreeMode = try container.decodeIfPresent(String.self, forKey: .fileTreeMode)
+            vaultPaths = try container.decodeIfPresent([String].self, forKey: .vaultPaths)
+            vaultPath = try container.decodeIfPresent(String.self, forKey: .vaultPath)
         }
     }
 
@@ -536,54 +564,34 @@ class SettingsManager: ObservableObject {
 
     /// Initialize with a specific config path (legacy mode, useful for testing)
     init(configPath: String) {
+        self.isInitializing = true
         self.configPath = configPath
         self.vaultRootURL = nil
         self.globalConfigPath = nil
+        self.onBootCommand = ""
+        self.fileExtensionFilter = "*.md, *.txt"
+        self.hiddenFileFolderFilter = ""
+        self.templatesDirectory = "templates"
+        self.dailyNotesEnabled = false
+        self.dailyNotesFolder = "daily"
+        self.dailyNotesTemplate = ""
+        self.dailyNotesOpenOnStartup = false
+        self.autoSave = false
+        self.autoPush = false
+        self.sidebars = FixedSidebar.all
+        self.sidebarPaneHeights = Self.defaultPaneHeights
+        self.collapsedPanes = []
+        self.collapsedSidebarIDs = [FixedSidebar.right2ID.uuidString]
+        self.githubPAT = ""
+        self.fileTreeMode = .folder
+        self.pinnedItems = []
+        self.defaultEditMode = true
+        self.hideMarkdownWhileEditing = false
+        self.browserStartupURL = ""
+        self.vaultPaths = []
 
-        // Load existing config or use defaults
-        if let config = Self.loadConfig(from: configPath) {
-            self.onBootCommand = config.onBootCommand
-            self.fileExtensionFilter = config.fileExtensionFilter
-            self.hiddenFileFolderFilter = config.hiddenFileFolderFilter ?? ""
-            self.templatesDirectory = config.templatesDirectory
-            self.dailyNotesEnabled = config.dailyNotesEnabled ?? false
-            self.dailyNotesFolder = config.dailyNotesFolder ?? "daily"
-            self.dailyNotesTemplate = config.dailyNotesTemplate ?? ""
-            self.dailyNotesOpenOnStartup = config.dailyNotesOpenOnStartup ?? false
-            self.autoSave = config.autoSave
-            self.autoPush = config.autoPush
-            self.sidebars = Self.applyPaneAssignments(config.sidebarPaneAssignments)
-            self.sidebarPaneHeights = config.sidebarPaneHeights ?? Self.defaultPaneHeights
-            self.collapsedPanes = Set(config.collapsedPanes ?? [])
-            self.collapsedSidebarIDs = Set(config.collapsedSidebarIDs ?? [FixedSidebar.right2ID.uuidString])
-            self.githubPAT = config.githubPAT ?? ""
-            self.fileTreeMode = FileTreeMode(rawValue: config.fileTreeMode ?? "") ?? .folder
-            self.pinnedItems = config.pinnedItems ?? []
-            self.defaultEditMode = config.defaultEditMode ?? true
-            self.hideMarkdownWhileEditing = config.hideMarkdownWhileEditing ?? false
-            self.browserStartupURL = config.browserStartupURL ?? ""
-        } else {
-            self.onBootCommand = ""
-            self.fileExtensionFilter = "*.md, *.txt"
-            self.hiddenFileFolderFilter = ""
-            self.templatesDirectory = "templates"
-            self.dailyNotesEnabled = false
-            self.dailyNotesFolder = "daily"
-            self.dailyNotesTemplate = ""
-            self.dailyNotesOpenOnStartup = false
-            self.autoSave = false
-            self.autoPush = false
-            self.sidebars = FixedSidebar.all
-            self.sidebarPaneHeights = Self.defaultPaneHeights
-            self.collapsedPanes = []
-            self.collapsedSidebarIDs = [FixedSidebar.right2ID.uuidString]
-            self.githubPAT = ""
-            self.fileTreeMode = .folder
-            self.pinnedItems = []
-            self.defaultEditMode = true
-            self.hideMarkdownWhileEditing = false
-            self.browserStartupURL = ""
-        }
+        applyLegacyConfig(Self.loadConfig(from: configPath))
+        self.isInitializing = false
     }
 
     /// Initialize with vault root - stores settings in .synapse/settings.yml
@@ -604,94 +612,186 @@ class SettingsManager: ObservableObject {
 
     /// Full initializer with vault root and global config path
     init(vaultRoot: URL?, globalConfigPath: String) {
+        self.isInitializing = true
         self.configPath = vaultRoot?.appendingPathComponent(".synapse/\(Self.vaultSettingsFilename)").path ?? globalConfigPath
         self.vaultRootURL = vaultRoot
         self.globalConfigPath = globalConfigPath
+        self.onBootCommand = ""
+        self.fileExtensionFilter = "*.md, *.txt"
+        self.hiddenFileFolderFilter = ""
+        self.templatesDirectory = "templates"
+        self.dailyNotesEnabled = false
+        self.dailyNotesFolder = "daily"
+        self.dailyNotesTemplate = ""
+        self.dailyNotesOpenOnStartup = false
+        self.autoSave = false
+        self.autoPush = false
+        self.sidebars = FixedSidebar.all
+        self.sidebarPaneHeights = Self.defaultPaneHeights
+        self.collapsedPanes = []
+        self.collapsedSidebarIDs = [FixedSidebar.right2ID.uuidString]
+        self.githubPAT = ""
+        self.fileTreeMode = .folder
+        self.pinnedItems = []
+        self.defaultEditMode = true
+        self.hideMarkdownWhileEditing = false
+        self.browserStartupURL = ""
+        self.vaultPaths = []
 
         if let vaultRoot = vaultRoot {
-            // Vault mode: load from both vault config and global config
-            let vaultConfigPath = vaultRoot.appendingPathComponent(".synapse/\(Self.vaultSettingsFilename)").path
-
             // Create .synapse folder and settings file if they don't exist
             let notedDir = vaultRoot.appendingPathComponent(".synapse")
             if !FileManager.default.fileExists(atPath: notedDir.path) {
                 try? FileManager.default.createDirectory(at: notedDir, withIntermediateDirectories: true)
             }
-
-            // Load vault-specific settings
-            if let vaultConfig = Self.loadVaultConfig(from: vaultConfigPath) {
-                self.onBootCommand = vaultConfig.onBootCommand
-                self.fileExtensionFilter = vaultConfig.fileExtensionFilter
-                self.hiddenFileFolderFilter = vaultConfig.hiddenFileFolderFilter ?? ""
-                self.templatesDirectory = vaultConfig.templatesDirectory
-                self.dailyNotesEnabled = vaultConfig.dailyNotesEnabled ?? false
-                self.dailyNotesFolder = vaultConfig.dailyNotesFolder ?? "daily"
-                self.dailyNotesTemplate = vaultConfig.dailyNotesTemplate ?? ""
-                self.dailyNotesOpenOnStartup = vaultConfig.dailyNotesOpenOnStartup ?? false
-                self.autoSave = vaultConfig.autoSave
-                self.autoPush = vaultConfig.autoPush
-                self.pinnedItems = vaultConfig.pinnedItems ?? []
-                self.defaultEditMode = vaultConfig.defaultEditMode ?? true
-                self.hideMarkdownWhileEditing = vaultConfig.hideMarkdownWhileEditing ?? false
-                self.browserStartupURL = vaultConfig.browserStartupURL ?? ""
-            } else {
-                // No vault config exists yet - use defaults
-                self.onBootCommand = ""
-                self.fileExtensionFilter = "*.md, *.txt"
-                self.hiddenFileFolderFilter = ""
-                self.templatesDirectory = "templates"
-                self.dailyNotesEnabled = false
-                self.dailyNotesFolder = "daily"
-                self.dailyNotesTemplate = ""
-                self.dailyNotesOpenOnStartup = false
-                self.autoSave = false
-                self.autoPush = false
-                self.pinnedItems = []
-                self.defaultEditMode = true
-                self.hideMarkdownWhileEditing = false
-                self.browserStartupURL = ""
-            }
-
-            self.sidebars = FixedSidebar.all
-            self.sidebarPaneHeights = Self.defaultPaneHeights
-            self.collapsedPanes = []
-            self.collapsedSidebarIDs = [FixedSidebar.right2ID.uuidString]
-            self.fileTreeMode = .folder
-
-            // Load global/machine-local settings
-            if let globalConfig = Self.loadGlobalConfig(from: globalConfigPath) {
-                self.githubPAT = globalConfig.githubPAT ?? ""
-                self.sidebars = Self.applyPaneAssignments(globalConfig.sidebarPaneAssignments)
-                self.sidebarPaneHeights = globalConfig.sidebarPaneHeights ?? Self.defaultPaneHeights
-                self.collapsedPanes = Set(globalConfig.collapsedPanes ?? [])
-                self.collapsedSidebarIDs = Set(globalConfig.collapsedSidebarIDs ?? [FixedSidebar.right2ID.uuidString])
-                self.fileTreeMode = FileTreeMode(rawValue: globalConfig.fileTreeMode ?? "") ?? self.fileTreeMode
-            } else {
-                self.githubPAT = ""
-            }
+            applyVaultConfig(Self.loadVaultConfig(from: self.configPath))
+            applyGlobalConfig(Self.loadGlobalConfig(from: globalConfigPath))
         } else {
-            // No vault mode: use all defaults
-            self.onBootCommand = ""
-            self.fileExtensionFilter = "*.md, *.txt"
-            self.hiddenFileFolderFilter = ""
-            self.templatesDirectory = "templates"
-            self.dailyNotesEnabled = false
-            self.dailyNotesFolder = "daily"
-            self.dailyNotesTemplate = ""
-            self.dailyNotesOpenOnStartup = false
-            self.autoSave = false
-            self.autoPush = false
-            self.sidebars = FixedSidebar.all
-            self.sidebarPaneHeights = Self.defaultPaneHeights
-            self.collapsedPanes = []
-            self.collapsedSidebarIDs = [FixedSidebar.right2ID.uuidString]
-            self.githubPAT = ""
-            self.fileTreeMode = .folder
-            self.pinnedItems = []
-            self.defaultEditMode = true
-            self.hideMarkdownWhileEditing = false
-            self.browserStartupURL = ""
+            applyNoVaultDefaults()
+            applyGlobalConfig(Self.loadGlobalConfig(from: globalConfigPath))
         }
+        self.isInitializing = false
+    }
+
+    deinit {
+        pendingSave?.cancel()
+    }
+
+    private func applyLegacyConfig(_ config: Config?) {
+        if let config {
+            onBootCommand = config.onBootCommand
+            fileExtensionFilter = config.fileExtensionFilter
+            hiddenFileFolderFilter = config.hiddenFileFolderFilter ?? ""
+            templatesDirectory = config.templatesDirectory
+            dailyNotesEnabled = config.dailyNotesEnabled ?? false
+            dailyNotesFolder = config.dailyNotesFolder ?? "daily"
+            dailyNotesTemplate = config.dailyNotesTemplate ?? ""
+            dailyNotesOpenOnStartup = config.dailyNotesOpenOnStartup ?? false
+            autoSave = config.autoSave
+            autoPush = config.autoPush
+            sidebars = Self.applyPaneAssignments(config.sidebarPaneAssignments)
+            sidebarPaneHeights = config.sidebarPaneHeights ?? Self.defaultPaneHeights
+            collapsedPanes = Set(config.collapsedPanes ?? [])
+            collapsedSidebarIDs = Set(config.collapsedSidebarIDs ?? [FixedSidebar.right2ID.uuidString])
+            githubPAT = config.githubPAT ?? ""
+            fileTreeMode = FileTreeMode(rawValue: config.fileTreeMode ?? "") ?? .folder
+            pinnedItems = config.pinnedItems ?? []
+            defaultEditMode = config.defaultEditMode ?? true
+            hideMarkdownWhileEditing = config.hideMarkdownWhileEditing ?? false
+            browserStartupURL = config.browserStartupURL ?? ""
+            vaultPaths = []
+            return
+        }
+
+        onBootCommand = ""
+        fileExtensionFilter = "*.md, *.txt"
+        hiddenFileFolderFilter = ""
+        templatesDirectory = "templates"
+        dailyNotesEnabled = false
+        dailyNotesFolder = "daily"
+        dailyNotesTemplate = ""
+        dailyNotesOpenOnStartup = false
+        autoSave = false
+        autoPush = false
+        sidebars = FixedSidebar.all
+        sidebarPaneHeights = Self.defaultPaneHeights
+        collapsedPanes = []
+        collapsedSidebarIDs = [FixedSidebar.right2ID.uuidString]
+        githubPAT = ""
+        fileTreeMode = .folder
+        pinnedItems = []
+        defaultEditMode = true
+        hideMarkdownWhileEditing = false
+        browserStartupURL = ""
+        vaultPaths = []
+    }
+
+    private func applyVaultConfig(_ vaultConfig: VaultConfig?) {
+        if let vaultConfig {
+            onBootCommand = vaultConfig.onBootCommand
+            fileExtensionFilter = vaultConfig.fileExtensionFilter
+            hiddenFileFolderFilter = vaultConfig.hiddenFileFolderFilter ?? ""
+            templatesDirectory = vaultConfig.templatesDirectory
+            dailyNotesEnabled = vaultConfig.dailyNotesEnabled ?? false
+            dailyNotesFolder = vaultConfig.dailyNotesFolder ?? "daily"
+            dailyNotesTemplate = vaultConfig.dailyNotesTemplate ?? ""
+            dailyNotesOpenOnStartup = vaultConfig.dailyNotesOpenOnStartup ?? false
+            autoSave = vaultConfig.autoSave
+            autoPush = vaultConfig.autoPush
+            pinnedItems = vaultConfig.pinnedItems ?? []
+            defaultEditMode = vaultConfig.defaultEditMode ?? true
+            hideMarkdownWhileEditing = vaultConfig.hideMarkdownWhileEditing ?? false
+            browserStartupURL = vaultConfig.browserStartupURL ?? ""
+            return
+        }
+
+        onBootCommand = ""
+        fileExtensionFilter = "*.md, *.txt"
+        hiddenFileFolderFilter = ""
+        templatesDirectory = "templates"
+        dailyNotesEnabled = false
+        dailyNotesFolder = "daily"
+        dailyNotesTemplate = ""
+        dailyNotesOpenOnStartup = false
+        autoSave = false
+        autoPush = false
+        pinnedItems = []
+        defaultEditMode = true
+        hideMarkdownWhileEditing = false
+        browserStartupURL = ""
+    }
+
+    private func applyNoVaultDefaults() {
+        onBootCommand = ""
+        fileExtensionFilter = "*.md, *.txt"
+        hiddenFileFolderFilter = ""
+        templatesDirectory = "templates"
+        dailyNotesEnabled = false
+        dailyNotesFolder = "daily"
+        dailyNotesTemplate = ""
+        dailyNotesOpenOnStartup = false
+        autoSave = false
+        autoPush = false
+        pinnedItems = []
+        defaultEditMode = true
+        hideMarkdownWhileEditing = false
+        browserStartupURL = ""
+    }
+
+    private func applyGlobalConfig(_ globalConfig: GlobalConfig?) {
+        githubPAT = globalConfig?.githubPAT ?? ""
+        sidebars = Self.applyPaneAssignments(globalConfig?.sidebarPaneAssignments)
+        sidebarPaneHeights = globalConfig?.sidebarPaneHeights ?? Self.defaultPaneHeights
+        collapsedPanes = Set(globalConfig?.collapsedPanes ?? [])
+        collapsedSidebarIDs = Set(globalConfig?.collapsedSidebarIDs ?? [FixedSidebar.right2ID.uuidString])
+        fileTreeMode = FileTreeMode(rawValue: globalConfig?.fileTreeMode ?? "") ?? .folder
+
+        if let paths = globalConfig?.vaultPaths, !paths.isEmpty {
+            vaultPaths = paths
+        } else if let legacyPath = globalConfig?.vaultPath, !legacyPath.isEmpty {
+            vaultPaths = [legacyPath]
+        } else {
+            vaultPaths = []
+        }
+    }
+
+    func reloadFromDisk() {
+        isApplyingExternalChange = true
+        defer { isApplyingExternalChange = false }
+
+        if useLegacyMode {
+            applyLegacyConfig(Self.loadConfig(from: configPath))
+            return
+        }
+
+        if vaultRootURL != nil {
+            applyVaultConfig(Self.loadVaultConfig(from: configPath))
+            applyGlobalConfig(globalConfigPath.flatMap(Self.loadGlobalConfig(from:)))
+            return
+        }
+
+        applyNoVaultDefaults()
+        applyGlobalConfig(Self.loadGlobalConfig(from: configPath))
     }
 
     /// Parse fileExtensionFilter into an array of extension strings
@@ -780,6 +880,9 @@ class SettingsManager: ObservableObject {
     /// Schedule a debounced save to disk, coalescing rapid mutations.
     /// Snapshot all values on the main thread, then serialize on a background thread.
     private func save() {
+        // Skip saves during initialization to avoid overwriting files with incomplete state
+        guard !isInitializing, !isApplyingExternalChange else { return }
+
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
             flush(); return
         }
@@ -822,6 +925,7 @@ class SettingsManager: ObservableObject {
         let configPath: String
         let vaultRootURL: URL?
         let globalConfigPath: String?
+        let vaultPaths: [String]
 
         init(from s: SettingsManager) {
             useLegacyMode         = s.useLegacyMode
@@ -849,6 +953,7 @@ class SettingsManager: ObservableObject {
             configPath            = s.configPath
             vaultRootURL          = s.vaultRootURL
             globalConfigPath      = s.globalConfigPath
+            vaultPaths            = s.vaultPaths
         }
 
         func write() {
@@ -856,7 +961,27 @@ class SettingsManager: ObservableObject {
                 writeLegacy()
             } else if vaultRootURL != nil {
                 writeVault()
+            } else if globalConfigPath != nil {
+                // No vault open, but we have a global config path - save global settings only
+                writeGlobalOnly()
             }
+        }
+
+        private func writeGlobalOnly() {
+            guard let globalConfigPath else { return }
+            let globalConfig = GlobalConfig(
+                githubPAT: githubPAT.isEmpty ? nil : githubPAT,
+                sidebarPaneHeights: sidebarPaneHeights.isEmpty ? nil : sidebarPaneHeights,
+                collapsedPanes: collapsedPanes.isEmpty ? nil : collapsedPanes,
+                collapsedSidebarIDs: collapsedSidebarIDs.isEmpty ? nil : collapsedSidebarIDs,
+                sidebarPaneAssignments: sidebarPaneAssignments,
+                fileTreeMode: fileTreeMode.rawValue,
+                vaultPaths: vaultPaths.isEmpty ? nil : vaultPaths
+            )
+            guard let globalYAML = try? YAMLEncoder().encode(globalConfig) else { return }
+            let globalURL = URL(fileURLWithPath: globalConfigPath)
+            try? FileManager.default.createDirectory(at: globalURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? globalYAML.write(to: globalURL, atomically: true, encoding: .utf8)
         }
 
         private func writeLegacy() {
@@ -944,7 +1069,8 @@ class SettingsManager: ObservableObject {
                 collapsedPanes: collapsedPanes.isEmpty ? nil : collapsedPanes,
                 collapsedSidebarIDs: collapsedSidebarIDs.isEmpty ? nil : collapsedSidebarIDs,
                 sidebarPaneAssignments: sidebarPaneAssignments,
-                fileTreeMode: fileTreeMode.rawValue
+                fileTreeMode: fileTreeMode.rawValue,
+                vaultPaths: vaultPaths.isEmpty ? nil : vaultPaths
             )
             guard let globalYAML = try? YAMLEncoder().encode(globalConfig) else { return }
             let globalURL = URL(fileURLWithPath: globalConfigPath)
@@ -989,6 +1115,43 @@ class SettingsManager: ObservableObject {
         }
 
         return try? JSONDecoder().decode(GlobalConfig.self, from: data)
+    }
+
+    // MARK: - Vault Path Discovery
+
+    /// Discover the first existing vault path from the global config
+    /// - Parameter globalConfigPath: Path to the global config file
+    /// - Returns: The first existing vault path, or nil if none exist
+    static func discoverVaultPath(from globalConfigPath: String) -> String? {
+        guard let globalConfig = loadGlobalConfig(from: globalConfigPath) else {
+            return nil
+        }
+
+        // Get vault paths (new format takes precedence)
+        var paths: [String] = []
+        if let vaultPaths = globalConfig.vaultPaths, !vaultPaths.isEmpty {
+            paths = vaultPaths
+        } else if let legacyPath = globalConfig.vaultPath, !legacyPath.isEmpty {
+            paths = [legacyPath]
+        }
+
+        // Log deprecation warning if both are present (but only in debug builds)
+        #if DEBUG
+        if globalConfig.vaultPaths != nil && globalConfig.vaultPath != nil {
+            print("[Synapse] Warning: Both 'vaultPath' (legacy) and 'vaultPaths' are configured. Using 'vaultPaths'.")
+        }
+        #endif
+
+        // Return first existing path
+        let fileManager = FileManager.default
+        for path in paths {
+            var isDirectory: ObjCBool = false
+            if fileManager.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue {
+                return path
+            }
+        }
+
+        return nil
     }
 
 
