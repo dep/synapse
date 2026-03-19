@@ -8,9 +8,9 @@ Whenever you modify `.swift` files, you MUST rebuild and relaunch the app BEFORE
 
 Do not skip this step, even if unit tests pass. This overrides the "Minimize Verification Loops" rule.
 
-Execute this exact command using the bash tool:
+Execute this command using the bash tool:
 ```bash
-pkill -9 "Synapse" || true && sleep 1 && xcodegen generate && xcodebuild -project "Synapse.xcodeproj" -scheme "Synapse" -destination "platform=macOS" build && open ~/Library/Developer/Xcode/DerivedData/Synapse-cdwicvkuefghruawgarjfsqkskpg/Build/Products/Debug/Synapse.app
+pkill -9 "Synapse" || true && sleep 1 && xcodegen generate && xcodebuild -project "Synapse.xcodeproj" -scheme "Synapse" -destination "platform=macOS" build && for app in ~/Library/Developer/Xcode/DerivedData/Synapse-*/Build/Products/Debug/Synapse.app; do [ -e "$app" ] && open "$app" && break; done
 ```
 
 ### Mobile Build and Relaunch

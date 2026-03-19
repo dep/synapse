@@ -109,7 +109,10 @@ struct FindBar: View {
             Rectangle().fill(SynapseTheme.border).frame(height: 1)
         }
         .onAppear {
-            isFieldFocused = true
+            // Delay focus slightly to ensure view is fully rendered
+            DispatchQueue.main.async {
+                isFieldFocused = true
+            }
         }
         .onChange(of: appState.searchQuery) { _, newQuery in
             postHighlight(query: newQuery, focusIndex: 0)
@@ -293,7 +296,10 @@ struct AllFilesSearchView: View {
             .shadow(color: .black.opacity(0.35), radius: 20, x: 0, y: 18)
         }
         .onAppear {
-            isFieldFocused = true
+            // Delay focus slightly to ensure view is fully rendered
+            DispatchQueue.main.async {
+                isFieldFocused = true
+            }
             installEventMonitor()
         }
         .onDisappear {

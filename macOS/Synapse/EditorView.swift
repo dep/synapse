@@ -537,6 +537,7 @@ private enum MarkdownTheme {
     static let h3   = NSFont.systemFont(ofSize: 18, weight: .semibold)
     static let h4   = NSFont.systemFont(ofSize: 16, weight: .semibold)
     static let dimColor            = SynapseTheme.editorMuted
+    static let tagColor            = SynapseTheme.editorLink
     static let linkColor           = SynapseTheme.editorLink
     static let unresolvedLinkColor = SynapseTheme.editorUnresolvedLink
     static let codeBackground      = SynapseTheme.editorCodeBackground
@@ -631,6 +632,10 @@ func styleMarkdownContent(_ content: String, fontSize: CGFloat = 12) -> NSAttrib
     // Blockquotes
     applyPattern("^> .+$", options: [.anchorsMatchLines]) { range in
         storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: range)
+    }
+    // Inline tags
+    AppState.inlineTagMatches(in: content).forEach { match in
+        storage.addAttribute(.foregroundColor, value: MarkdownTheme.tagColor, range: match.range)
     }
     // Wiki links
     applyPattern("\\[\\[[^\\]]+\\]\\]") { range in
@@ -981,6 +986,9 @@ extension LinkAwareTextView {
         }
         applyRegex("^> .+$", to: text, storage: storage, options: [.anchorsMatchLines]) { range in
             storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: range)
+        }
+        AppState.inlineTagMatches(in: storage.string).forEach { match in
+            storage.addAttribute(.foregroundColor, value: MarkdownTheme.tagColor, range: match.range)
         }
         // Style embed patterns (![[note]]) - dimmed since they'll be rendered as blocks below
         applyRegex("!\\[\\[[^\\]]+\\]\\]", to: text, storage: storage) { range in

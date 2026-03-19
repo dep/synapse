@@ -702,44 +702,48 @@ class AppState: ObservableObject {
     private static let codeBlockRegex = try? NSRegularExpression(pattern: #"```[\s\S]*?```"#, options: [.dotMatchesLineSeparators])
     private static let inlineCodeRegex = try? NSRegularExpression(pattern: #"`[^`]*?`"#)
 
-    /// Extracts all hashtags from text, normalizes to lowercase, removes duplicates
-    /// Ignores hashtags inside code blocks (```), inline code (`), and URLs
-    func extractTags(from text: String) -> [String] {
+    static func inlineTagMatches(in text: String) -> [(range: NSRange, normalized: String)] {
         guard let regex = AppState.extractTagsRegex else { return [] }
         let nsText = text as NSString
         let fullRange = NSRange(location: 0, length: nsText.length)
-        
-        // Find all code block ranges to exclude (both fenced and inline)
+
         var codeRanges: [NSRange] = []
         codeRanges += AppState.codeBlockRegex?.matches(in: text, range: fullRange).map { $0.range } ?? []
         codeRanges += AppState.inlineCodeRegex?.matches(in: text, range: fullRange).map { $0.range } ?? []
-        
-        let matches = regex.matches(in: text, range: fullRange)
+
         let urlRanges = AppState.urlDetector?.matches(in: text, range: fullRange).map(\.range) ?? []
-        
-        var uniqueTags = Set<String>()
-        return matches.compactMap { match in
+
+        return regex.matches(in: text, range: fullRange).compactMap { match in
             guard match.numberOfRanges > 1 else { return nil }
-            
-            // Skip if inside a code block (fenced or inline)
+
             if codeRanges.contains(where: { NSLocationInRange(match.range.location, $0) }) {
                 return nil
             }
-            
-            // Skip if inside a URL
+
             if urlRanges.contains(where: { NSLocationInRange(match.range.location, $0) }) {
                 return nil
             }
-            
+
             if match.range.location > 0 {
                 let previousCharacter = nsText.substring(with: NSRange(location: match.range.location - 1, length: 1))
                 if previousCharacter == "/" {
                     return nil
                 }
             }
+
             let raw = nsText.substring(with: match.range(at: 1))
             let normalized = raw.lowercased()
             guard !normalized.isEmpty, normalized.rangeOfCharacter(from: .letters) != nil else { return nil }
+            return (match.range(at: 0), normalized)
+        }
+    }
+
+    /// Extracts all hashtags from text, normalizes to lowercase, removes duplicates
+    /// Ignores hashtags inside code blocks (```), inline code (`), and URLs
+    func extractTags(from text: String) -> [String] {
+        var uniqueTags = Set<String>()
+        return AppState.inlineTagMatches(in: text).compactMap { match in
+            let normalized = match.normalized
             guard uniqueTags.insert(normalized).inserted else { return nil }
             return normalized
         }.sorted()

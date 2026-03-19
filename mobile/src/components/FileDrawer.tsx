@@ -80,7 +80,6 @@ export function FileDrawer({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{ file: FileNode; lineNumber: number; lineText: string; matchIndex: number }[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   const loadPreferences = useCallback(async () => {
     setHasLoadedPreferences(false);
@@ -323,11 +322,10 @@ export function FileDrawer({
   const getSortedFiles = useCallback(() => sortFiles(files), [files, sortFiles]);
   const getSortedFlatFiles = useCallback(() => sortFiles(flatFiles), [flatFiles, sortFiles]);
 
-  // Vault-wide search function
-  const performVaultSearch = useCallback(async (query: string) => {
-    if (!query.trim() || !vaultPath) {
+  // Manual search execution
+  const handleSearch = useCallback(async () => {
+    if (!searchQuery.trim() || !vaultPath) {
       setSearchResults([]);
-      setIsSearching(false);
       return;
     }
 
@@ -341,7 +339,7 @@ export function FileDrawer({
       });
 
       const results: { file: FileNode; lineNumber: number; lineText: string; matchIndex: number }[] = [];
-      const lowerQuery = query.toLowerCase();
+      const lowerQuery = searchQuery.toLowerCase();
 
       // Search through each file
       for (const file of allFiles) {
@@ -377,35 +375,12 @@ export function FileDrawer({
     } finally {
       setIsSearching(false);
     }
-  }, [vaultPath]);
-
-  // Debounced search handler
-  const handleSearchChange = (query: string) => {
-    setSearchQuery(query);
-    
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-    
-    if (!query.trim()) {
-      setSearchResults([]);
-      setIsSearching(false);
-      return;
-    }
-    
-    setIsSearching(true);
-    searchTimeoutRef.current = setTimeout(() => {
-      performVaultSearch(query);
-    }, 300); // 300ms debounce
-  };
+  }, [searchQuery, vaultPath]);
 
   const clearSearch = () => {
     setSearchQuery('');
     setSearchResults([]);
     setIsSearching(false);
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
   };
 
   const openDrawer = () => {
@@ -894,19 +869,37 @@ export function FileDrawer({
                   testID="vault-search-input"
                   style={[styles.searchInput, { color: theme.colors.text }]}
                   value={searchQuery}
-                  onChangeText={handleSearchChange}
+                  onChangeText={setSearchQuery}
                   placeholder="Search all notes..."
                   placeholderTextColor={theme.colors.text + '60'}
+                  returnKeyType="search"
+                  onSubmitEditing={handleSearch}
                 />
                 {searchQuery.length > 0 && (
                   <TouchableOpacity onPress={clearSearch} testID="clear-search-button">
                     <MaterialIcons name="close" size={20} color={theme.colors.text + '60'} />
                   </TouchableOpacity>
                 )}
-                {isSearching && (
-                  <ActivityIndicator size="small" color={theme.colors.primary} style={styles.searchSpinner} />
-                )}
               </View>
+              
+              {/* Search Button */}
+              <TouchableOpacity
+                style={[styles.searchButton, { backgroundColor: theme.colors.primary }]}
+                onPress={handleSearch}
+                disabled={isSearching || !searchQuery.trim()}
+                testID="search-button"
+              >
+                {isSearching ? (
+                  <ActivityIndicator size="small" color={theme.colors.background} />
+                ) : (
+                  <>
+                    <MaterialIcons name="search" size={18} color={theme.colors.background} />
+                    <Text style={[styles.searchButtonText, { color: theme.colors.background }]}>
+                      Search
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
               
               {/* Search Results */}
               {searchResults.length > 0 && (
@@ -1361,6 +1354,22 @@ const styles = StyleSheet.create({
   },
   searchSpinner: {
     marginLeft: 8,
+  },
+  searchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 12,
+    minHeight: 44,
+  },
+  searchButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
   searchResultsContainer: {
     marginTop: 12,

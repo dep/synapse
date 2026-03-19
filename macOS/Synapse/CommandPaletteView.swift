@@ -187,7 +187,10 @@ struct CommandPaletteView: View {
             .shadow(color: .black.opacity(0.35), radius: 20, x: 0, y: 18)
         }
         .onAppear {
-            isSearchFocused = true
+            // Delay focus slightly to ensure view is fully rendered
+            DispatchQueue.main.async {
+                isSearchFocused = true
+            }
             installEventMonitor()
         }
         .onDisappear {

@@ -55,6 +55,7 @@
 		70792E277639E834624DC380 /* SplitPaneKeyboardAndCursorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58B5194AC3C7EE4980499F00 /* SplitPaneKeyboardAndCursorTests.swift */; };
 		716F196A70B019DB1125E38F /* AppStateCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56691DF2CDDFA2DF5F263CF3 /* AppStateCoreTests.swift */; };
 		726A539D32A11574BB72A17D /* AppStateExitVaultFullTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 490C9CA7FD044A526559CA53 /* AppStateExitVaultFullTests.swift */; };
+		72B187CC92232606DB011D92 /* InlineTagStylingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 144B3EA17E9D478AD62ED9A5 /* InlineTagStylingTests.swift */; };
 		7371C3F9A6EADA8C24730961 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = 09980A02177F156C0F1B20D8 /* Yams */; };
 		7715A2594C966414407B38C9 /* SettingsPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37535D804D7598740D99FEDD /* SettingsPersistenceTests.swift */; };
 		7A972695B65AFE2D1DA7A523 /* SettingsManagerBareExtensionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 380760DBBA1A62E71C1C9D15 /* SettingsManagerBareExtensionsTests.swift */; };
@@ -141,6 +142,7 @@
 		0E15235537B931DCAA752074 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		12936BAA078D86D1DC91F861 /* SettingsManagerGitHubPATTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsManagerGitHubPATTests.swift; sourceTree = "<group>"; };
 		12B05C011702D5236468CEDD /* Synapse.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Synapse.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		144B3EA17E9D478AD62ED9A5 /* InlineTagStylingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineTagStylingTests.swift; sourceTree = "<group>"; };
 		147AFC9C373247489F744397 /* AppStateCommandPaletteGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateCommandPaletteGuardTests.swift; sourceTree = "<group>"; };
 		1609E933DF539DAC00406023 /* AppStateRelativePathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateRelativePathTests.swift; sourceTree = "<group>"; };
 		1E187A6A841FAE77D9C9440A /* AppStateGraphTabTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateGraphTabTests.swift; sourceTree = "<group>"; };
@@ -368,6 +370,7 @@
 				C55EAAB85AA800B037CDF588 /* GraphNodeColorTests.swift */,
 				AC8CA87990A19BCF411A9424 /* ImagePasteTests.swift */,
 				8A03956EC9D388F74A50F6F3 /* ImageSidebarEmbedTests.swift */,
+				144B3EA17E9D478AD62ED9A5 /* InlineTagStylingTests.swift */,
 				716125BBC502DD8F555057F7 /* KeyCodeTests.swift */,
 				625B7F4419FE877A036D3664 /* ListContinuationTests.swift */,
 				9D419E073C2917DEE1A85E20 /* NoteGraphModelTests.swift */,
@@ -455,9 +458,10 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+				};
 			};
 			buildConfigurationList = F9E134B30A5BBF25B9343AD5 /* Build configuration list for PBXProject "Synapse" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -472,6 +476,7 @@
 				14519BB0FD8BF9DAF35FBD70 /* XCRemoteSwiftPackageReference "Yams" */,
 			);
 			preferredProjectObjectVersion = 77;
+			productRefGroup = 8B9CF596FCB07B1002F10E36 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -554,6 +559,7 @@
 				E0730BEEF94695E2F06AFE72 /* GraphNodeColorTests.swift in Sources */,
 				3BAD93BD9ED210549AF41A07 /* ImagePasteTests.swift in Sources */,
 				F4AE6BB73560EDBD541B5187 /* ImageSidebarEmbedTests.swift in Sources */,
+				72B187CC92232606DB011D92 /* InlineTagStylingTests.swift in Sources */,
 				9E080881DF7B54EB62019205 /* KeyCodeTests.swift in Sources */,
 				98ECF354C8B6A66507E3C7FE /* ListContinuationTests.swift in Sources */,
 				9C491E4C25AF389520BC1BD1 /* NoteGraphModelTests.swift in Sources */,
