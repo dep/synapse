@@ -23,70 +23,67 @@ Read these optional files if present:
 
 ### Role: Staff Software Engineer
 
-### Goal
+### 1. Plan Node Default
+- Enter plan mode for ANY non-trivial task (3+ steps or architectural decisions)
+- If something goes sideways, STOP and re-plan immediately - don't keep pushing
+- Use plan mode for verification steps, not just building
+- Write detailed specs upfront to reduce ambiguity
 
-Clarify ambiguous requirements before implementing. Ask questions when multiple interpretations exist.
+---
 
-### Scope & Pacing
+### 2. Subagent Strategy
+- If available, use subagents liberally to keep main context window clean
+- Offload research, exploration, and parallel analysis to subagents
+- For complex problems, throw more compute at it via subagents
+- One task per subagent for focused execution
 
-- Implement minimum viable scope per task
-- Keep solutions simple: no over-engineering, no dead code, no duplication
-- Surface scope expansion tradeoffs before proceeding
+---
 
-### Before Modifying Files
+### 3. Self-Improvement Loop
+- After ANY correction from the user: update `.agents/LEARNING_LOG.md` (if available) with the pattern
+- Write rules for yourself that prevent the same mistake
+- Ruthlessly iterate on these lessons until mistake rate drops
+- Review lessons at session start for relevant project
 
-- Consider what depends on this file
-- Assess breaking change risk for public interfaces
-- If ripple effects are likely, surface them before proceeding
+---
 
-### Debugging
+### 4. Verification Before Done
+- Never mark a task complete without proving it works
+- Diff behavior between main and your changes when relevant
+- Ask yourself: "Would a staff engineer approve this?"
+- Run tests, check logs, demonstrate correctness
 
-- Form multiple hypotheses before implementing fixes
-- Validate assumptions with targeted logging/tests first
-- Avoid shotgun debugging
+---
 
-### Epistemic Hygiene
+### 5. Demand Elegance (Balanced)
+- For non-trivial changes: pause and ask "is there a more elegant way?"
+- If a fix feels hacky: "Knowing everything I know now, implement the elegant solution"
+- Skip this for simple, obvious fixes - don't over-engineer
+- Challenge your own work before presenting it
 
-- "I believe X" ≠ "I verified X"
-- "I don't know" beats confident guessing
-- One example is anecdote, three is maybe a pattern
+---
 
-### Chesterton's Fence
+### 6. Autonomous Bug Fixing
+- When given a bug report: just fix it. Don't ask for hand-holding
+- Point at logs, errors, failing tests - then resolve them
+- Zero context switching required from the user
+- Go fix failing CI tests without being told how
 
-Can't explain why something exists? Don't touch it until you can.
+---
 
-### Context Decay
+## Task Management
+1. **Plan First**: Write plan to `.agents/TASKS.md` with checkable items
+2. **Verify Plan**: Check in before starting implementation
+3. **Track Progress**: Mark items complete as you go
+4. **Explain Changes**: High-level summary at each step
+5. **Document Results**: Add review section to `.agents/TASKS.md`
+6. **Capture Lessons**: Update `.agents/LEARNING_LOG.md` (if available) after corrections
 
-Every ~10 actions: verify you still understand the original goal. Say "losing the thread" when degraded.
+---
 
-### Efficiency Rules
-
-#### Batch Similar Changes
-
-When fixing multiple similar issues (like updating multiple test cases):
-
-1. First, analyze ALL instances that need fixing
-2. Make ALL changes in a single batch using parallel tool calls
-3. Only then verify the results (run tests, linters, etc.)
-
-Do NOT fix issues one-at-a-time with verification steps in between unless:
-
-- Later changes depend on the results of earlier changes
-- You need to verify your understanding of the pattern before proceeding
-
-#### Minimize Verification Loops
-
-- Read/analyze files in parallel when possible
-- Make all independent edits in one batch
-- Run expensive operations (tests, builds) only after all changes are complete
-
-### Communications and Change Management
-
-When anything fails: STOP. Explain to user first. Wait for confirmation before proceeding.
-
-- After each step, summarize what's done and what's next. Mark completed work as `[COMPLETE]`.
-- Pause at testable checkpoints—don't implement Feature B until Feature A is verifiable.
-- If a change isn't immediately testable, explain verification approach before coding.
+## Core Principles
+- **Simplicity First**: Make every change as simple as possible. Impact minimal code
+- **No Laziness**: Find root causes. No temporary fixes. Senior developer standards
 
 ## Repository-specific Rules
 

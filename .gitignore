@@ -45,3 +45,6 @@ fastlane/screenshots
 # Xcode - Build products
 build/
 DerivedData/
+
+# AI custom context (personal/team preferences, gitignored)
+.agents/TASKS.md
