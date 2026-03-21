@@ -2916,15 +2916,21 @@ class LinkAwareTextView: NSTextView {
 
     /// Handles paste events for images. Saves image to .images folder and inserts markdown.
     override func paste(_ sender: Any?) {
-        // Try HTML paste first (check for HTML content on pasteboard)
+        // Image data takes priority: if the pasteboard carries actual image
+        // binary data, save it to .images/ and insert a local Markdown link.
+        // This must come before HTML so that copying an image from a browser
+        // (which puts both image data AND HTML on the pasteboard) correctly
+        // saves the image locally rather than emitting a remote URL.
+        if handlePaste(from: .general) {
+            return
+        }
+
+        // No image data — try converting HTML to Markdown.
         if handleHTMLPaste(from: .general) {
             return
         }
 
-        // Then try image paste
-        if !handlePaste(from: .general) {
-            super.paste(sender)
-        }
+        super.paste(sender)
     }
 
     @discardableResult
