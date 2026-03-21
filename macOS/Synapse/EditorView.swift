@@ -316,22 +316,22 @@ struct EditorView: View {
     private func loadFileHistory(for file: URL) {
         print("[DEBUG] Loading file history for: \(file.path)")
         print("[DEBUG] appState.rootURL: \(String(describing: appState.rootURL))")
-        
+
         guard let rootURL = appState.rootURL else {
             print("[DEBUG] No rootURL available")
             fileHistory = []
             return
         }
-        
+
         print("[DEBUG] Attempting to create GitService with: \(rootURL.path)")
         print("[DEBUG] Is git repo: \(GitService.isGitRepo(at: rootURL))")
-        
+
         guard let gitService = try? GitService(repoURL: rootURL) else {
             print("[DEBUG] Failed to create GitService")
             fileHistory = []
             return
         }
-        
+
         let history = gitService.getFileHistory(for: file)
         print("[DEBUG] Found \(history.count) commits")
         fileHistory = history
@@ -340,7 +340,7 @@ struct EditorView: View {
     private func selectCommit(_ commit: GitService.FileCommit) {
         selectedCommit = commit
         isLoadingHistory = true
-        
+
         guard let rootURL = appState.rootURL,
               let gitService = try? GitService(repoURL: rootURL),
               let file = displayFile else {
@@ -348,14 +348,14 @@ struct EditorView: View {
             isLoadingHistory = false
             return
         }
-        
+
         historicalContent = gitService.getFileContent(at: commit.sha, for: file)
         isLoadingHistory = false
     }
 
     private func restoreHistoricalVersion() {
         guard let content = historicalContent else { return }
-        
+
         if let editableContent = editableContent {
             editableContent.wrappedValue = content
             editableIsDirty?.wrappedValue = true
@@ -363,7 +363,7 @@ struct EditorView: View {
             appState.fileContent = content
             appState.isDirty = true
         }
-        
+
         showHistoryModal = false
         selectedCommit = nil
         historicalContent = nil
@@ -380,7 +380,7 @@ struct EditorView: View {
                 .onTapGesture {
                     showHistoryModal = false
                 }
-            
+
             // Modal content
             VStack(spacing: 0) {
                 // Header
@@ -402,13 +402,13 @@ struct EditorView: View {
                         .buttonStyle(.plain)
                         .padding(.trailing, 8)
                     }
-                    
+
                     Text(selectedCommit == nil ? "Version History" : "Historical Version")
                         .font(.system(size: 17, weight: .semibold, design: .rounded))
                         .foregroundStyle(SynapseTheme.textPrimary)
-                    
+
                     Spacer()
-                    
+
                     Button(action: {
                         showHistoryModal = false
                         selectedCommit = nil
@@ -423,10 +423,10 @@ struct EditorView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(SynapseTheme.panel)
-                
+
                 Divider()
                     .background(SynapseTheme.border)
-                
+
                 // Content
                 if let commit = selectedCommit {
                     // Preview mode
@@ -442,7 +442,7 @@ struct EditorView: View {
                         }
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
-                        
+
                         // Historical content preview
                         if isLoadingHistory {
                             Spacer()
@@ -469,7 +469,7 @@ struct EditorView: View {
                                 .foregroundStyle(SynapseTheme.textMuted)
                             Spacer()
                         }
-                        
+
                         // Restore button
                         Button(action: restoreHistoricalVersion) {
                             HStack(spacing: 6) {
@@ -502,7 +502,7 @@ struct EditorView: View {
                                         Image(systemName: "clock")
                                             .font(.system(size: 14))
                                             .foregroundStyle(SynapseTheme.accent)
-                                        
+
                                         VStack(alignment: .leading, spacing: 3) {
                                             Text(commit.message)
                                                 .font(.system(size: 13, weight: .medium))
@@ -513,9 +513,9 @@ struct EditorView: View {
                                                 .font(.system(size: 11))
                                                 .foregroundStyle(SynapseTheme.textMuted)
                                         }
-                                        
+
                                         Spacer()
-                                        
+
                                         Image(systemName: "chevron.right")
                                             .font(.system(size: 12))
                                             .foregroundStyle(SynapseTheme.textMuted)
@@ -525,7 +525,7 @@ struct EditorView: View {
                                     .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
-                                
+
                                 if index < fileHistory.count - 1 {
                                     Divider()
                                         .background(SynapseTheme.border)
@@ -621,7 +621,7 @@ struct RawEditor: NSViewRepresentable {
         } else {
             textView.onCommandPaletteFallback = nil
         }
-        
+
         // Set up wiki link callbacks
         textView.onWikiLinkRequest = { [weak appState, weak textView] in
             // Store the typing range and set up completion handler
@@ -717,21 +717,21 @@ struct RawEditor: NSViewRepresentable {
             let noteMatches = textView.inlineEmbedMatches()
             let imageMatches = textView.inlineImageMatches()
             let currentFileURL = textView.currentFileURL
-            
+
             // Convert note matches to SidebarEmbedInfo
             var allEmbeds: [SidebarEmbedInfo] = noteMatches.map { match in
                 SidebarEmbedInfo.fromEmbedMatch(match)
             }
-            
+
             // Convert image matches to SidebarEmbedInfo
             let imageEmbeds = imageMatches.map { match in
                 SidebarEmbedInfo.fromImageMatch(match, relativeTo: currentFileURL)
             }
             allEmbeds.append(contentsOf: imageEmbeds)
-            
+
             // Sort by document position
             allEmbeds.sort { $0.range.location < $1.range.location }
-            
+
             if allEmbeds != embeddedNotes {
                 embeddedNotes = allEmbeds
             }
@@ -891,7 +891,7 @@ func styleMarkdownContent(_ content: String, fontSize: CGFloat = 12) -> NSAttrib
     let storage = NSTextStorage(string: content)
     let text = content as NSString
     let fullRange = NSRange(location: 0, length: text.length)
-    
+
     let baseFont = NSFont.systemFont(ofSize: fontSize)
     storage.addAttributes([
         .font: baseFont,
@@ -911,7 +911,7 @@ func styleMarkdownContent(_ content: String, fontSize: CGFloat = 12) -> NSAttrib
         storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: NSRange(location: range.location, length: delimLen))
         storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: NSRange(location: range.location + range.length - delimLen, length: delimLen))
     }
-    
+
     // Headers
     let headerPatterns: [(String, NSFont)] = [
         ("^#{6} .+$", NSFont.systemFont(ofSize: fontSize + 2, weight: .semibold)),
@@ -930,7 +930,7 @@ func styleMarkdownContent(_ content: String, fontSize: CGFloat = 12) -> NSAttrib
             }
         }
     }
-    
+
     // Bold
     applyPattern("\\*\\*(.+?)\\*\\*") { range in
         storage.addAttribute(.font, value: NSFont.systemFont(ofSize: fontSize, weight: .bold), range: range)
@@ -987,7 +987,7 @@ func styleMarkdownContent(_ content: String, fontSize: CGFloat = 12) -> NSAttrib
     applyPattern("^---$", options: [.anchorsMatchLines]) { range in
         storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: range)
     }
-    
+
     return NSAttributedString(attributedString: storage)
 }
 
@@ -1613,7 +1613,7 @@ extension LinkAwareTextView {
             inlineVideoViews[key]?.removeFromSuperview()
             inlineVideoViews.removeValue(forKey: key)
         }
-        
+
         clearCodeBlockCopyButtons()
     }
 }
@@ -1705,19 +1705,19 @@ class LinkAwareTextView: NSTextView {
             return
         }
         let point = convert(event.locationInWindow, from: nil)
-        
+
         // Check if clicking on an image markdown
         if let embedID = imageEmbedTarget(at: point) {
             onSelectEmbed?(embedID)
             return
         }
-        
+
         if let target = wikilinkTarget(at: point) {
             let openInNewTab = event.modifierFlags.contains(.command)
             _ = handleLinkClick(target, openInNewTab: openInNewTab)
             return
         }
-        
+
         // Check if clicking on a tag
         if let tag = tagTarget(at: point) {
             let openInNewTab = event.modifierFlags.contains(.command)
@@ -1731,11 +1731,11 @@ class LinkAwareTextView: NSTextView {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        
+
         if let oldTrackingArea = trackingArea {
             removeTrackingArea(oldTrackingArea)
         }
-        
+
         let newTrackingArea = NSTrackingArea(
             rect: bounds,
             options: [.mouseMoved, .activeAlways, .inVisibleRect],
@@ -1748,7 +1748,7 @@ class LinkAwareTextView: NSTextView {
 
     override func mouseMoved(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        
+
         // Check if hovering over an interactive element
         if imageEmbedTarget(at: point) != nil ||
            wikilinkTarget(at: point) != nil ||
@@ -1786,10 +1786,10 @@ class LinkAwareTextView: NSTextView {
         // Check if this character is part of an image markdown
         let nsText = string as NSString
         let textRange = NSRange(location: 0, length: nsText.length)
-        
+
         guard let regex = Self.inlineImageRegex else { return nil }
         let matches = regex.matches(in: string, range: textRange)
-        
+
         for match in matches {
             let matchRange = match.range(at: 0)
             if NSLocationInRange(charIndex, matchRange) {
@@ -1797,7 +1797,7 @@ class LinkAwareTextView: NSTextView {
                 return "\(matchRange.location)-\(source)"
             }
         }
-        
+
         return nil
     }
 
@@ -2913,12 +2913,24 @@ class LinkAwareTextView: NSTextView {
     }
 
     // MARK: - Image paste handling
-    
+
     /// Handles paste events for images. Saves image to .images folder and inserts markdown.
     override func paste(_ sender: Any?) {
-        if !handlePaste(from: .general) {
-            super.paste(sender)
+        // Image data takes priority: if the pasteboard carries actual image
+        // binary data, save it to .images/ and insert a local Markdown link.
+        // This must come before HTML so that copying an image from a browser
+        // (which puts both image data AND HTML on the pasteboard) correctly
+        // saves the image locally rather than emitting a remote URL.
+        if handlePaste(from: .general) {
+            return
         }
+
+        // No image data — try converting HTML to Markdown.
+        if handleHTMLPaste(from: .general) {
+            return
+        }
+
+        super.paste(sender)
     }
 
     @discardableResult
@@ -2975,20 +2987,20 @@ class LinkAwareTextView: NSTextView {
         guard let image = readImage(from: pasteboard) else { return nil }
         return PastedImageAsset(image: image, originalData: nil, fileExtension: "png")
     }
-    
+
     /// Reads an image from the pasteboard using various methods
     private func readImage(from pasteboard: NSPasteboard) -> NSImage? {
         if let images = pasteboard.readObjects(forClasses: [NSImage.self]) as? [NSImage],
            let firstImage = images.first {
             return firstImage
         }
-        
+
         if NSImage.canInit(with: pasteboard) {
             if let image = NSImage(pasteboard: pasteboard) {
                 return image
             }
         }
-        
+
         let tiffTypes: [NSPasteboard.PasteboardType] = [
             .tiff,
             NSPasteboard.PasteboardType(rawValue: "public.tiff"),
@@ -2996,7 +3008,7 @@ class LinkAwareTextView: NSTextView {
             NSPasteboard.PasteboardType(rawValue: "com.apple.tiff"),
             NSPasteboard.PasteboardType(rawValue: "NeXT TIFF v4.0 pasteboard type"),
         ]
-        
+
         for type in tiffTypes {
             if let tiffData = pasteboard.data(forType: type) {
                 if let image = NSImage(data: tiffData) {
@@ -3004,7 +3016,7 @@ class LinkAwareTextView: NSTextView {
                 }
             }
         }
-        
+
         let pngTypes: [NSPasteboard.PasteboardType] = [
             .png,
             NSPasteboard.PasteboardType(rawValue: "public.png"),
@@ -3012,7 +3024,7 @@ class LinkAwareTextView: NSTextView {
             NSPasteboard.PasteboardType(rawValue: "PNGf"),
             NSPasteboard.PasteboardType(rawValue: "Apple PNG pasteboard type"),
         ]
-        
+
         for type in pngTypes {
             if let pngData = pasteboard.data(forType: type) {
                 if let image = NSImage(data: pngData) {
@@ -3020,7 +3032,7 @@ class LinkAwareTextView: NSTextView {
                 }
             }
         }
-        
+
         let otherImageTypes: [NSPasteboard.PasteboardType] = [
             NSPasteboard.PasteboardType(rawValue: "public.jpeg"),
             NSPasteboard.PasteboardType(rawValue: "public.jpg"),
@@ -3033,17 +3045,17 @@ class LinkAwareTextView: NSTextView {
             NSPasteboard.PasteboardType(rawValue: "BMP"),
             NSPasteboard.PasteboardType(rawValue: "BMPf"),
         ]
-        
+
         for type in otherImageTypes {
             if let data = pasteboard.data(forType: type),
                let image = NSImage(data: data) {
                 return image
             }
         }
-        
+
         return nil
     }
-    
+
     /// Handles image paste: saves to .images folder and inserts markdown
     func handleImagePaste(image: NSImage) {
         handleImagePaste(asset: PastedImageAsset(image: image, originalData: nil, fileExtension: "png"))
@@ -3054,10 +3066,10 @@ class LinkAwareTextView: NSTextView {
             // No current file, fall back to regular paste (but images can't be pasted without a file context)
             return
         }
-        
+
         let fileFolder = currentFileURL.deletingLastPathComponent()
         let imagesFolder = fileFolder.appendingPathComponent(".images")
-        
+
         // Create .images folder if it doesn't exist
         let fileManager = FileManager.default
         if !fileManager.fileExists(atPath: imagesFolder.path) {
@@ -3068,7 +3080,7 @@ class LinkAwareTextView: NSTextView {
                 return
             }
         }
-        
+
         // Generate unique filename with timestamp and random component
         let timestamp = Int(Date().timeIntervalSince1970)
         let random = Int.random(in: 1000...9999)
@@ -3087,18 +3099,18 @@ class LinkAwareTextView: NSTextView {
             }
             dataToWrite = pngData
         }
-        
+
         do {
             try dataToWrite.write(to: imagePath)
         } catch {
             debugLog("Failed to save image: \(error)")
             return
         }
-        
+
         // Calculate relative path from current file to image
         let relativePath = ".images/\(filename)"
         let markdown = "![](\(relativePath))"
-        
+
         // Insert markdown at current cursor position
         let currentRange = selectedRange()
         if shouldChangeText(in: currentRange, replacementString: markdown) {
@@ -3106,13 +3118,301 @@ class LinkAwareTextView: NSTextView {
             didChangeText()
         }
     }
-    
+
     private func scaledInlineImageSize(for image: NSImage, maxWidth: CGFloat) -> NSSize {
         let originalSize = image.size.width > 0 && image.size.height > 0 ? image.size : NSSize(width: maxWidth, height: 180)
         let width = min(maxWidth, originalSize.width)
         let scale = width / max(originalSize.width, 1)
         let height = max(80, min(420, originalSize.height * scale))
         return NSSize(width: width, height: height)
+    }
+
+    // MARK: - HTML to Markdown Conversion
+
+    /// Returns true when the insertion point is inside (or on the opening line
+    /// of) a fenced code block, so HTML paste should be left as-is.
+    private func cursorIsInCodeBlock() -> Bool {
+        let cursor = selectedRange().location
+        guard cursor != NSNotFound else { return false }
+        let nsText = string as NSString
+        let len = nsText.length
+
+        // Pattern: opening ``` fence at the start of a line.
+        guard let fenceRegex = try? NSRegularExpression(
+            pattern: "^[ \\t]{0,3}```",
+            options: [.anchorsMatchLines]
+        ) else { return false }
+
+        let fenceMatches = fenceRegex.matches(in: string, options: [],
+                                              range: NSRange(location: 0, length: len))
+
+        // Walk fence matches in pairs; an unpaired opening also counts.
+        var i = 0
+        while i < fenceMatches.count {
+            let open = fenceMatches[i]
+            let openEnd = open.range.location + open.range.length
+
+            if i + 1 < fenceMatches.count {
+                let close = fenceMatches[i + 1]
+                let closeStart = close.range.location
+                // Cursor is inside a complete block.
+                if cursor >= open.range.location && cursor <= NSMaxRange(close.range) {
+                    return true
+                }
+                i += 2
+            } else {
+                // Unpaired opening fence — cursor anywhere from the ``` to end of doc.
+                if cursor >= open.range.location {
+                    return true
+                }
+                i += 1
+            }
+        }
+        return false
+    }
+
+    /// Converts HTML pasteboard content to Markdown and inserts it.
+    /// Checks dedicated HTML pasteboard types first, then falls back to
+    /// checking whether the plain-text payload looks like HTML (e.g. when
+    /// copying raw HTML source from a text editor or terminal).
+    @discardableResult
+    func handleHTMLPaste(from pasteboard: NSPasteboard) -> Bool {
+        // Never convert when the cursor is inside a fenced code block.
+        guard !cursorIsInCodeBlock() else { return false }
+
+        // 1. Try dedicated HTML pasteboard types (browser copies, rich-text apps).
+        let htmlTypes: [NSPasteboard.PasteboardType] = [
+            .html,
+            NSPasteboard.PasteboardType("public.html"),
+            NSPasteboard.PasteboardType("Apple HTML pasteboard type"),
+            NSPasteboard.PasteboardType("NSHTMLPboardType"),
+        ]
+
+        var htmlString: String? = nil
+        for type in htmlTypes {
+            if let str = pasteboard.string(forType: type) {
+                htmlString = str
+                break
+            }
+        }
+
+        // 2. Fallback: plain-text that looks like HTML (raw source pasted from
+        //    a terminal, VS Code, etc.). Require at least one structural tag so
+        //    we don't accidentally convert markdown or code that uses < >.
+        if htmlString == nil, let plain = pasteboard.string(forType: .string) {
+            if looksLikeHTML(plain) {
+                htmlString = plain
+            }
+        }
+
+        guard let html = htmlString, !html.isEmpty else {
+            return false
+        }
+
+        #if DEBUG
+        print("[HTML Paste] Source: \(html.prefix(300))")
+        #endif
+
+        let markdown = HTMLToMarkdownConverter.convert(html)
+
+        #if DEBUG
+        print("[HTML Paste] Result: \(markdown.prefix(300))")
+        #endif
+
+        let currentRange = selectedRange()
+        guard shouldChangeText(in: currentRange, replacementString: markdown) else {
+            return false
+        }
+        replaceCharacters(in: currentRange, with: markdown)
+        didChangeText()
+        return true
+    }
+
+    /// Returns true if the string contains at least one structural HTML tag
+    /// that makes it worth attempting conversion.
+    private func looksLikeHTML(_ text: String) -> Bool {
+        let structural = ["<ul", "<ol", "<li", "<p>", "<p ", "<h1", "<h2",
+                          "<h3", "<h4", "<h5", "<h6", "<table", "<div",
+                          "<blockquote", "<pre", "<code"]
+        let lower = text.lowercased()
+        return structural.contains { lower.contains($0) }
+    }
+}
+
+// MARK: - HTML to Markdown Converter
+
+/// Converts HTML content to Markdown using NSAttributedString for correct parsing,
+/// then walks the attribute runs to emit Markdown syntax.
+struct HTMLToMarkdownConverter {
+
+    static func convert(_ html: String) -> String {
+        let trimmed = html.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        // Wrap in a minimal HTML document so NSAttributedString's HTML renderer
+        // uses the correct charset and a neutral sans-serif stylesheet. Without
+        // the wrapper the renderer can misdetect encoding and apply a monospace /
+        // code-block stylesheet to the entire content.
+        let wrapped: String
+        if trimmed.lowercased().hasPrefix("<!doctype") || trimmed.lowercased().hasPrefix("<html") {
+            wrapped = trimmed
+        } else {
+            wrapped = """
+            <!DOCTYPE html>
+            <html><head><meta charset="UTF-8">
+            <style>body { font-family: -apple-system, sans-serif; font-size: 13px; }</style>
+            </head><body>\(trimmed)</body></html>
+            """
+        }
+
+        guard let data = wrapped.data(using: .utf8) else { return trimmed }
+
+        let opts: [NSAttributedString.DocumentReadingOptionKey: Any] = [
+            .documentType: NSAttributedString.DocumentType.html,
+            .characterEncoding: String.Encoding.utf8.rawValue,
+        ]
+
+        guard let attrStr = try? NSAttributedString(data: data, options: opts, documentAttributes: nil) else {
+            return trimmed
+        }
+
+        return markdownFromAttributedString(attrStr)
+    }
+
+    // MARK: - Attributed string → Markdown
+
+    private static func markdownFromAttributedString(_ attrStr: NSAttributedString) -> String {
+        let fullString = attrStr.string
+        var output = ""
+
+        let nsString = fullString as NSString
+        var paraStart = 0
+
+        while paraStart < nsString.length {
+            var paraEnd = 0
+            var contentsEnd = 0
+            nsString.getParagraphStart(nil, end: &paraEnd, contentsEnd: &contentsEnd,
+                                       for: NSRange(location: paraStart, length: 0))
+
+            let contentsRange = NSRange(location: paraStart, length: contentsEnd - paraStart)
+
+            // Grab first-character attributes to classify the paragraph.
+            let attrs = (paraEnd > paraStart)
+                ? attrStr.attributes(at: paraStart, effectiveRange: nil)
+                : [:]
+
+            let paraStyle = attrs[.paragraphStyle] as? NSParagraphStyle
+            let font      = attrs[.font] as? NSFont
+            let fontSize  = font?.pointSize ?? 12
+            let headingLevel = headingLevelForFontSize(fontSize)
+            let isListItem   = isListItemParagraph(paraStyle)
+            let isOrdered    = isOrderedListItem(attrStr, range: contentsRange)
+
+            // Build inline content, suppressing bold on headings (NSAttributedString
+            // makes heading text bold by default — that would double-format it).
+            let inlineContent = inlineMarkdown(attrStr, range: contentsRange,
+                                               suppressBold: headingLevel > 0)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if inlineContent.isEmpty {
+                if !output.isEmpty { output += "\n" }
+            } else if headingLevel > 0 {
+                let hashes = String(repeating: "#", count: headingLevel)
+                output += "\(hashes) \(inlineContent)\n\n"
+            } else if isListItem {
+                let marker = isOrdered ? "1." : "-"
+                let indent = indentForParagraphStyle(paraStyle)
+                output += "\(indent)\(marker) \(inlineContent)\n"
+            } else {
+                output += "\(inlineContent)\n\n"
+            }
+
+            paraStart = paraEnd
+        }
+
+        return output
+            .replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: - Inline span rendering
+
+    private static func inlineMarkdown(_ attrStr: NSAttributedString, range: NSRange,
+                                       suppressBold: Bool = false) -> String {
+        guard range.length > 0 else { return "" }
+
+        var output = ""
+
+        attrStr.enumerateAttributes(in: range, options: []) { attrs, spanRange, _ in
+            let text = (attrStr.string as NSString).substring(with: spanRange)
+
+            // Strip tabs (list marker column) and Unicode bullets NSAttributedString
+            // inserts for <ul> items (U+2022 •, U+25E6 ◦, U+25AA ▪, etc.)
+            var cleaned = text.replacingOccurrences(of: "\t", with: "")
+            cleaned = cleaned.unicodeScalars.filter { scalar in
+                // Drop Unicode list-marker bullet characters
+                ![0x2022, 0x25E6, 0x25AA, 0x25AB, 0x2023, 0x2043].contains(scalar.value)
+            }.reduce("") { $0 + String($1) }
+
+            guard !cleaned.isEmpty else { return }
+
+            let font    = attrs[.font] as? NSFont
+            let isBold  = !suppressBold && (font?.fontDescriptor.symbolicTraits.contains(.bold) ?? false)
+            let isItalic = font?.fontDescriptor.symbolicTraits.contains(.italic) ?? false
+            let isMono  = font?.fontDescriptor.symbolicTraits.contains(.monoSpace) ?? false
+            let link    = attrs[.link] as? URL
+                       ?? (attrs[.link] as? String).flatMap { URL(string: $0) }
+
+            var span = cleaned
+
+            if isMono {
+                span = "`\(span)`"
+            } else {
+                if isBold && isItalic { span = "***\(span)***" }
+                else if isBold        { span = "**\(span)**" }
+                else if isItalic      { span = "_\(span)_" }
+            }
+
+            if let url = link, !isMono {
+                span = "[\(cleaned)](\(url.absoluteString))"
+            }
+
+            output += span
+        }
+
+        return output
+    }
+
+    // MARK: - Helpers
+
+    /// Map NSAttributedString's rendered font sizes back to heading levels.
+    /// Empirical values on macOS 14/15 with default system HTML stylesheet:
+    ///   h1 → ~24pt, h2 → ~18pt, h3 → ~14pt bold, h4-h6 → 12pt bold
+    private static func headingLevelForFontSize(_ size: CGFloat) -> Int {
+        switch size {
+        case 22...: return 1
+        case 17..<22: return 2
+        case 14..<17: return 3
+        default: return 0
+        }
+    }
+
+    private static func isListItemParagraph(_ style: NSParagraphStyle?) -> Bool {
+        guard let style else { return false }
+        return style.headIndent > 0 && !style.tabStops.isEmpty
+    }
+
+    private static func isOrderedListItem(_ attrStr: NSAttributedString, range: NSRange) -> Bool {
+        guard range.length > 0 else { return false }
+        let raw = (attrStr.string as NSString).substring(with: range)
+        // Ordered items start with a tab followed by a digit and a period.
+        return raw.hasPrefix("\t") && raw.dropFirst().first?.isNumber == true
+    }
+
+    private static func indentForParagraphStyle(_ style: NSParagraphStyle?) -> String {
+        guard let style, style.headIndent > 36 else { return "" }
+        let extraLevels = Int((style.headIndent - 18) / 18)
+        return String(repeating: "    ", count: max(0, extraLevels))
     }
 }
 
@@ -3149,7 +3449,7 @@ struct EmbeddedNoteInfo: Identifiable, Equatable {
     let content: String?
     let noteURL: URL?
     let isUnresolved: Bool
-    
+
     static func == (lhs: EmbeddedNoteInfo, rhs: EmbeddedNoteInfo) -> Bool {
         lhs.id == rhs.id &&
         lhs.noteName == rhs.noteName &&
@@ -3178,7 +3478,7 @@ struct SidebarEmbedInfo: Identifiable, Equatable {
     let resolvedURL: URL?    // Resolved URL for both notes and images
     let isUnresolved: Bool
     let range: NSRange      // Position in document for sorting
-    
+
     /// Creates a SidebarEmbedInfo from an InlineEmbedMatch (note embed)
     static func fromEmbedMatch(_ match: InlineEmbedMatch) -> SidebarEmbedInfo {
         SidebarEmbedInfo(
@@ -3193,7 +3493,7 @@ struct SidebarEmbedInfo: Identifiable, Equatable {
             range: match.range
         )
     }
-    
+
     /// Creates a SidebarEmbedInfo from an InlineImageMatch (image embed)
     static func fromImageMatch(_ match: InlineImageMatch, relativeTo noteURL: URL?) -> SidebarEmbedInfo {
         let resolved = resolvedSidebarImageURL(for: match.source, relativeTo: noteURL)
@@ -3215,22 +3515,22 @@ struct SidebarEmbedInfo: Identifiable, Equatable {
 func resolvedSidebarImageURL(for source: String, relativeTo noteURL: URL?) -> URL? {
     let cleanedSource = source.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !cleanedSource.isEmpty else { return nil }
-    
+
     // Handle web URLs
     if cleanedSource.hasPrefix("http://") || cleanedSource.hasPrefix("https://") {
         return URL(string: cleanedSource)
     }
-    
+
     // Handle file:// URLs
     if cleanedSource.hasPrefix("file://") {
         return URL(string: cleanedSource)
     }
-    
+
     // Handle absolute paths
     if cleanedSource.hasPrefix("/") {
         return URL(fileURLWithPath: cleanedSource)
     }
-    
+
     // Handle relative paths
     guard let noteURL = noteURL else { return nil }
     let baseURL = noteURL.deletingLastPathComponent()
@@ -3262,23 +3562,23 @@ struct EmbeddedNotesPanel: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let documentView = scrollView.documentView else { return }
-        
+
         let width: CGFloat = 304 // 320 - 16 padding
         let spacing: CGFloat = 12
         var currentY: CGFloat = 8
         var selectedView: NSView?
         var selectedViewY: CGFloat = 0
-        
+
         // Track which embed IDs we've processed
         var processedIDs = Set<String>()
-        
+
         for embed in notes {
             processedIDs.insert(embed.id)
             let isSelected = embed.id == selectedEmbedID
-            
+
             // Find existing view for this embed ID
             let existingView = documentView.subviews.first { $0.identifier?.rawValue == embed.id }
-            
+
             switch embed.type {
             case .note:
                 let embedView: EmbeddedNoteView
@@ -3292,27 +3592,27 @@ struct EmbeddedNotesPanel: NSViewRepresentable {
                     }
                     documentView.addSubview(embedView)
                 }
-                
+
                 embedView.configure(
                     noteName: embed.title ?? "Note",
                     content: embed.content,
                     noteURL: embed.resolvedURL,
                     isUnresolved: embed.isUnresolved
                 )
-                
+
                 // Calculate height
                 let preferredSize = embedView.preferredSize(for: embed.content)
                 let height = min(preferredSize.height, 400)
-                
+
                 embedView.frame = NSRect(x: 0, y: currentY, width: width, height: height)
-                
+
                 if isSelected {
                     selectedView = embedView
                     selectedViewY = currentY
                 }
-                
+
                 currentY += height + spacing
-                
+
             case .image:
                 let imageView: EmbeddedImageView
                 if let existing = existingView as? EmbeddedImageView {
@@ -3328,26 +3628,26 @@ struct EmbeddedNotesPanel: NSViewRepresentable {
                     }
                     documentView.addSubview(imageView)
                 }
-                
+
                 imageView.configure(
                     caption: embed.caption,
                     imageURL: embed.resolvedURL,
                     isUnresolved: embed.isUnresolved,
                     isSelected: isSelected
                 )
-                
+
                 let height: CGFloat = embed.caption != nil ? 246 : 228
                 imageView.frame = NSRect(x: 0, y: currentY, width: width, height: height)
-                
+
                 if isSelected {
                     selectedView = imageView
                     selectedViewY = currentY
                 }
-                
+
                 currentY += height + spacing
             }
         }
-        
+
         // Remove views that are no longer needed
         documentView.subviews.forEach { view in
             if let id = view.identifier?.rawValue, !processedIDs.contains(id) {
@@ -3358,7 +3658,7 @@ struct EmbeddedNotesPanel: NSViewRepresentable {
         // Set document view size
         let totalHeight = max(currentY - spacing + 8, scrollView.bounds.height)
         documentView.frame = NSRect(x: 0, y: 0, width: width, height: totalHeight)
-        
+
         // Scroll selected view into view
         if let selectedView = selectedView {
             let visibleRect = NSRect(
@@ -3571,7 +3871,7 @@ final class EmbeddedImageView: NSView {
         targetURL = imageURL
         self.isSelected = isSelected
         openButton.isHidden = imageURL == nil || isUnresolved
-        
+
         if isUnresolved {
             captionField.stringValue = caption ?? "Image not found"
             imageView.image = nil
@@ -3582,17 +3882,17 @@ final class EmbeddedImageView: NSView {
                 loadImage(from: imageURL)
             }
         }
-        
+
         captionField.isHidden = (caption == nil || caption?.isEmpty == true)
-        
+
         // Update border color based on selection state
         updateBorderAppearance()
     }
-    
+
     private func updateBorderAppearance() {
         borderView.layer?.borderWidth = isSelected ? 3 : 1
-        borderView.layer?.borderColor = isSelected 
-            ? NSColor(SynapseTheme.accent).cgColor 
+        borderView.layer?.borderColor = isSelected
+            ? NSColor(SynapseTheme.accent).cgColor
             : NSColor(SynapseTheme.border).cgColor
     }
 
@@ -3609,7 +3909,7 @@ final class EmbeddedImageView: NSView {
 
     override func layout() {
         super.layout()
-        
+
         wantsLayer = true
         layer?.cornerRadius = 6
         layer?.masksToBounds = true
@@ -3682,7 +3982,7 @@ final class EmbeddedImageView: NSView {
 
     @objc private func openImage() {
         guard let targetURL = targetURL else { return }
-        
+
         let viewer = ImageViewerWindowController(imageURL: targetURL, caption: captionField.stringValue.isEmpty ? nil : captionField.stringValue)
         imageViewerController = viewer // retain strongly so it isn't deallocated before image loads
         viewer.showFullScreen()
@@ -3699,7 +3999,7 @@ final class EmbeddedImageView: NSView {
         borderView.layer?.cornerRadius = 6
         borderView.layer?.masksToBounds = true
         borderView.layer?.backgroundColor = SynapseTheme.nsPanelElevated.cgColor
-        
+
         addSubview(borderView)
         previewBackgroundView.wantsLayer = true
         previewBackgroundView.layer?.cornerRadius = 8
@@ -3715,11 +4015,11 @@ final class EmbeddedImageView: NSView {
         openButton.target = self
         openButton.action = #selector(openImage)
         addSubview(openButton)
-        
+
         // Click on image thumbnail scrolls editor to the markdown
         let click = NSClickGestureRecognizer(target: self, action: #selector(thumbnailClicked))
         imageView.addGestureRecognizer(click)
-        
+
         // Initial border appearance
         updateBorderAppearance()
     }
@@ -3746,7 +4046,7 @@ final class ImageViewerWindowController: NSWindowController {
     private var imageWidthConstraint: NSLayoutConstraint?
     private var imageHeightConstraint: NSLayoutConstraint?
     private var gestureStartZoom: CGFloat = 1.0
-    
+
     init(imageURL: URL, caption: String?) {
         let window = NSWindow(
             contentRect: NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 800, height: 600),
@@ -3759,9 +4059,9 @@ final class ImageViewerWindowController: NSWindowController {
         window.backgroundColor = .black
         window.isOpaque = true
         window.hasShadow = true
-        
+
         super.init(window: window)
-        
+
         self.imageURL = imageURL
         setupContentView()
         setupImageView()
@@ -3769,11 +4069,11 @@ final class ImageViewerWindowController: NSWindowController {
         setupEscapeHandler()
         loadImage()
     }
-    
+
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
-    
+
     deinit {
         if let monitor = localMonitor {
             NSEvent.removeMonitor(monitor)
@@ -3782,7 +4082,7 @@ final class ImageViewerWindowController: NSWindowController {
             NSEvent.removeMonitor(monitor)
         }
     }
-    
+
     private func setupContentView() {
         guard let window = window else { return }
 
@@ -3797,7 +4097,7 @@ final class ImageViewerWindowController: NSWindowController {
 
         window.contentView = scrollView
     }
-    
+
     private func setupImageView() {
         imageContainerView.wantsLayer = true
         imageContainerView.layer?.backgroundColor = NSColor.black.cgColor
@@ -3825,7 +4125,7 @@ final class ImageViewerWindowController: NSWindowController {
         setupGestureRecognizers()
         setupScrollWheelZoom()
     }
-    
+
     private func setupScrollWheelZoom() {
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self = self, let window = self.window else { return event }
@@ -3840,7 +4140,7 @@ final class ImageViewerWindowController: NSWindowController {
             return event
         }
     }
-    
+
     private func setupGestureRecognizers() {
         let doubleClickGesture = NSClickGestureRecognizer(target: self, action: #selector(handleDoubleClick))
         doubleClickGesture.numberOfClicksRequired = 2
@@ -3849,7 +4149,7 @@ final class ImageViewerWindowController: NSWindowController {
         let magnifyGesture = NSMagnificationGestureRecognizer(target: self, action: #selector(handleMagnify(_:)))
         imageView.addGestureRecognizer(magnifyGesture)
     }
-    
+
     @objc private func handleDoubleClick() {
         // Toggle between fit-to-screen and 100% zoom
         if currentZoom != 1.0 {
@@ -3858,7 +4158,7 @@ final class ImageViewerWindowController: NSWindowController {
             fitImageToScreen()
         }
     }
-    
+
     @objc private func handleMagnify(_ gesture: NSMagnificationGestureRecognizer) {
         switch gesture.state {
         case .began:
@@ -3870,7 +4170,7 @@ final class ImageViewerWindowController: NSWindowController {
             break
         }
     }
-    
+
     private func setZoom(_ zoom: CGFloat, animated: Bool) {
         let clampedZoom = max(minZoom, min(maxZoom, zoom))
         currentZoom = clampedZoom
@@ -3924,15 +4224,15 @@ final class ImageViewerWindowController: NSWindowController {
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
     }
-    
+
     private func setupCloseButton() {
         // Native window close button (traffic light) is sufficient
     }
-    
+
     private func setupEscapeHandler() {
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self, let window = self.window else { return event }
-            
+
             if NSApp.keyWindow == window && event.keyCode == 53 {
                 self.closeWindow()
                 return nil
@@ -3940,22 +4240,22 @@ final class ImageViewerWindowController: NSWindowController {
             return event
         }
     }
-    
+
     private func loadImage() {
         guard let imageURL = imageURL else { return }
-        
+
         let fileManager = FileManager.default
         if !fileManager.fileExists(atPath: imageURL.path) {
             print("Image file does not exist at: \(imageURL.path)")
             return
         }
-        
+
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let image = NSImage(contentsOf: imageURL) else {
                 print("Failed to load image from: \(imageURL.path)")
                 return
             }
-            
+
             DispatchQueue.main.async {
                 self?.imageSize = image.size
                 self?.imageView.image = image
@@ -3965,19 +4265,19 @@ final class ImageViewerWindowController: NSWindowController {
             }
         }
     }
-    
+
     private func updateImageViewSize() {
         layoutImage(centerViewport: true)
     }
-    
+
     @objc private func closeWindow() {
         window?.close()
     }
-    
+
     func showFullScreen() {
         window?.center()
         window?.makeKeyAndOrderFront(nil)
-        
+
         // Make it nearly full screen but keep title bar
         if let screen = NSScreen.main {
             let screenFrame = screen.visibleFrame
@@ -4304,7 +4604,7 @@ struct CodeBlockMatch: Equatable {
     let range: NSRange
     let content: String
     let language: String?
-    
+
     static func == (lhs: CodeBlockMatch, rhs: CodeBlockMatch) -> Bool {
         lhs.id == rhs.id &&
         lhs.range == rhs.range &&
@@ -4314,10 +4614,10 @@ struct CodeBlockMatch: Equatable {
 }
 
 extension LinkAwareTextView {
-    
+
     /// Dictionary to track code block copy buttons keyed by their ID
     private var codeBlockCopyButtonsKey: String { "codeBlockCopyButtons" }
-    
+
     var codeBlockCopyButtons: [String: NSButton] {
         get {
             (objc_getAssociatedObject(self, &CodeBlockCopyButtonAssociatedKeys.buttons) as? [String: NSButton]) ?? [:]
@@ -4326,20 +4626,20 @@ extension LinkAwareTextView {
             objc_setAssociatedObject(self, &CodeBlockCopyButtonAssociatedKeys.buttons, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
     }
-    
+
     /// Regex pattern to detect code blocks: ```optional_language\ncode\n```
     /// Only matches opening ``` at the start of a line or string
     private static let codeBlockRegex = try? NSRegularExpression(
         pattern: "^[ \\t]{0,3}```([a-zA-Z0-9+-]*)[ \\t]*$",
         options: [.anchorsMatchLines]
     )
-    
+
     /// Find all code blocks in the current text
     func codeBlockMatches() -> [CodeBlockMatch] {
         guard let regex = Self.codeBlockRegex else { return [] }
         let nsText = string as NSString
         let fullRange = NSRange(location: 0, length: nsText.length)
-        
+
         let fenceMatches = regex.matches(in: string, options: [], range: fullRange)
         var matches: [CodeBlockMatch] = []
         var index = 0
@@ -4387,23 +4687,23 @@ extension LinkAwareTextView {
 
         return matches
     }
-    
+
     /// Create and position copy buttons for all code blocks
     func refreshCodeBlockCopyButtons() {
         guard let layoutManager = layoutManager,
               let textContainer = textContainer else { return }
-        
+
         layoutManager.ensureLayout(for: textContainer)
-        
+
         let matches = codeBlockMatches()
         let activeKeys = Set(matches.map(\.id))
-        
+
         // Remove stale buttons
         for key in Array(codeBlockCopyButtons.keys) where !activeKeys.contains(key) {
             codeBlockCopyButtons[key]?.removeFromSuperview()
             codeBlockCopyButtons.removeValue(forKey: key)
         }
-        
+
         let buttonSize: CGFloat = 24
         let buttonMargin: CGFloat = 8
         let minBlockHeight = buttonSize + buttonMargin * 2
@@ -4422,7 +4722,7 @@ extension LinkAwareTextView {
             // Position button at top-right corner
             let buttonX = codeBlockRect.maxX - buttonSize - buttonMargin
             let buttonY = codeBlockRect.minY + buttonMargin
-            
+
             let button: CodeBlockCopyButton
             if let existing = codeBlockCopyButtons[match.id] {
                 guard let existingButton = existing as? CodeBlockCopyButton else {
@@ -4444,7 +4744,7 @@ extension LinkAwareTextView {
             button.frame = NSRect(x: buttonX, y: buttonY, width: buttonSize, height: buttonSize)
         }
     }
-    
+
     /// Create a copy button for a specific code block
     private func createCopyButton(for match: CodeBlockMatch) -> CodeBlockCopyButton {
         let button = CodeBlockCopyButton(frame: .zero)
@@ -4452,7 +4752,7 @@ extension LinkAwareTextView {
         button.codeContent = match.content
         return button
     }
-    
+
     /// Remove all code block copy buttons
     func clearCodeBlockCopyButtons() {
         for (_, button) in codeBlockCopyButtons {
