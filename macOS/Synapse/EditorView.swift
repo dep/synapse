@@ -3123,12 +3123,57 @@ class LinkAwareTextView: NSTextView {
 
     // MARK: - HTML to Markdown Conversion
 
+    /// Returns true when the insertion point is inside (or on the opening line
+    /// of) a fenced code block, so HTML paste should be left as-is.
+    private func cursorIsInCodeBlock() -> Bool {
+        let cursor = selectedRange().location
+        guard cursor != NSNotFound else { return false }
+        let nsText = string as NSString
+        let len = nsText.length
+
+        // Pattern: opening ``` fence at the start of a line.
+        guard let fenceRegex = try? NSRegularExpression(
+            pattern: "^[ \\t]{0,3}```",
+            options: [.anchorsMatchLines]
+        ) else { return false }
+
+        let fenceMatches = fenceRegex.matches(in: string, options: [],
+                                              range: NSRange(location: 0, length: len))
+
+        // Walk fence matches in pairs; an unpaired opening also counts.
+        var i = 0
+        while i < fenceMatches.count {
+            let open = fenceMatches[i]
+            let openEnd = open.range.location + open.range.length
+
+            if i + 1 < fenceMatches.count {
+                let close = fenceMatches[i + 1]
+                let closeStart = close.range.location
+                // Cursor is inside a complete block.
+                if cursor >= open.range.location && cursor <= NSMaxRange(close.range) {
+                    return true
+                }
+                i += 2
+            } else {
+                // Unpaired opening fence — cursor anywhere from the ``` to end of doc.
+                if cursor >= open.range.location {
+                    return true
+                }
+                i += 1
+            }
+        }
+        return false
+    }
+
     /// Converts HTML pasteboard content to Markdown and inserts it.
     /// Checks dedicated HTML pasteboard types first, then falls back to
     /// checking whether the plain-text payload looks like HTML (e.g. when
     /// copying raw HTML source from a text editor or terminal).
     @discardableResult
     func handleHTMLPaste(from pasteboard: NSPasteboard) -> Bool {
+        // Never convert when the cursor is inside a fenced code block.
+        guard !cursorIsInCodeBlock() else { return false }
+
         // 1. Try dedicated HTML pasteboard types (browser copies, rich-text apps).
         let htmlTypes: [NSPasteboard.PasteboardType] = [
             .html,

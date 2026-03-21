@@ -12,6 +12,7 @@
 		0BAD97ABBAA364DB85827080 /* TemplatesDirectoryHiddenFolderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEFD465FCA255C7225417AB1 /* TemplatesDirectoryHiddenFolderTests.swift */; };
 		0F5E75F1929BB107A3E4F9E6 /* FolderPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C258F5BE9BBC6264833097E /* FolderPickerView.swift */; };
 		0FC57BB32EFF6F4BE66FFA95 /* EditorModeToggle.swift in Sources */ = {isa = PBXBuildFile; fileRef = B916ADB0587845108BD3EF62 /* EditorModeToggle.swift */; };
+		126A9FC4477C5B67A242F68A /* HTMLPasteCodeBlockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A8BAEDD2536A6A0E7D0F25 /* HTMLPasteCodeBlockTests.swift */; };
 		12E843F9AB63612FD91EA4A0 /* SidebarNotePaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04AF80097474499AB3373B1E /* SidebarNotePaneView.swift */; };
 		149B715AD9DF9829286F386F /* GistPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = F88EA4153C25D088562FAC1C /* GistPublisher.swift */; };
 		1B8470063FF3F149A02D581B /* AppConstantsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD119E93048F3C571E60BD8A /* AppConstantsTests.swift */; };
@@ -269,6 +270,7 @@
 		EFD958AFEB9C0730DDEB54AD /* SettingsManagerNotePaneTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsManagerNotePaneTests.swift; sourceTree = "<group>"; };
 		F0767AC48736498C7296D8B6 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		F0B00871B184157E21F3C346 /* AppStateEditModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateEditModeTests.swift; sourceTree = "<group>"; };
+		F1A8BAEDD2536A6A0E7D0F25 /* HTMLPasteCodeBlockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTMLPasteCodeBlockTests.swift; sourceTree = "<group>"; };
 		F2819956191CAC51CF76DAFA /* AppStateFileOperationsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateFileOperationsTests.swift; sourceTree = "<group>"; };
 		F88EA4153C25D088562FAC1C /* GistPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GistPublisher.swift; sourceTree = "<group>"; };
 		F8B6BF025E9076F964C35D0B /* GitServiceFileContentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitServiceFileContentTests.swift; sourceTree = "<group>"; };
@@ -403,6 +405,7 @@
 				72DEFB357992438600DB9E4E /* GitServiceLiveTests.swift */,
 				6C665A271CAB4E35735B89A9 /* GitServiceTests.swift */,
 				C55EAAB85AA800B037CDF588 /* GraphNodeColorTests.swift */,
+				F1A8BAEDD2536A6A0E7D0F25 /* HTMLPasteCodeBlockTests.swift */,
 				4B50760FD39FD68DA4D9877E /* HTMLToMarkdownTests.swift */,
 				AC8CA87990A19BCF411A9424 /* ImagePasteTests.swift */,
 				8A03956EC9D388F74A50F6F3 /* ImageSidebarEmbedTests.swift */,
@@ -606,6 +609,7 @@
 				B06E57B2B6CFDFAAF97CD8A3 /* GitServiceLiveTests.swift in Sources */,
 				D1DF0C68FA69ABC62DB00659 /* GitServiceTests.swift in Sources */,
 				E0730BEEF94695E2F06AFE72 /* GraphNodeColorTests.swift in Sources */,
+				126A9FC4477C5B67A242F68A /* HTMLPasteCodeBlockTests.swift in Sources */,
 				975FD9263E548BFDD18FBB91 /* HTMLToMarkdownTests.swift in Sources */,
 				3BAD93BD9ED210549AF41A07 /* ImagePasteTests.swift in Sources */,
 				F4AE6BB73560EDBD541B5187 /* ImageSidebarEmbedTests.swift in Sources */,

@@ -14,12 +14,6 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   removeItem: jest.fn(() => Promise.resolve()),
 }));
 
-// Mock @react-native-clipboard/clipboard
-jest.mock('@react-native-clipboard/clipboard', () => ({
-  getString: jest.fn(() => Promise.resolve('')),
-  setString: jest.fn(() => Promise.resolve()),
-}));
-
 // Mock expo-file-system
 jest.mock('expo-file-system', () => ({
   documentDirectory: 'file:///data/user/0/com.synapse/files/',
