@@ -3126,46 +3126,48 @@ class LinkAwareTextView: NSTextView {
     /// Converts HTML pasteboard content to Markdown and inserts it
     @discardableResult
     func handleHTMLPaste(from pasteboard: NSPasteboard) -> Bool {
-        // Check for HTML content on pasteboard
-        guard let htmlString = pasteboard.string(forType: .html) ??
-                              pasteboard.string(forType: NSPasteboard.PasteboardType("public.html")) else {
-            return false
-        }
-
-        // Check if there's also a plain text version - if so, prefer that for plain text
-        // This prevents converting already-clean text
-        if let plainText = pasteboard.string(forType: .string) {
-            // If the HTML looks like it might just be wrapped plain text (simple HTML),
-            // check if plain text is sufficient
-            let isComplexHTML = htmlString.contains("<") &&
-                               (htmlString.contains("<h") ||
-                                htmlString.contains("<ul") ||
-                                htmlString.contains("<ol") ||
-                                htmlString.contains("<blockquote") ||
-                                htmlString.contains("<strong") ||
-                                htmlString.contains("<em") ||
-                                htmlString.contains("<a ") ||
-                                htmlString.contains("<img") ||
-                                htmlString.contains("<code") ||
-                                htmlString.contains("<pre"))
-
-            if !isComplexHTML {
-                // Simple HTML, just use the plain text
-                return false
+        // Try multiple HTML pasteboard types that different apps use
+        let htmlTypes: [NSPasteboard.PasteboardType] = [
+            .html,
+            NSPasteboard.PasteboardType("public.html"),
+            NSPasteboard.PasteboardType("Apple HTML pasteboard type"),
+            NSPasteboard.PasteboardType("NSHTMLPboardType"),
+        ]
+        
+        var htmlString: String? = nil
+        for type in htmlTypes {
+            if let str = pasteboard.string(forType: type) {
+                htmlString = str
+                break
             }
         }
-
+        
+        guard let html = htmlString, !html.isEmpty else {
+            return false
+        }
+        
+        // Debug logging to help diagnose issues
+        #if DEBUG
+        print("[HTML Paste] Found HTML content")
+        print("[HTML Paste] Content preview: \(html.prefix(200))")
+        #endif
+        
         // Convert HTML to Markdown
-        let markdown = HTMLToMarkdownConverter.convert(htmlString)
-
+        let markdown = HTMLToMarkdownConverter.convert(html)
+        
+        #if DEBUG
+        print("[HTML Paste] Converted to Markdown: \(markdown.prefix(200))")
+        #endif
+        
         // Insert at current cursor position
         let currentRange = selectedRange()
         if shouldChangeText(in: currentRange, replacementString: markdown) {
             replaceCharacters(in: currentRange, with: markdown)
             didChangeText()
+            return true
         }
-
-        return true
+        
+        return false
     }
 }
 
