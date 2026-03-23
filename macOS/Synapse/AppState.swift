@@ -1043,10 +1043,10 @@ class AppState: ObservableObject {
     }
 
     private func startPullTimer() {
-        let timer = Timer(timeInterval: 10, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
             self?.pullLatest()
         }
-        RunLoop.main.add(timer, forMode: .common)
+        RunLoop.main.add(timer, forMode: .default)
         pullTimer = timer
     }
 

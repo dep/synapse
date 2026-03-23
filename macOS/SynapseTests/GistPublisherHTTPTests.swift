@@ -49,6 +49,8 @@ final class GistPublisherHTTPTests: XCTestCase {
         mockSession = URLSession(configuration: config)
         sut = GistPublisher()
         sut.urlSession = mockSession
+        // Mock external URL opening to prevent browser from opening during tests
+        sut.onOpenExternalURL = { _ in }
         cancellables = []
     }
 

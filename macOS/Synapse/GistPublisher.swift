@@ -26,6 +26,9 @@ class GistPublisher: ObservableObject {
 
     /// Injected for testing; defaults to the shared session in production.
     var urlSession: URLSession = .shared
+    
+    /// Injected for testing; defaults to NSWorkspace.shared.open in production.
+    var onOpenExternalURL: ((URL) -> Void)?
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -111,7 +114,12 @@ class GistPublisher: ObservableObject {
                     self?.state = .success(url: gistUrl)
                     // Open the gist URL in the default browser
                     if let url = URL(string: gistUrl) {
-                        NSWorkspace.shared.open(url)
+                        // Use injected callback if available, otherwise fall back to NSWorkspace
+                        if let onOpenExternalURL = self?.onOpenExternalURL {
+                            onOpenExternalURL(url)
+                        } else {
+                            NSWorkspace.shared.open(url)
+                        }
                     }
                 }
             )
