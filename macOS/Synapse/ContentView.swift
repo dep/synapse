@@ -34,18 +34,18 @@ func sidebarFileItemProvider(for fileURL: URL) -> NSItemProvider {
     NSItemProvider(object: fileURL as NSURL)
 }
 
-private let sidebarItemTokenPrefix = "synapse-sidebar-item:"
+let sidebarItemTokenPrefix = "synapse-sidebar-item:"
 
 private func sidebarPaneItemProvider(for item: SidebarPaneItem) -> NSItemProvider {
     NSItemProvider(object: sidebarItemToken(for: item) as NSString)
 }
 
-private func sidebarItemToken(for item: SidebarPaneItem) -> String {
+func sidebarItemToken(for item: SidebarPaneItem) -> String {
     let data = (try? JSONEncoder().encode(item)) ?? Data()
     return sidebarItemTokenPrefix + data.base64EncodedString()
 }
 
-private func sidebarItem(from token: String) -> SidebarPaneItem? {
+func sidebarItem(from token: String) -> SidebarPaneItem? {
     guard token.hasPrefix(sidebarItemTokenPrefix) else { return nil }
     let encoded = String(token.dropFirst(sidebarItemTokenPrefix.count))
     guard let data = Data(base64Encoded: encoded) else { return nil }
@@ -99,7 +99,7 @@ private func loadSidebarDropPayload(from providers: [NSItemProvider], completion
     }
 }
 
-private func extractSidebarFileURL(from item: Any?) -> URL? {
+func extractSidebarFileURL(from item: Any?) -> URL? {
     if let data = item as? Data {
         return URL(dataRepresentation: data, relativeTo: nil)?.standardizedFileURL
     }

@@ -1,6 +1,58 @@
 import SwiftUI
 import AppKit
 
+/// Scores a file URL against a search needle for command palette ranking.
+///
+/// Scoring tiers (higher is better):
+///   200  exact stem match
+///   190  exact filename match
+///   100  stem prefix match
+///    90  filename prefix match
+///    70  relative-path prefix match
+///    60  stem substring match
+///    45  filename substring match
+///    30  relative-path substring match
+///    15  per matched word-part (multi-word fallback)
+///
+/// A depth penalty of 2 per path component is subtracted to prefer shallower files.
+/// Returns 0 when there is no match (caller should exclude the result).
+func commandPaletteScore(forURL url: URL, needle: String, relativePath: String) -> Int {
+    let normalizedNeedle = needle.lowercased()
+    guard !normalizedNeedle.isEmpty else { return 0 }
+
+    let name = url.lastPathComponent.lowercased()
+    let stem = url.deletingPathExtension().lastPathComponent.lowercased()
+    let relPath = relativePath.lowercased()
+
+    var score = 0
+
+    if stem == normalizedNeedle { score += 200 }
+    else if name == normalizedNeedle { score += 190 }
+    else if stem.hasPrefix(normalizedNeedle) { score += 100 }
+    else if name.hasPrefix(normalizedNeedle) { score += 90 }
+    else if relPath.hasPrefix(normalizedNeedle) { score += 70 }
+
+    if score == 0 {
+        if stem.contains(normalizedNeedle) { score += 60 }
+        else if name.contains(normalizedNeedle) { score += 45 }
+        else if relPath.contains(normalizedNeedle) { score += 30 }
+    }
+
+    if score == 0 {
+        let needleParts = normalizedNeedle.split(separator: " ").map(String.init)
+        let matchedParts = needleParts.filter { part in
+            stem.contains(part) || relPath.contains(part)
+        }
+        score += matchedParts.count * 15
+    }
+
+    guard score > 0 else { return 0 }
+
+    let depth = relPath.components(separatedBy: "/").count - 1
+    score -= depth * 2
+    return score
+}
+
 struct CommandPaletteView: View {
     @EnvironmentObject var appState: AppState
     @State private var query = ""
@@ -32,42 +84,9 @@ struct CommandPaletteView: View {
 
         let scoredResults: [(url: URL, score: Int)] = files
             .compactMap { url -> (url: URL, score: Int)? in
-                let name = url.lastPathComponent.lowercased()
-                let relativePath = appState.relativePath(for: url).lowercased()
-                let stem = url.deletingPathExtension().lastPathComponent.lowercased()
-
-                var score = 0
-
-                // Exact matches
-                if stem == needle { score += 200 }
-                else if name == needle { score += 190 }
-                // Prefix matches (strongest signal after exact)
-                else if stem.hasPrefix(needle) { score += 100 }
-                else if name.hasPrefix(needle) { score += 90 }
-                else if relativePath.hasPrefix(needle) { score += 70 }
-
-                // Substring matches (additive — don't else-chain these)
-                if score == 0 {
-                    if stem.contains(needle) { score += 60 }
-                    else if name.contains(needle) { score += 45 }
-                    else if relativePath.contains(needle) { score += 30 }
-                }
-
-                // Word-part fallback for multi-word queries or no match yet
-                if score == 0 {
-                    let needleParts = needle.split(separator: " ").map(String.init)
-                    let matchedParts = needleParts.filter { part in
-                        stem.contains(part) || relativePath.contains(part)
-                    }
-                    score += matchedParts.count * 15
-                }
-
+                let relativePath = appState.relativePath(for: url)
+                let score = commandPaletteScore(forURL: url, needle: needle, relativePath: relativePath)
                 guard score > 0 else { return nil }
-
-                // Penalise deep paths slightly (prefer shallow matches)
-                let depth = relativePath.components(separatedBy: "/").count - 1
-                score -= depth * 2
-
                 return (url, score)
             }
             .sorted {
