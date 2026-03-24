@@ -415,7 +415,7 @@ final class MarkdownDocumentParser {
             let trimmed = cell.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty else { return false }
             let core = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: ":"))
-            return core.count >= 3 && core.allSatisfy { $0 == "-" }
+            return core.count >= 1 && core.allSatisfy { $0 == "-" }
         }
     }
 

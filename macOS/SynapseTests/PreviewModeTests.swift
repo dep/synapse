@@ -361,7 +361,7 @@ final class PreviewModeTests: XCTestCase {
         textView.applyPreviewStyling()
 
         let ns = tableText as NSString
-        // Separator row should be VISIBLE in edit mode (not hidden)
+        // Separator row should stay visible while actively editing inside the table.
         let separatorRange = ns.range(of: "|------|-------|")
         XCTAssertFalse(allHidden(in: separatorRange), "Table separator row should be visible in edit mode")
     }
@@ -399,7 +399,7 @@ final class PreviewModeTests: XCTestCase {
         }
     }
 
-    func test_tableRawMarkdown_visibleWhenCursorOutside() {
+    func test_tableRendersAsOverlayWhenCursorOutside() {
         let tableText = "Some text before\n\n| Time | Event |\n|------|-------|\n| 9:00 | Meeting |\n\nSome text after"
         textView.setPlainText(tableText)
         textView.isEditable = true
@@ -413,24 +413,29 @@ final class PreviewModeTests: XCTestCase {
         // Apply preview styling
         textView.applyPreviewStyling()
 
-        // The table pipes should be VISIBLE (tables show raw markdown in edit mode)
+        XCTAssertEqual(textView.renderedTablePreviewCount, 1, "Rendered table overlay should appear when cursor is outside the table")
+
         let firstPipeInTable = ns.range(of: "| Time").location
-        XCTAssertFalse(isHidden(at: firstPipeInTable), "Table syntax should be visible in edit mode")
+        XCTAssertTrue(allHidden(in: NSRange(location: firstPipeInTable, length: 1)), "Underlying markdown should be hidden behind the rendered table overlay")
     }
 
-    func test_table_rendersWithRawMarkdownInEditMode() {
+    func test_table_rendersWithRawMarkdownWhenCursorInside() {
         let tableText = "| Time | Event |\n|------|-------|\n| 9:00 | Meeting |"
         textView.setPlainText(tableText)
         textView.isEditable = true
 
+        let ns = tableText as NSString
+        let meetingRange = ns.range(of: "Meeting")
+        textView.setSelectedRange(NSRange(location: meetingRange.location + 1, length: 0))
+
         // Simulate hide-markdown-while-editing mode
         textView.applyPreviewStyling()
+
+        XCTAssertEqual(textView.renderedTablePreviewCount, 0, "Rendered table overlay should disappear when actively editing the table")
 
         // Tables should show raw markdown (pipes visible)
         XCTAssertFalse(isHidden(at: 0), "Opening pipe should be visible in editable preview mode")
 
-        let ns = tableText as NSString
-        let meetingRange = ns.range(of: "Meeting")
         XCTAssertTrue(anyVisible(in: meetingRange), "Cell content should be visible")
     }
 }

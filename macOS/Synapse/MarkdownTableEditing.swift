@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 struct MarkdownTableCell: Equatable {
@@ -12,6 +13,21 @@ struct MarkdownTableLayout: Equatable {
     let columnCount: Int
     let cells: [MarkdownTableCell]
     let rowRanges: [NSRange]
+    let alignments: [ColumnAlignment]
+
+    enum ColumnAlignment: Equatable {
+        case left
+        case center
+        case right
+
+        var textAlignment: NSTextAlignment {
+            switch self {
+            case .left: return .left
+            case .center: return .center
+            case .right: return .right
+            }
+        }
+    }
 
     func cell(at location: Int) -> MarkdownTableCell? {
         cells.first { NSLocationInRange(location, $0.contentRange) || NSLocationInRange(location, $0.range) }
@@ -33,6 +49,14 @@ struct MarkdownTableLayout: Equatable {
 }
 
 enum MarkdownTableEditing {
+    static func tableLayouts(in source: String, parser: MarkdownDocumentParser = MarkdownDocumentParser()) -> [MarkdownTableLayout] {
+        let document = parser.parse(source)
+        return document.blocks.compactMap { block in
+            guard case let .table(columnCount) = block.kind else { return nil }
+            return makeLayout(for: block, columnCount: columnCount, source: source)
+        }
+    }
+
     static func tableLayout(in source: String, at location: Int, parser: MarkdownDocumentParser = MarkdownDocumentParser()) -> MarkdownTableLayout? {
         let document = parser.parse(source)
         guard let tableBlock = document.blocks.first(where: {
@@ -41,10 +65,16 @@ enum MarkdownTableEditing {
         }) else { return nil }
         guard case let .table(columnCount) = tableBlock.kind else { return nil }
 
+        return makeLayout(for: tableBlock, columnCount: columnCount, source: source)
+    }
+
+    private static func makeLayout(for tableBlock: MarkdownBlock, columnCount: Int, source: String) -> MarkdownTableLayout? {
         let nsSource = source as NSString
         let blockText = nsSource.substring(with: tableBlock.range)
         let lines = blockText.components(separatedBy: "\n").filter { !$0.isEmpty }
         guard lines.count >= 2 else { return nil }
+
+        let alignments = alignmentsForSeparatorLine(lines[1])
 
         var cells: [MarkdownTableCell] = []
         var rowRanges: [NSRange] = []
@@ -60,7 +90,7 @@ enum MarkdownTableEditing {
             absoluteLocation += lineLength + 1
         }
 
-        return MarkdownTableLayout(blockRange: tableBlock.range, columnCount: columnCount, cells: cells, rowRanges: rowRanges)
+        return MarkdownTableLayout(blockRange: tableBlock.range, columnCount: columnCount, cells: cells, rowRanges: rowRanges, alignments: alignments)
     }
 
     static func insertionForNewRow(in source: String, at location: Int, parser: MarkdownDocumentParser = MarkdownDocumentParser()) -> (range: NSRange, replacement: String, selection: NSRange)? {
@@ -100,6 +130,30 @@ enum MarkdownTableEditing {
             }
             let contentRange = NSRange(location: contentLocation, length: max(0, trimmed.count))
             result.append(MarkdownTableCell(rowIndex: rowIndex, columnIndex: columnIndex, range: cellRange, contentRange: contentRange))
+        }
+        return result
+    }
+
+    private static func alignmentsForSeparatorLine(_ line: String) -> [MarkdownTableLayout.ColumnAlignment] {
+        let nsLine = line as NSString
+        var boundaries: [Int] = []
+        for index in 0..<nsLine.length where nsLine.substring(with: NSRange(location: index, length: 1)) == "|" {
+            boundaries.append(index)
+        }
+        guard boundaries.count >= 2 else { return [] }
+
+        var result: [MarkdownTableLayout.ColumnAlignment] = []
+        for columnIndex in 0..<(boundaries.count - 1) {
+            let start = boundaries[columnIndex] + 1
+            let end = boundaries[columnIndex + 1]
+            let raw = nsLine.substring(with: NSRange(location: start, length: max(0, end - start))).trimmingCharacters(in: .whitespaces)
+            if raw.hasPrefix(":") && raw.hasSuffix(":") {
+                result.append(.center)
+            } else if raw.hasSuffix(":") {
+                result.append(.right)
+            } else {
+                result.append(.left)
+            }
         }
         return result
     }
