@@ -12,11 +12,6 @@ struct MarkdownEditorSemanticStyles {
         let contentRange: NSRange
     }
 
-    struct Table: Equatable {
-        let range: NSRange
-        let columnCount: Int
-    }
-
     struct Callout: Equatable {
         let range: NSRange
         let headerRange: NSRange
@@ -30,7 +25,6 @@ struct MarkdownEditorSemanticStyles {
     let codeBlocks: [NSRange]
     let thematicBreaks: [NSRange]
     let frontmatter: Frontmatter?
-    let tables: [Table]
     let callouts: [Callout]
 
     static func make(from source: String, parser: MarkdownDocumentParser = MarkdownDocumentParser()) -> MarkdownEditorSemanticStyles {
@@ -45,7 +39,6 @@ struct MarkdownEditorSemanticStyles {
         var codeBlocks: [NSRange] = []
         var thematicBreaks: [NSRange] = []
         var frontmatter: Frontmatter?
-        var tables: [Table] = []
         var callouts: [Callout] = []
 
         for block in document.blocks {
@@ -69,8 +62,6 @@ struct MarkdownEditorSemanticStyles {
                 codeBlocks.append(block.range)
             case .thematicBreak:
                 thematicBreaks.append(block.range)
-            case let .table(columnCount):
-                tables.append(Table(range: block.range, columnCount: columnCount))
             default:
                 break
             }
@@ -82,7 +73,6 @@ struct MarkdownEditorSemanticStyles {
             codeBlocks: codeBlocks,
             thematicBreaks: thematicBreaks,
             frontmatter: frontmatter,
-            tables: tables,
             callouts: callouts
         )
     }

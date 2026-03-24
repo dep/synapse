@@ -27,22 +27,11 @@ final class MarkdownEditorSemanticStylesTests: XCTestCase {
         XCTAssertEqual(styles.frontmatter?.contentRange, ns.range(of: "title: Hello\n"))
     }
 
-    func test_make_findsThematicBreakAndTableRanges() {
-        let markdown = """
-        Intro
-        ---
-        | Name | Value |
-        | --- | --- |
-        | One | 1 |
-        """
-
+    func test_make_findsThematicBreakRange() {
+        let markdown = "Intro\n---\n"
         let styles = MarkdownEditorSemanticStyles.make(from: markdown)
         let ns = markdown as NSString
-
         XCTAssertEqual(styles.thematicBreaks, [ns.range(of: "---")])
-        XCTAssertEqual(styles.tables.count, 1)
-        XCTAssertEqual(styles.tables[0].range, ns.range(of: "| Name | Value |\n| --- | --- |\n| One | 1 |"))
-        XCTAssertEqual(styles.tables[0].columnCount, 2)
     }
 
     func test_make_detectsCalloutMetadataFromBlockquote() {

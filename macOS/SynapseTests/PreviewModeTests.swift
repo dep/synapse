@@ -399,45 +399,6 @@ final class PreviewModeTests: XCTestCase {
         }
     }
 
-    func test_tableRendersAsOverlayWhenCursorOutside() {
-        let tableText = "Some text before\n\n| Time | Event |\n|------|-------|\n| 9:00 | Meeting |\n\nSome text after"
-        textView.setPlainText(tableText)
-        textView.isEditable = true
-
-        // Position cursor outside the table (in "Some text before")
-        let ns = tableText as NSString
-        let beforeRange = ns.range(of: "Some text before")
-        let cursorPosition = beforeRange.location + 5
-        textView.setSelectedRange(NSRange(location: cursorPosition, length: 0))
-
-        // Apply preview styling
-        textView.applyPreviewStyling()
-
-        XCTAssertEqual(textView.renderedTablePreviewCount, 1, "Rendered table overlay should appear when cursor is outside the table")
-
-        let firstPipeInTable = ns.range(of: "| Time").location
-        XCTAssertTrue(allHidden(in: NSRange(location: firstPipeInTable, length: 1)), "Underlying markdown should be hidden behind the rendered table overlay")
-    }
-
-    func test_table_rendersWithRawMarkdownWhenCursorInside() {
-        let tableText = "| Time | Event |\n|------|-------|\n| 9:00 | Meeting |"
-        textView.setPlainText(tableText)
-        textView.isEditable = true
-
-        let ns = tableText as NSString
-        let meetingRange = ns.range(of: "Meeting")
-        textView.setSelectedRange(NSRange(location: meetingRange.location + 1, length: 0))
-
-        // Simulate hide-markdown-while-editing mode
-        textView.applyPreviewStyling()
-
-        XCTAssertEqual(textView.renderedTablePreviewCount, 0, "Rendered table overlay should disappear when actively editing the table")
-
-        // Tables should show raw markdown (pipes visible)
-        XCTAssertFalse(isHidden(at: 0), "Opening pipe should be visible in editable preview mode")
-
-        XCTAssertTrue(anyVisible(in: meetingRange), "Cell content should be visible")
-    }
 }
 
 private final class RedrawTrackingTextView: LinkAwareTextView {

@@ -77,9 +77,9 @@ func refreshEditorForFontChange(_ textView: LinkAwareTextView) {
             ]
         }
         let shouldApplyPreview = textView.lastAppliedEditorDisplayMode == .preview || !textView.isEditable
-        textView.applyMarkdownStyling()
+        textView.applyMarkdownStyling(deferRedraw: shouldApplyPreview)
         if shouldApplyPreview {
-            textView.applyPreviewStyling()
+            textView.applyPreviewStyling(editingSessionOpen: true)
         }
     }
 }
@@ -847,7 +847,6 @@ struct RawEditor: NSViewRepresentable {
         private var linkCheckScheduled = false
         private var pendingRefreshRequest: (oldText: String, newText: String, editedRange: NSRange, changeInLength: Int)?
         private var hasCoalescedEdits = false
-        private var lastSelectionInsideTable = false
 
         init(_ parent: RawEditor) { self.parent = parent }
 
@@ -871,6 +870,7 @@ struct RawEditor: NSViewRepresentable {
                     guard let self, let tv else { return }
                     self.linkCheckScheduled = false
                     tv.expandSlashCommandIfNeeded()
+                    tv.prettifyTableIfNeeded()
                     tv.checkForLinkTrigger()
                 }
             }
@@ -900,9 +900,10 @@ struct RawEditor: NSViewRepresentable {
                     self.pendingRefreshRequest = nil
                     self.hasCoalescedEdits = false
                     self.suppressSync = true
-                    tv.applyMarkdownStyling(document: document, refreshPlan: refreshPlan)
-                    if self.parent.appState.settings.hideMarkdownWhileEditing {
-                        tv.applyPreviewStyling(document: document, refreshPlan: refreshPlan)
+                    let needsPreview = self.parent.appState.settings.hideMarkdownWhileEditing
+                    tv.applyMarkdownStyling(document: document, refreshPlan: refreshPlan, deferRedraw: needsPreview)
+                    if needsPreview {
+                        tv.applyPreviewStyling(document: document, refreshPlan: refreshPlan, editingSessionOpen: true)
                     }
                     self.suppressSync = false
                 }
@@ -919,13 +920,10 @@ struct RawEditor: NSViewRepresentable {
         func textViewDidChangeSelection(_ notification: Notification) {
             guard parent.appState.settings.hideMarkdownWhileEditing,
                   let tv = textView else { return }
-            let selectionInsideTable = MarkdownTableEditing.tableLayout(in: tv.string, at: tv.selectedRange().location) != nil
-            if selectionInsideTable != lastSelectionInsideTable, tv.lastAppliedEditorDisplayMode == .preview {
-                lastSelectionInsideTable = selectionInsideTable
-                // Re-run full styling so the table text becomes visible/hidden as needed
+            if tv.lastAppliedEditorDisplayMode == .preview {
                 suppressSync = true
-                tv.applyMarkdownStyling()
-                tv.applyPreviewStyling()
+                tv.applyMarkdownStyling(deferRedraw: true)
+                tv.applyPreviewStyling(editingSessionOpen: true)
                 suppressSync = false
             }
             tv.revealSemanticInlineMarkdownAtCursor()
@@ -935,19 +933,20 @@ struct RawEditor: NSViewRepresentable {
 
 func refreshEditorForHideMarkdownToggle(_ textView: LinkAwareTextView, hideMarkdown: Bool) {
     preserveScrollOffset(for: textView) {
-        textView.applyMarkdownStyling()
+        textView.applyMarkdownStyling(deferRedraw: hideMarkdown)
         if hideMarkdown {
-            textView.applyPreviewStyling()
+            textView.applyPreviewStyling(editingSessionOpen: true)
         }
     }
 }
 
 func refreshEditorForCurrentDisplayMode(_ textView: LinkAwareTextView) {
     let displayMode = textView.lastAppliedEditorDisplayMode
+    let needsPreview = displayMode == .preview
     preserveScrollOffset(for: textView) {
-        textView.applyMarkdownStyling()
-        if displayMode == .preview {
-            textView.applyPreviewStyling()
+        textView.applyMarkdownStyling(deferRedraw: needsPreview)
+        if needsPreview {
+            textView.applyPreviewStyling(editingSessionOpen: true)
         }
     }
 }
@@ -1276,9 +1275,9 @@ extension LinkAwareTextView {
         storage.beginEditing()
         storage.setAttributedString(NSAttributedString(string: plain))
         storage.endEditing()
-        applyMarkdownStyling()
+        applyMarkdownStyling(deferRedraw: !isEditable)
         if !isEditable {
-            applyPreviewStyling()
+            applyPreviewStyling(editingSessionOpen: true)
         }
         // Note: hideMarkdownWhileEditing in editable mode is handled in the
         // Coordinator's styling callback and updateNSView, which have access to appState.
@@ -1288,7 +1287,7 @@ extension LinkAwareTextView {
     /// Hides markdown syntax tokens (delimiters, sigils, fences) by setting
     /// their font size to near-zero and foreground color to clear, so only the
     /// styled content is visible.
-    func applyPreviewStyling(document: MarkdownDocument? = nil, refreshPlan: MarkdownEditorRefreshPlan = .fullDocument) {
+    func applyPreviewStyling(document: MarkdownDocument? = nil, refreshPlan: MarkdownEditorRefreshPlan = .fullDocument, editingSessionOpen: Bool = false) {
         guard let storage = textStorage else { return }
         let fullRange = NSRange(location: 0, length: storage.length)
         guard fullRange.length > 0 else { return }
@@ -1297,37 +1296,6 @@ extension LinkAwareTextView {
         let previewSemanticHiding = MarkdownPreviewSemanticHiding.make(from: parsedDocument, isEditable: isEditable)
         let scopeRange = refreshPlan.affectedRange ?? fullRange
         let searchRange = (text as NSString).lineRange(for: scopeRange)
-        let activeTableCursorLocation = isEditable ? selectedRange().location : NSNotFound
-
-        // Pre-compute table rects BEFORE hiding text, while layout metrics are still valid.
-        var precomputedTableRects: [String: NSRect] = [:]
-        if let layoutManager = layoutManager, let textContainer = textContainer {
-            layoutManager.ensureLayout(for: textContainer)
-            let nsString = text as NSString
-            let allTableLayouts = MarkdownTableEditing.tableLayouts(in: text)
-            for layout in allTableLayouts {
-                if activeTableCursorLocation != NSNotFound, NSLocationInRange(activeTableCursorLocation, layout.blockRange) {
-                    continue
-                }
-                let id = "\(layout.blockRange.location)-\(layout.blockRange.length)"
-                let firstLineRange = nsString.lineRange(for: NSRange(location: layout.blockRange.location, length: 0))
-                let lastLineRange = nsString.lineRange(for: NSRange(location: layout.blockRange.location + max(0, layout.blockRange.length - 1), length: 0))
-                let firstGlyphRange = layoutManager.glyphRange(forCharacterRange: firstLineRange, actualCharacterRange: nil)
-                let lastGlyphRange = layoutManager.glyphRange(forCharacterRange: lastLineRange, actualCharacterRange: nil)
-                var firstLineRect = layoutManager.lineFragmentRect(forGlyphAt: firstGlyphRange.location, effectiveRange: nil)
-                var lastLineRect = layoutManager.lineFragmentRect(forGlyphAt: max(0, lastGlyphRange.location + lastGlyphRange.length - 1), effectiveRange: nil)
-                firstLineRect.origin.x += textContainerOrigin.x
-                firstLineRect.origin.y += textContainerOrigin.y
-                lastLineRect.origin.x += textContainerOrigin.x
-                lastLineRect.origin.y += textContainerOrigin.y
-                precomputedTableRects[id] = NSRect(
-                    x: firstLineRect.minX,
-                    y: firstLineRect.minY,
-                    width: max(firstLineRect.width, lastLineRect.width),
-                    height: lastLineRect.maxY - firstLineRect.minY
-                )
-            }
-        }
         let fencedCodeBlockRanges = parsedDocument.blocks.compactMap { block -> NSRange? in
             if case .fencedCodeBlock = block.kind {
                 return block.range
@@ -1368,19 +1336,12 @@ extension LinkAwareTextView {
         // We only need to hide the markdown syntax tokens here.
         // Do NOT re-apply base fonts — that would undo the heading sizes set by applyMarkdownStyling.
 
-        storage.beginEditing()
+        if !editingSessionOpen {
+            storage.beginEditing()
+        }
 
         for range in previewSemanticHiding.hiddenRanges where NSIntersectionRange(range, scopeRange).length > 0 {
             storage.addAttributes(hiddenAttrs, range: range)
-        }
-
-        for block in parsedDocument.blocks {
-            guard case .table = block.kind else { continue }
-            guard NSIntersectionRange(block.range, scopeRange).length > 0 else { continue }
-            if activeTableCursorLocation != NSNotFound, NSLocationInRange(activeTableCursorLocation, block.range) {
-                continue
-            }
-            storage.addAttributes(hiddenAttrs, range: block.range)
         }
 
         // Bold **text** — hide the ** delimiters
@@ -1425,19 +1386,10 @@ extension LinkAwareTextView {
             ], range: captionRange)
         }
 
-        if isEditable,
-           let activeTableLayout = MarkdownTableEditing.tableLayout(in: text, at: selectedRange().location) {
-            storage.addAttributes([
-                .font: settings != nil ? MarkdownTheme.bodyFont(for: settings!) : MarkdownTheme.body,
-                .foregroundColor: SynapseTheme.editorForeground,
-            ], range: activeTableLayout.blockRange)
-        }
-
         storage.endEditing()
         requestImmediateRedraw(for: scopeRange)
         lastAppliedEditorDisplayMode = .preview
         refreshTaskCheckboxButtons()
-        refreshRenderedTables(precomputedRects: precomputedTableRects)
 
         // After hiding, reveal the wikilink/image embed the cursor is currently inside.
         if isEditable {
@@ -1523,14 +1475,13 @@ extension LinkAwareTextView {
         }
     }
 
-    func applyMarkdownStyling(document: MarkdownDocument? = nil, refreshPlan: MarkdownEditorRefreshPlan = .fullDocument) {
+    func applyMarkdownStyling(document: MarkdownDocument? = nil, refreshPlan: MarkdownEditorRefreshPlan = .fullDocument, deferRedraw: Bool = false) {
         guard let storage = textStorage else { return }
         let fullRange = NSRange(location: 0, length: storage.length)
         guard fullRange.length > 0 else {
             lastAppliedEditorFontSignature = EditorFontSignature(settings: settings)
             lastAppliedEditorDisplayMode = .markdown
             clearInlineImagePreviews()
-            clearRenderedTablePreviews()
             clearTaskCheckboxButtons()
             for key in Array(collapsibleToggleButtons.keys) {
                 collapsibleToggleButtons[key]?.removeFromSuperview()
@@ -1543,7 +1494,6 @@ extension LinkAwareTextView {
         let scopeRange = refreshPlan.affectedRange ?? fullRange
         let searchRange = text.lineRange(for: scopeRange)
         lastAppliedEditorDisplayMode = .markdown
-        clearRenderedTablePreviews()
         clearTaskCheckboxButtons()
         let semanticStyles = MarkdownEditorSemanticStyles.make(from: parsedDocument)
         let inlineSemanticStyles = MarkdownEditorInlineSemanticStyles.make(from: parsedDocument)
@@ -1563,8 +1513,13 @@ extension LinkAwareTextView {
             return NSFont(descriptor: desc, size: 15) ?? MarkdownTheme.body
         }()
         let lineHeightMultiple = settings != nil ? MarkdownTheme.lineHeightMultiple(for: settings!) : 1.6
+        let naturalLineHeight = bodyFont.ascender - bodyFont.descender + bodyFont.leading
+        let desiredLineHeight = naturalLineHeight * lineHeightMultiple
+        let extraSpacing = max(0, desiredLineHeight - naturalLineHeight)
         let baseParagraphStyle = NSMutableParagraphStyle()
-        baseParagraphStyle.lineHeightMultiple = lineHeightMultiple
+        baseParagraphStyle.minimumLineHeight = naturalLineHeight
+        baseParagraphStyle.maximumLineHeight = naturalLineHeight
+        baseParagraphStyle.lineSpacing = extraSpacing
 
         storage.setAttributes([
             .font: bodyFont,
@@ -1581,7 +1536,14 @@ extension LinkAwareTextView {
             case 3: font = h3Font
             default: font = h4Font
             }
-            storage.addAttributes([.font: font], range: heading.range)
+            let headingNaturalHeight = font.ascender - font.descender + font.leading
+            let headingDesiredHeight = headingNaturalHeight * lineHeightMultiple
+            let headingExtraSpacing = max(0, headingDesiredHeight - headingNaturalHeight)
+            let headingParaStyle = NSMutableParagraphStyle()
+            headingParaStyle.minimumLineHeight = headingNaturalHeight
+            headingParaStyle.maximumLineHeight = headingNaturalHeight
+            headingParaStyle.lineSpacing = headingExtraSpacing
+            storage.addAttributes([.font: font, .paragraphStyle: headingParaStyle], range: heading.range)
             storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: heading.markerRange)
         }
 
@@ -1621,6 +1583,11 @@ extension LinkAwareTextView {
             lastParaStyle.tailIndent = 0
             lastParaStyle.lineBreakMode = .byWordWrapping
             storage.addAttribute(.paragraphStyle, value: lastParaStyle, range: lastLineRange)
+        }
+        for block in parsedDocument.blocks {
+            guard case .table = block.kind else { continue }
+            guard NSIntersectionRange(block.range, scopeRange).length > 0 else { continue }
+            storage.addAttribute(.font, value: monoFont, range: block.range)
         }
         let calloutRanges = Set(semanticStyles.callouts.map { "\($0.range.location):\($0.range.length)" })
         for range in semanticStyles.blockquotes {
@@ -1735,9 +1702,13 @@ extension LinkAwareTextView {
         */
 
         applyCollapsibleStyling(storage: storage)
-        storage.endEditing()
+        if !deferRedraw {
+            storage.endEditing()
+        }
         lastAppliedEditorFontSignature = EditorFontSignature(settings: settings)
-        requestImmediateRedraw(for: scopeRange)
+        if !deferRedraw {
+            requestImmediateRedraw(for: scopeRange)
+        }
         reapplySearchHighlights()
         DispatchQueue.main.async { [weak self] in
             self?.refreshInlineImagePreviews()
@@ -1932,12 +1903,6 @@ extension LinkAwareTextView {
         clearCodeBlockCopyButtons()
     }
 
-    private func clearRenderedTablePreviews() {
-        for key in Array(renderedTableViews.keys) {
-            renderedTableViews[key]?.removeFromSuperview()
-            renderedTableViews.removeValue(forKey: key)
-        }
-    }
 }
 
 #if DEBUG
@@ -2003,9 +1968,8 @@ class LinkAwareTextView: NSTextView {
     private var eventMonitor: Any?
     private var inlineImageViews: [String: NSImageView] = [:]
     private var inlineVideoViews: [String: YouTubePreviewView] = [:]
-    private var renderedTableViews: [String: NSView] = [:]
-    var renderedTablePreviewCount: Int { renderedTableViews.count }
     private var animatedInlineImageKeys: Set<String> = []
+    private var isPrettifyingTable = false
     private var failedInlineImageKeys: Set<String> = []
     private var loadingInlineImageKeys: Set<String> = []
     private var loadingYouTubeMetadataKeys: Set<String> = []
@@ -2393,13 +2357,6 @@ class LinkAwareTextView: NSTextView {
         let sel = selectedRange()
         let nsText = string as NSString
 
-        if sel.length == 0,
-           let layout = MarkdownTableEditing.tableLayout(in: string, at: sel.location),
-           let nextCell = layout.nextCell(after: sel.location) {
-            setSelectedRange(nextCell.contentRange.length > 0 ? nextCell.contentRange : NSRange(location: nextCell.contentRange.location, length: 0))
-            return
-        }
-
         // Determine whether the selection spans more than one line.
         let selText = sel.length > 0 ? nsText.substring(with: sel) : ""
         let spansMultipleLines = selText.contains("\n")
@@ -2468,15 +2425,6 @@ class LinkAwareTextView: NSTextView {
         let cursor = selectedRange().location
         let nsText = string as NSString
         guard cursor != NSNotFound else { super.insertNewline(sender); return }
-
-        if let insertion = MarkdownTableEditing.insertionForNewRow(in: string, at: cursor) {
-            if shouldChangeText(in: insertion.range, replacementString: insertion.replacement) {
-                replaceCharacters(in: insertion.range, with: insertion.replacement)
-                didChangeText()
-                setSelectedRange(insertion.selection)
-                return
-            }
-        }
 
         // Find the start of the current line.
         let lineRange = nsText.lineRange(for: NSRange(location: cursor, length: 0))
@@ -2579,11 +2527,6 @@ class LinkAwareTextView: NSTextView {
         }
         // Shift-Tab on a multi-line selection → dedent.
         if event.keyCode == KeyCode.tab, event.modifierFlags.contains(.shift) {
-            if let layout = MarkdownTableEditing.tableLayout(in: string, at: selectedRange().location),
-               let previousCell = layout.previousCell(before: selectedRange().location) {
-                setSelectedRange(previousCell.contentRange.length > 0 ? previousCell.contentRange : NSRange(location: previousCell.contentRange.location, length: 0))
-                return
-            }
             let sel = selectedRange()
             let selText = sel.length > 0 ? (string as NSString).substring(with: sel) : ""
             if selText.contains("\n") {
@@ -2622,6 +2565,44 @@ class LinkAwareTextView: NSTextView {
             }
         }
         return super.performKeyEquivalent(with: event)
+    }
+
+    func prettifyTableIfNeeded() {
+        guard isEditable, !isPrettifyingTable else { return }
+        let cursor = selectedRange().location
+        guard cursor != NSNotFound else { return }
+
+        let source = string
+        let parser = MarkdownDocumentParser()
+        let document = parser.parse(source)
+
+        // Only prettify when cursor is OUTSIDE all tables
+        let cursorInTable = document.blocks.contains {
+            guard case .table = $0.kind else { return false }
+            return NSLocationInRange(cursor, $0.range)
+        }
+        guard !cursorInTable else { return }
+
+        let nsSource = source as NSString
+        isPrettifyingTable = true
+        defer { isPrettifyingTable = false }
+
+        // Prettify all tables in the document
+        let tableBlocks = document.blocks.filter { if case .table = $0.kind { return true }; return false }
+        // Process in reverse so earlier ranges stay valid after replacements
+        for tableBlock in tableBlocks.reversed() {
+            let tableText = nsSource.substring(with: tableBlock.range)
+            guard let result = MarkdownTablePrettifier.prettify(
+                tableText: tableText,
+                cursorOffsetInTable: 0
+            ) else { continue }
+            guard result.formatted != tableText else { continue }
+
+            if shouldChangeText(in: tableBlock.range, replacementString: result.formatted) {
+                replaceCharacters(in: tableBlock.range, with: result.formatted)
+                didChangeText()
+            }
+        }
     }
 
     func expandSlashCommandIfNeeded() {
@@ -2878,61 +2859,6 @@ class LinkAwareTextView: NSTextView {
     func refreshInlineImagePreviews() {
         // Inline image previews disabled - images now only show in sidebar
         // This function is kept for compatibility but does nothing
-    }
-
-    func refreshRenderedTables(precomputedRects: [String: NSRect] = [:]) {
-        guard lastAppliedEditorDisplayMode == .preview else {
-            clearRenderedTablePreviews()
-            return
-        }
-
-        let activeTableRange = isEditable ? MarkdownTableEditing.tableLayout(in: string, at: selectedRange().location)?.blockRange : nil
-        let layouts = MarkdownTableEditing.tableLayouts(in: string).filter { layout in
-            guard let activeTableRange else { return true }
-            return !NSEqualRanges(layout.blockRange, activeTableRange)
-        }
-        let activeIDs = Set(layouts.map { "\($0.blockRange.location)-\($0.blockRange.length)" })
-
-        for key in Array(renderedTableViews.keys) where !activeIDs.contains(key) {
-            renderedTableViews[key]?.removeFromSuperview()
-            renderedTableViews.removeValue(forKey: key)
-        }
-
-        let bodyFont = settings != nil ? MarkdownTheme.bodyFont(for: settings!) : MarkdownTheme.body
-
-        for layout in layouts {
-            let id = "\(layout.blockRange.location)-\(layout.blockRange.length)"
-            guard let blockRect = precomputedRects[id] else { continue }
-            // If the rect collapsed (e.g. due to scrolled-out layout), use a reasonable minimum
-            let effectiveRect: NSRect
-            if blockRect.height < 2 {
-                let rowCount = max(1, layout.rowRanges.count)
-                let estimatedRowHeight: CGFloat = 32
-                effectiveRect = NSRect(x: blockRect.minX, y: blockRect.minY, width: max(blockRect.width, 200), height: CGFloat(rowCount) * estimatedRowHeight)
-            } else {
-                effectiveRect = blockRect
-            }
-
-            let tableView: RenderedMarkdownTableView
-            if let existing = renderedTableViews[id] as? RenderedMarkdownTableView {
-                tableView = existing
-            } else {
-                tableView = RenderedMarkdownTableView(frame: .zero)
-                addSubview(tableView, positioned: .above, relativeTo: nil)
-                renderedTableViews[id] = tableView
-            }
-
-            let tableInset = NSEdgeInsets(top: 8, left: 4, bottom: 8, right: 4)
-            let paddedRect = NSRect(
-                x: effectiveRect.minX - tableInset.left,
-                y: effectiveRect.minY - tableInset.top,
-                width: effectiveRect.width + tableInset.left + tableInset.right,
-                height: effectiveRect.height + tableInset.top + tableInset.bottom
-            )
-            tableView.tableBlockRange = layout.blockRange
-            tableView.frame = paddedRect
-            tableView.configure(with: layout, source: string, bodyFont: bodyFont)
-        }
     }
 
     // MARK: - Embedded Notes
@@ -5006,96 +4932,6 @@ final class CodeBlockCopyButton: NSButton {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.contentTintColor = NSColor.secondaryLabelColor
         }
-    }
-}
-
-final class RenderedMarkdownTableView: NSView {
-    private var currentGridView: NSGridView?
-    var tableBlockRange: NSRange = NSRange(location: NSNotFound, length: 0)
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        wantsLayer = true
-        layer?.cornerRadius = 8
-        layer?.borderWidth = 0
-        layer?.backgroundColor = SynapseTheme.editorBackground.cgColor
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        // Pass clicks through to the underlying text view so the cursor
-        // lands inside the table, which triggers raw-markdown reveal.
-        guard let textView = superview as? NSTextView else {
-            super.mouseDown(with: event)
-            return
-        }
-        let pointInTextView = textView.convert(event.locationInWindow, from: nil)
-        // Place cursor at the start of the table block
-        if tableBlockRange.location != NSNotFound {
-            textView.setSelectedRange(NSRange(location: tableBlockRange.location, length: 0))
-            textView.window?.makeFirstResponder(textView)
-        } else {
-            textView.mouseDown(with: event)
-        }
-    }
-
-    override func resetCursorRects() {
-        addCursorRect(bounds, cursor: .iBeam)
-    }
-
-    func configure(with layout: MarkdownTableLayout, source: String, bodyFont: NSFont) {
-        currentGridView?.removeFromSuperview()
-        let newGrid = NSGridView()
-        newGrid.translatesAutoresizingMaskIntoConstraints = false
-        newGrid.rowSpacing = 0
-        newGrid.columnSpacing = 0
-        newGrid.yPlacement = .fill
-        newGrid.xPlacement = .fill
-
-        let nsSource = source as NSString
-        let rowCount = layout.rowRanges.count
-        for rowIndex in 0..<rowCount {
-            var rowViews: [NSView] = []
-            let rowCells = layout.cells.filter { $0.rowIndex == rowIndex }.sorted { $0.columnIndex < $1.columnIndex }
-            for (columnIndex, cell) in rowCells.enumerated() {
-                let label = NSTextField(labelWithString: nsSource.substring(with: cell.contentRange))
-                label.font = rowIndex == 0 ? NSFont.systemFont(ofSize: bodyFont.pointSize, weight: .semibold) : bodyFont
-                label.textColor = SynapseTheme.editorForeground
-                label.alignment = layout.alignments.indices.contains(columnIndex) ? layout.alignments[columnIndex].textAlignment : .left
-                label.lineBreakMode = .byTruncatingTail
-                label.maximumNumberOfLines = 1
-                label.translatesAutoresizingMaskIntoConstraints = false
-
-                let container = NSView()
-                container.translatesAutoresizingMaskIntoConstraints = false
-                if rowIndex == 0 {
-                    container.wantsLayer = true
-                    container.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.12).cgColor
-                }
-                container.addSubview(label)
-                NSLayoutConstraint.activate([
-                    label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 10),
-                    label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -10),
-                    label.topAnchor.constraint(equalTo: container.topAnchor, constant: 7),
-                    label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -7),
-                ])
-                rowViews.append(container)
-            }
-            newGrid.addRow(with: rowViews)
-        }
-
-        addSubview(newGrid)
-        currentGridView = newGrid
-        NSLayoutConstraint.activate([
-            newGrid.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            newGrid.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            newGrid.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            newGrid.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
-        ])
     }
 }
 
