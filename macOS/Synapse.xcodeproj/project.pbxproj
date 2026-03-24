@@ -152,6 +152,11 @@
 		BB1B2C3DE5F67891ABCD1002 /* CommandPaletteScoringTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1B2C3DE5F67891ABCD2002 /* CommandPaletteScoringTests.swift */; };
 		CC1B2C3DE5F67891ABCD1003 /* GitServiceAskpassTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC1B2C3DE5F67891ABCD2003 /* GitServiceAskpassTests.swift */; };
 		DD1B2C3DE5F67891ABCD1004 /* SidebarDragDropTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD1B2C3DE5F67891ABCD2004 /* SidebarDragDropTests.swift */; };
+		EE1B2C3DE5F67891ABCD1005 /* FontEnumeratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE1B2C3DE5F67891ABCD2005 /* FontEnumeratorTests.swift */; };
+		FF1B2C3DE5F67891ABCD1006 /* MarkdownPreviewCSSSizeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF1B2C3DE5F67891ABCD2006 /* MarkdownPreviewCSSSizeTests.swift */; };
+		A01B2C3DE5F67891ABCD1007 /* EditorStateConsumerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A01B2C3DE5F67891ABCD2007 /* EditorStateConsumerTests.swift */; };
+		B01B2C3DE5F67891ABCD1008 /* CollapsibleSectionModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B01B2C3DE5F67891ABCD2008 /* CollapsibleSectionModelTests.swift */; };
+		C01B2C3DE5F67891ABCD1009 /* MarkdownPreviewCSSHeadingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C01B2C3DE5F67891ABCD2009 /* MarkdownPreviewCSSHeadingTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -311,6 +316,11 @@
 		BB1B2C3DE5F67891ABCD2002 /* CommandPaletteScoringTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteScoringTests.swift; sourceTree = "<group>"; };
 		CC1B2C3DE5F67891ABCD2003 /* GitServiceAskpassTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitServiceAskpassTests.swift; sourceTree = "<group>"; };
 		DD1B2C3DE5F67891ABCD2004 /* SidebarDragDropTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarDragDropTests.swift; sourceTree = "<group>"; };
+		EE1B2C3DE5F67891ABCD2005 /* FontEnumeratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontEnumeratorTests.swift; sourceTree = "<group>"; };
+		FF1B2C3DE5F67891ABCD2006 /* MarkdownPreviewCSSSizeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownPreviewCSSSizeTests.swift; sourceTree = "<group>"; };
+		A01B2C3DE5F67891ABCD2007 /* EditorStateConsumerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorStateConsumerTests.swift; sourceTree = "<group>"; };
+		B01B2C3DE5F67891ABCD2008 /* CollapsibleSectionModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollapsibleSectionModelTests.swift; sourceTree = "<group>"; };
+		C01B2C3DE5F67891ABCD2009 /* MarkdownPreviewCSSHeadingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownPreviewCSSHeadingTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -490,6 +500,11 @@
 				BB1B2C3DE5F67891ABCD2002 /* CommandPaletteScoringTests.swift */,
 				CC1B2C3DE5F67891ABCD2003 /* GitServiceAskpassTests.swift */,
 				DD1B2C3DE5F67891ABCD2004 /* SidebarDragDropTests.swift */,
+			EE1B2C3DE5F67891ABCD2005 /* FontEnumeratorTests.swift */,
+			FF1B2C3DE5F67891ABCD2006 /* MarkdownPreviewCSSSizeTests.swift */,
+			A01B2C3DE5F67891ABCD2007 /* EditorStateConsumerTests.swift */,
+			B01B2C3DE5F67891ABCD2008 /* CollapsibleSectionModelTests.swift */,
+			C01B2C3DE5F67891ABCD2009 /* MarkdownPreviewCSSHeadingTests.swift */,
 			);
 			path = SynapseTests;
 			sourceTree = "<group>";
@@ -708,6 +723,11 @@
 				BB1B2C3DE5F67891ABCD1002 /* CommandPaletteScoringTests.swift in Sources */,
 				CC1B2C3DE5F67891ABCD1003 /* GitServiceAskpassTests.swift in Sources */,
 				DD1B2C3DE5F67891ABCD1004 /* SidebarDragDropTests.swift in Sources */,
+			EE1B2C3DE5F67891ABCD1005 /* FontEnumeratorTests.swift in Sources */,
+			FF1B2C3DE5F67891ABCD1006 /* MarkdownPreviewCSSSizeTests.swift in Sources */,
+			A01B2C3DE5F67891ABCD1007 /* EditorStateConsumerTests.swift in Sources */,
+			B01B2C3DE5F67891ABCD1008 /* CollapsibleSectionModelTests.swift in Sources */,
+			C01B2C3DE5F67891ABCD1009 /* MarkdownPreviewCSSHeadingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
