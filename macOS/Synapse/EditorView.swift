@@ -172,7 +172,7 @@ struct EditorView: View {
                                 participatesInGlobalEditorCommands: participatesInGlobalEditorCommands,
                                 onDidEdit: markEditorDirty
                             )
-                            .id("editor-font-\(appState.settings.editorBodyFontFamily)-\(appState.settings.editorMonospaceFontFamily)-\(appState.settings.editorFontSize)")
+                            .id("editor-font-\(appState.settings.editorBodyFontFamily)-\(appState.settings.editorMonospaceFontFamily)-\(appState.settings.editorFontSize)-\(appState.settings.editorLineHeight)")
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
 
@@ -500,7 +500,7 @@ struct EditorView: View {
                                 participatesInGlobalEditorCommands: false
                             )
                             .environmentObject(appState)
-                            .id("history-font-\(appState.settings.editorBodyFontFamily)-\(appState.settings.editorMonospaceFontFamily)-\(appState.settings.editorFontSize)")
+                            .id("history-font-\(appState.settings.editorBodyFontFamily)-\(appState.settings.editorMonospaceFontFamily)-\(appState.settings.editorFontSize)-\(appState.settings.editorLineHeight)")
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         } else {
                             Spacer()
@@ -1032,11 +1032,13 @@ private struct EditorFontSignature: Equatable {
     let bodyFontFamily: String
     let monospaceFontFamily: String
     let fontSize: Int
+    let lineHeight: Double
 
     init(settings: SettingsManager?) {
         bodyFontFamily = settings?.editorBodyFontFamily ?? "System"
         monospaceFontFamily = settings?.editorMonospaceFontFamily ?? "System Monospace"
         fontSize = settings?.editorFontSize ?? 15
+        lineHeight = settings?.editorLineHeight ?? 1.6
     }
 }
 
