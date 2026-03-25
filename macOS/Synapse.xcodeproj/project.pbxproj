@@ -166,6 +166,7 @@
 		F130A3AE3317CD34B8419BAA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CB8BA24E7E55C8EF0A3530F0 /* Assets.xcassets */; };
 		F1ACE878A9BD0B6F6530A66C /* MarkdownPreviewCursorReveal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D193C8BB18F3C7666349DB1 /* MarkdownPreviewCursorReveal.swift */; };
 		F4AE6BB73560EDBD541B5187 /* ImageSidebarEmbedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A03956EC9D388F74A50F6F3 /* ImageSidebarEmbedTests.swift */; };
+		F74DC7FF8A8BF5743CE92337 /* SyntaxHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77EFD07F12F0D2B96BFEA6E0 /* SyntaxHighlighter.swift */; };
 		F8CE6A091363039D10951B3F /* MarkdownPreviewCSS.swift in Sources */ = {isa = PBXBuildFile; fileRef = 575EBDEB0FCDE2BC05FFF26C /* MarkdownPreviewCSS.swift */; };
 		FA748D708DD0F029A45CA494 /* GraphPaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADBC72A6A85DB161568424D /* GraphPaneView.swift */; };
 		FB69E60D92275DD48F59979D /* SettingsManagerRemovePaneTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8385D1262EFC1C89910D50A1 /* SettingsManagerRemovePaneTests.swift */; };
@@ -262,6 +263,7 @@
 		734BABE0C2F5D117550DBF45 /* GitStageChangesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitStageChangesTests.swift; sourceTree = "<group>"; };
 		73B4A29C8E54F6C29637E8D2 /* AppStateContentChangeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateContentChangeTests.swift; sourceTree = "<group>"; };
 		7603E5241D305A3BAE781451 /* SplitPaneEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplitPaneEditorView.swift; sourceTree = "<group>"; };
+		77EFD07F12F0D2B96BFEA6E0 /* SyntaxHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntaxHighlighter.swift; sourceTree = "<group>"; };
 		78E1B729A125740F1A8C3AAE /* FileTreeHiddenItemsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTreeHiddenItemsTests.swift; sourceTree = "<group>"; };
 		79CCB6B287F3565EC8CEF2AF /* SidebarPaneTitleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarPaneTitleTests.swift; sourceTree = "<group>"; };
 		7A59692ED432DF0BD26FADE0 /* AppStateCurrentDirectoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateCurrentDirectoryTests.swift; sourceTree = "<group>"; };
@@ -407,6 +409,7 @@
 				7603E5241D305A3BAE781451 /* SplitPaneEditorView.swift */,
 				5D10844594863C142A8C7D08 /* Synapse.entitlements */,
 				48E13069F2D634A684FAE713 /* SynapseApp.swift */,
+				77EFD07F12F0D2B96BFEA6E0 /* SyntaxHighlighter.swift */,
 				8F24B33A93487844014AF953 /* TabBarView.swift */,
 				928B9D0E079FF89907F205E4 /* TagsPaneView.swift */,
 				B2933BCDF0B2B56488D2D9F4 /* TerminalPaneView.swift */,
@@ -817,6 +820,7 @@
 				563EA784036219818F794EFE /* SlashCommands.swift in Sources */,
 				63ED7B40721FC00C49571D34 /* SplitPaneEditorView.swift in Sources */,
 				F0CC31A93376DEA4A2F12A95 /* SynapseApp.swift in Sources */,
+				F74DC7FF8A8BF5743CE92337 /* SyntaxHighlighter.swift in Sources */,
 				1ED3F09C38165B2493F1F33F /* TabBarView.swift in Sources */,
 				95894C3787EAA8AF0D094716 /* TagsPaneView.swift in Sources */,
 				B26B4268AD9B4A526D7D6049 /* TerminalPaneView.swift in Sources */,

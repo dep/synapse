@@ -902,10 +902,11 @@ struct RawEditor: NSViewRepresentable {
                     self.stylingScheduled = false
                     let parser = MarkdownDocumentParser()
                     let document = parser.parse(tv.string)
+                    let request = self.pendingRefreshRequest
                     let refreshPlan: MarkdownEditorRefreshPlan
                     if self.hasCoalescedEdits {
                         refreshPlan = .fullDocument
-                    } else if let request = self.pendingRefreshRequest, request.newText == tv.string {
+                    } else if let request, request.newText == tv.string {
                         refreshPlan = MarkdownEditorRefreshPlan.make(
                             oldText: request.oldText,
                             newText: request.newText,
@@ -920,6 +921,16 @@ struct RawEditor: NSViewRepresentable {
                     self.hasCoalescedEdits = false
                     self.suppressSync = true
                     let needsPreview = self.parent.appState.settings.hideMarkdownWhileEditing
+                    if !needsPreview,
+                       let request,
+                       tv.shouldSkipIncrementalMarkdownRestyle(
+                           document: document,
+                           refreshPlan: refreshPlan,
+                           editedRange: request.editedRange
+                       ) {
+                        self.suppressSync = false
+                        return
+                    }
                     tv.applyMarkdownStyling(document: document, refreshPlan: refreshPlan, deferRedraw: needsPreview)
                     if needsPreview {
                         tv.applyPreviewStyling(document: document, refreshPlan: refreshPlan, editingSessionOpen: true)
@@ -1548,6 +1559,10 @@ extension LinkAwareTextView {
             .paragraphStyle: baseParagraphStyle,
         ], range: scopeRange)
 
+        // Restore Apple Color Emoji on emoji characters so they don't flicker
+        // to a fallback glyph while the styling pass is in-flight.
+        restoreEmojiFonts(in: storage, range: scopeRange, bodyFont: bodyFont)
+
         for heading in semanticStyles.headings {
             guard NSIntersectionRange(heading.range, scopeRange).length > 0 else { continue }
             let font: NSFont
@@ -1584,19 +1599,37 @@ extension LinkAwareTextView {
             storage.addAttributes([.font: monoFont, .backgroundColor: MarkdownTheme.codeBackground], range: range)
         }
         let codePad: CGFloat = 10
-        for range in semanticStyles.codeBlocks {
-            guard NSIntersectionRange(range, scopeRange).length > 0 else { continue }
-            storage.addAttributes([.font: monoFont, .backgroundColor: MarkdownTheme.codeBackground, .foregroundColor: SynapseTheme.editorForeground], range: range)
+        let isDarkMode = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        for block in parsedDocument.blocks {
+            guard case let .fencedCodeBlock(_, infoString) = block.kind else { continue }
+            guard NSIntersectionRange(block.range, scopeRange).length > 0 else { continue }
+
+            storage.addAttributes([
+                .font: monoFont,
+                .backgroundColor: MarkdownTheme.codeBackground,
+                .foregroundColor: SynapseTheme.editorForeground,
+            ], range: block.range)
+
+            if SyntaxHighlighter.isSupportedLanguage(infoString) {
+                SyntaxHighlighter.apply(
+                    to: storage,
+                    codeRange: block.contentRange,
+                    language: infoString,
+                    baseFont: monoFont,
+                    isDarkMode: isDarkMode
+                )
+            }
+
             // Add top padding to the opening fence line and bottom padding to the closing fence line
             // so the code block has breathing room and the copy button has space to sit in.
             let nsStr = text as NSString
             // First line of block → paragraphSpacingBefore
-            let firstLineRange = nsStr.lineRange(for: NSRange(location: range.location, length: 0))
+            let firstLineRange = nsStr.lineRange(for: NSRange(location: block.range.location, length: 0))
             let firstParaStyle = (storage.attribute(.paragraphStyle, at: firstLineRange.location, effectiveRange: nil) as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
             firstParaStyle.paragraphSpacingBefore = codePad
             storage.addAttribute(.paragraphStyle, value: firstParaStyle, range: firstLineRange)
             // Last line of block → paragraphSpacing (after) and full-width background
-            let lastLineRange = nsStr.lineRange(for: NSRange(location: range.location + range.length - 1, length: 0))
+            let lastLineRange = nsStr.lineRange(for: NSRange(location: block.range.location + block.range.length - 1, length: 0))
             let lastParaStyle = (storage.attribute(.paragraphStyle, at: lastLineRange.location, effectiveRange: nil) as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
             lastParaStyle.paragraphSpacing = codePad
             // Extend the last line's background to the full line width by appending a trailing tab stop
@@ -1763,6 +1796,35 @@ extension LinkAwareTextView {
         }
     }
 
+    /// Re-apply Apple Color Emoji to emoji characters after a blanket font reset.
+    /// `NSTextStorage.setAttributes` replaces the font on every character,
+    /// including emoji — which need the Apple Color Emoji font to render.
+    /// Without this pass emoji momentarily show a fallback glyph (`` ` ``) until
+    /// Core Text resolves the substitution, causing visible flicker.
+    private func restoreEmojiFonts(in storage: NSTextStorage, range: NSRange, bodyFont: NSFont) {
+        let text = storage.string
+        let nsRange = Range(range, in: text)
+        guard let nsRange else { return }
+        let emojiFont = NSFont(name: "Apple Color Emoji", size: bodyFont.pointSize)
+            ?? NSFont.systemFont(ofSize: bodyFont.pointSize)
+
+        // Walk composed character sequences; only touch those containing emoji scalars.
+        var idx = nsRange.lowerBound
+        while idx < nsRange.upperBound {
+            let next = text.index(after: idx)
+            // rangeOfComposedCharacterSequence gives us the full cluster
+            let cluster = text[idx..<next]
+            let isEmoji = cluster.unicodeScalars.contains { scalar in
+                scalar.properties.isEmoji && scalar.value > 0x23F // skip small ASCII-range symbols like #, *, 0-9
+            }
+            if isEmoji {
+                let charRange = NSRange(idx..<next, in: text)
+                storage.addAttribute(.font, value: emojiFont, range: charRange)
+            }
+            idx = next
+        }
+    }
+
     private func dimDelimiters(storage: NSTextStorage, outerRange: NSRange, delimLen: Int) {
         guard outerRange.length >= delimLen * 2 else { return }
         storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: NSRange(location: outerRange.location, length: delimLen))
@@ -1785,6 +1847,31 @@ extension LinkAwareTextView {
         if range.length == (textStorage?.length ?? 0) {
             setNeedsDisplay(bounds)
         }
+    }
+
+    fileprivate func shouldSkipIncrementalMarkdownRestyle(
+        document: MarkdownDocument,
+        refreshPlan: MarkdownEditorRefreshPlan,
+        editedRange: NSRange
+    ) -> Bool {
+        guard case let .blockRange(blockRange) = refreshPlan.kind else { return false }
+        guard let block = document.blocks.first(where: { NSEqualRanges($0.range, blockRange) }) else { return false }
+        guard case .paragraph = block.kind, block.inlineTokens.isEmpty else { return false }
+
+        let nsText = string as NSString
+        guard nsText.length > 0 else { return false }
+
+        let probeLocation = min(max(0, editedRange.location), max(0, nsText.length - 1))
+        let probeLength = min(max(1, editedRange.length), nsText.length - probeLocation)
+        let probeRange = NSRange(location: probeLocation, length: probeLength)
+        let probeText = nsText.substring(with: probeRange)
+
+        return !containsMarkdownTrigger(in: probeText)
+    }
+
+    private func containsMarkdownTrigger(in text: String) -> Bool {
+        let triggerCharacters = CharacterSet(charactersIn: "*_`[]!~#>|-:/")
+        return text.rangeOfCharacter(from: triggerCharacters) != nil
     }
 
     // MARK: - Collapsible section toggle buttons
@@ -5409,6 +5496,7 @@ struct MarkdownPreviewView: NSViewRepresentable {
                 strong { font-weight: 600; }
                 em { font-style: italic; }
                 del { text-decoration: line-through; }
+                \(SyntaxHighlightTheme.css(forDarkMode: isDarkMode))
             </style>
         </head>
         <body>
