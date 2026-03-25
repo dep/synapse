@@ -1,8 +1,8 @@
 import XCTest
 @testable import Synapse
 
-/// Tests for opening daily note on startup
-final class DailyNoteStartupBehaviorTests: XCTestCase {
+/// Tests for launch behavior on startup
+final class LaunchBehaviorStartupTests: XCTestCase {
 
     var sut: AppState!
     var tempDir: URL!
@@ -32,12 +32,26 @@ final class DailyNoteStartupBehaviorTests: XCTestCase {
         super.tearDown()
     }
 
-    // MARK: - Open on Startup Tests
+    // MARK: - Previously Open Notes Tests
 
-    func test_openFolder_withDailyNotesEnabledAndOpenOnStartup_opensTodayNote() {
+    func test_openFolder_withPreviouslyOpenNotes_showsBlankEditorWhenNoState() {
+        // Given
+        sut.settings.launchBehavior = .previouslyOpenNotes
+        
+        // When
+        sut.openFolder(tempDir)
+        
+        // Then
+        XCTAssertNil(sut.selectedFile, "Should show blank editor when no saved state")
+        XCTAssertTrue(sut.tabs.isEmpty, "Should have no tabs")
+    }
+
+    // MARK: - Daily Note Tests
+
+    func test_openFolder_withDailyNoteBehaviorAndEnabled_opensTodayNote() {
         // Given
         sut.settings.dailyNotesEnabled = true
-        sut.settings.dailyNotesOpenOnStartup = true
+        sut.settings.launchBehavior = .dailyNote
         sut.settings.dailyNotesFolder = "daily"
 
         // When
@@ -51,10 +65,10 @@ final class DailyNoteStartupBehaviorTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: expectedNoteURL.path), "Note file should exist")
     }
 
-    func test_openFolder_withDailyNotesEnabledButOpenOnStartupDisabled_doesNotOpenNote() {
+    func test_openFolder_withDailyNoteBehaviorButDisabled_doesNotOpenNote() {
         // Given
-        sut.settings.dailyNotesEnabled = true
-        sut.settings.dailyNotesOpenOnStartup = false
+        sut.settings.dailyNotesEnabled = false
+        sut.settings.launchBehavior = .dailyNote
         sut.settings.dailyNotesFolder = "daily"
 
         // When
@@ -66,25 +80,10 @@ final class DailyNoteStartupBehaviorTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: dailyDir.path), "Daily folder should not be created")
     }
 
-    func test_openFolder_withDailyNotesDisabled_doesNotOpenNote() {
-        // Given
-        sut.settings.dailyNotesEnabled = false
-        sut.settings.dailyNotesOpenOnStartup = true
-        sut.settings.dailyNotesFolder = "daily"
-
-        // When
-        sut.openFolder(tempDir)
-
-        // Then
-        XCTAssertNil(sut.selectedFile, "Should not open any file when daily notes is disabled")
-        let dailyDir = tempDir.appendingPathComponent("daily", isDirectory: true)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: dailyDir.path), "Daily folder should not be created")
-    }
-
-    func test_openFolder_opensExistingTodayNote() throws {
+    func test_openFolder_withDailyNoteBehavior_opensExistingTodayNote() throws {
         // Given
         sut.settings.dailyNotesEnabled = true
-        sut.settings.dailyNotesOpenOnStartup = true
+        sut.settings.launchBehavior = .dailyNote
         sut.settings.dailyNotesFolder = "daily"
 
         // Create an existing note
@@ -102,16 +101,50 @@ final class DailyNoteStartupBehaviorTests: XCTestCase {
         XCTAssertEqual(content, "existing content", "Should preserve existing content")
     }
 
-    func test_openFolder_withBothSettingsFalse_doesNotOpenNote() {
+    // MARK: - Specific Note Tests
+
+    func test_openFolder_withSpecificNoteBehavior_opensSelectedNote() throws {
         // Given
-        sut.settings.dailyNotesEnabled = false
-        sut.settings.dailyNotesOpenOnStartup = false
-        sut.settings.dailyNotesFolder = "daily"
+        let notePath = "notes/startup.md"
+        sut.settings.launchBehavior = .specificNote
+        sut.settings.launchSpecificNotePath = notePath
+        
+        // Create the note
+        let notesDir = tempDir.appendingPathComponent("notes", isDirectory: true)
+        try FileManager.default.createDirectory(at: notesDir, withIntermediateDirectories: true)
+        let noteURL = notesDir.appendingPathComponent("startup.md")
+        try "startup content".write(to: noteURL, atomically: true, encoding: .utf8)
 
         // When
         sut.openFolder(tempDir)
 
         // Then
-        XCTAssertNil(sut.selectedFile, "Should not open any file")
+        XCTAssertEqual(sut.selectedFile, noteURL, "Should open the specific note")
+    }
+
+    func test_openFolder_withSpecificNoteBehavior_missingNote_showsBlankEditor() throws {
+        // Given
+        sut.settings.launchBehavior = .specificNote
+        sut.settings.launchSpecificNotePath = "notes/missing.md"
+
+        // When - note doesn't exist
+        sut.openFolder(tempDir)
+
+        // Then
+        XCTAssertNil(sut.selectedFile, "Should show blank editor when specific note doesn't exist")
+        XCTAssertTrue(sut.tabs.isEmpty, "Should have no tabs")
+    }
+
+    func test_openFolder_withSpecificNoteBehavior_emptyPath_showsBlankEditor() {
+        // Given
+        sut.settings.launchBehavior = .specificNote
+        sut.settings.launchSpecificNotePath = ""
+
+        // When
+        sut.openFolder(tempDir)
+
+        // Then
+        XCTAssertNil(sut.selectedFile, "Should show blank editor when no specific note is set")
+        XCTAssertTrue(sut.tabs.isEmpty, "Should have no tabs")
     }
 }

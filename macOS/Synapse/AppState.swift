@@ -307,7 +307,36 @@ class AppState: ObservableObject {
         return SettingsManager()
     }
 
-    // MARK: - Pinning
+    /// Saves the current vault path to the global settings for auto-restore on next launch
+    private func saveCurrentVaultPath() {
+        guard let rootURL = rootURL else { return }
+        let path = rootURL.path
+        
+        // Add to the beginning of vaultPaths (most recent first)
+        var paths = settings.vaultPaths
+        // Remove if already exists to avoid duplicates
+        paths.removeAll { $0 == path }
+        // Insert at the beginning
+        paths.insert(path, at: 0)
+        // Keep only the most recent 10 vaults
+        if paths.count > 10 {
+            paths = Array(paths.prefix(10))
+        }
+        settings.vaultPaths = paths
+    }
+    
+    /// Opens the most recently used vault if available
+    /// Returns true if a vault was opened, false otherwise
+    func openLastVaultIfAvailable() -> Bool {
+        guard let lastVaultPath = settings.vaultPaths.first,
+              FileManager.default.fileExists(atPath: lastVaultPath) else {
+            return false
+        }
+        
+        let url = URL(fileURLWithPath: lastVaultPath)
+        openFolder(url)
+        return true
+    }
 
     /// Returns all pinned items that exist in the current vault
     var pinnedItems: [PinnedItem] {
@@ -371,8 +400,7 @@ class AppState: ObservableObject {
 
     @objc private func handleAppTermination() {
         persistDirtyFileIfNeeded()
-        // Remove runtime state file on quit
-        removeStateFile()
+        // State file is NOT removed on quit - it's needed for "Previously open notes" restoration
         // Try auto-push if enabled (includes pulling, squashing, and pushing)
         autoPushIfEnabled()
     }
@@ -938,6 +966,10 @@ class AppState: ObservableObject {
     func openFolder(_ url: URL) {
         persistDirtyFileIfNeeded()
         stopWatching()
+        
+        // Track if we're switching from a previous vault
+        let hadPriorVault = rootURL != nil
+        
         rootURL = standardized(url)
         
         // Reload settings for the new vault
@@ -954,15 +986,69 @@ class AppState: ObservableObject {
         updateHistoryState()
         refreshAllFiles()
         
-        // Open today's note on startup if settings allow
-        if settings.dailyNotesEnabled && settings.dailyNotesOpenOnStartup {
-            _ = openTodayNote()
+        // Handle launch behavior only on initial vault open (not when switching)
+        if !hadPriorVault {
+            handleLaunchBehavior()
         }
         
         setupGit(for: url)
         
         // Write runtime state file on vault open
         scheduleStateFileWrite()
+    }
+    
+    /// Handles the launch behavior based on user settings
+    private func handleLaunchBehavior() {
+        print("[DEBUG] handleLaunchBehavior: launchBehavior is \(settings.launchBehavior)")
+        switch settings.launchBehavior {
+        case .previouslyOpenNotes:
+            print("[DEBUG] handleLaunchBehavior: Attempting to restore previously open notes")
+            // Try to restore tabs from state file
+            let restored = restoreTabsFromStateFile()
+            print("[DEBUG] handleLaunchBehavior: restoreTabsFromStateFile returned \(restored)")
+            if !restored {
+                // No saved tabs - show blank editor
+                print("[DEBUG] handleLaunchBehavior: No tabs restored, showing blank editor")
+                selectedFile = nil
+                fileContent = ""
+                tabs = []
+                activeTabIndex = nil
+            }
+            
+        case .dailyNote:
+            // Open daily note if enabled
+            if settings.dailyNotesEnabled {
+                _ = openTodayNote()
+            } else {
+                // Daily notes disabled - fall back to blank editor
+                selectedFile = nil
+                fileContent = ""
+                tabs = []
+                activeTabIndex = nil
+            }
+            
+        case .specificNote:
+            // Open specific note if set
+            let notePath = settings.launchSpecificNotePath.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !notePath.isEmpty, let rootURL = rootURL {
+                let noteURL = rootURL.appendingPathComponent(notePath)
+                if FileManager.default.fileExists(atPath: noteURL.path) {
+                    openFileInNewTab(noteURL)
+                } else {
+                    // Note doesn't exist - fall back to blank editor
+                    selectedFile = nil
+                    fileContent = ""
+                    tabs = []
+                    activeTabIndex = nil
+                }
+            } else {
+                // No specific note set - show blank editor
+                selectedFile = nil
+                fileContent = ""
+                tabs = []
+                activeTabIndex = nil
+            }
+        }
     }
     
     /// Reload settings for the specified vault root
@@ -1103,13 +1189,13 @@ class AppState: ObservableObject {
                 if git.hasConflicts() {
                     DispatchQueue.main.async {
                         self.gitSyncStatus = .conflict("Merge conflicts detected. Resolve them manually in a terminal, then push.")
-                        self.reloadSelectedFileFromDiskIfNeeded(force: true)
+                        self.reloadSelectedFileFromDiskIfNeeded()
                     }
                     return
                 }
 
                 DispatchQueue.main.async {
-                    self.reloadSelectedFileFromDiskIfNeeded(force: true)
+                    self.reloadSelectedFileFromDiskIfNeeded()
                     self.gitSyncStatus = .idle
                 }
             } catch {
@@ -2110,6 +2196,9 @@ class AppState: ObservableObject {
         }
         stateData["openTabs"] = openTabs
         
+        // Save active tab index
+        stateData["activeTabIndex"] = activeTabIndex ?? 0
+        
         // Skip writing if there are no meaningful file tabs open
         // This prevents creating .synapse/ directory unnecessarily during tests
         if openTabs.isEmpty && selectedFile == nil {
@@ -2130,13 +2219,86 @@ class AppState: ObservableObject {
 
             let jsonData = try JSONSerialization.data(withJSONObject: stateData, options: [.prettyPrinted, .sortedKeys])
             
-            // Atomic write: write to temp file then rename to avoid truncated reads
+            // Clean up any stale temp file first
             let tempURL = stateURL.appendingPathExtension("tmp")
-            try jsonData.write(to: tempURL, options: .atomic)
-            try FileManager.default.moveItem(at: tempURL, to: stateURL)
+            if FileManager.default.fileExists(atPath: tempURL.path) {
+                try? FileManager.default.removeItem(at: tempURL)
+            }
+            
+            // Write directly to final location (atomic is handled by the write method itself)
+            try jsonData.write(to: stateURL, options: .atomic)
+            print("[DEBUG] writeStateFile: Successfully wrote state file to \(stateURL.path)")
         } catch {
-            // Silently fail - this is transient runtime state
-            print("Failed to write state file: \(error)")
+            print("[DEBUG] writeStateFile: Failed to write - \(error)")
+        }
+    }
+    
+    /// Restores tabs from the state file (.synapse/state.json)
+    /// Returns true if tabs were restored, false otherwise
+    func restoreTabsFromStateFile() -> Bool {
+        guard let stateURL = stateFileURL,
+              FileManager.default.fileExists(atPath: stateURL.path),
+              let rootURL = rootURL else {
+            print("[DEBUG] restoreTabsFromStateFile: early return - stateURL: \(String(describing: stateFileURL)), exists: \(FileManager.default.fileExists(atPath: stateFileURL?.path ?? "")), rootURL: \(String(describing: rootURL))")
+            return false
+        }
+        
+        print("[DEBUG] restoreTabsFromStateFile: Attempting to restore from \(stateURL.path)")
+        print("[DEBUG] restoreTabsFromStateFile: rootURL is \(rootURL.path)")
+        
+        do {
+            let data = try Data(contentsOf: stateURL)
+            guard let stateData = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                print("[DEBUG] restoreTabsFromStateFile: Failed to parse JSON")
+                return false
+            }
+            
+            print("[DEBUG] restoreTabsFromStateFile: stateData keys: \(stateData.keys)")
+            
+            // Restore open tabs
+            if let openTabs = stateData["openTabs"] as? [String] {
+                print("[DEBUG] restoreTabsFromStateFile: Found \(openTabs.count) tabs in state file: \(openTabs)")
+                var restoredTabs: [TabItem] = []
+                for relativePath in openTabs {
+                    let fileURL = rootURL.appendingPathComponent(relativePath)
+                    let exists = FileManager.default.fileExists(atPath: fileURL.path)
+                    print("[DEBUG] restoreTabsFromStateFile: Checking \(relativePath) -> \(fileURL.path), exists: \(exists)")
+                    if exists {
+                        restoredTabs.append(.file(fileURL))
+                    }
+                }
+                
+                print("[DEBUG] restoreTabsFromStateFile: Restored \(restoredTabs.count) tabs")
+                
+                if !restoredTabs.isEmpty {
+                    tabs = restoredTabs
+                    
+                    // Restore active tab index
+                    if let activeIndex = stateData["activeTabIndex"] as? Int,
+                       activeIndex >= 0 && activeIndex < tabs.count {
+                        activeTabIndex = activeIndex
+                    } else {
+                        activeTabIndex = 0
+                    }
+                    
+                    print("[DEBUG] restoreTabsFromStateFile: Setting activeTabIndex to \(String(describing: activeTabIndex))")
+                    
+                    // Load the active tab's content
+                    if let index = activeTabIndex, index < tabs.count {
+                        print("[DEBUG] restoreTabsFromStateFile: Activating tab at index \(index)")
+                        activateTab(at: index)
+                    }
+                    
+                    return true
+                }
+            } else {
+                print("[DEBUG] restoreTabsFromStateFile: No openTabs found in state data")
+            }
+            
+            return false
+        } catch {
+            print("[DEBUG] restoreTabsFromStateFile: Error - \(error)")
+            return false
         }
     }
 

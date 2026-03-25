@@ -669,7 +669,8 @@ final class SettingsManagerTests: XCTestCase {
         dailyNotesEnabled: true
         dailyNotesFolder: daily
         dailyNotesTemplate: Daily Note.md
-        dailyNotesOpenOnStartup: true
+        launchBehavior: dailyNote
+        launchSpecificNotePath: notes/startup.md
         autoSave: true
         autoPush: false
         leftSidebarPanes:
@@ -691,6 +692,8 @@ final class SettingsManagerTests: XCTestCase {
         XCTAssertEqual(manager.fileExtensionFilter, "*.md, *.swift")
         XCTAssertEqual(manager.hiddenFileFolderFilter, ".git")
         XCTAssertTrue(manager.dailyNotesEnabled)
+        XCTAssertEqual(manager.launchBehavior, .dailyNote)
+        XCTAssertEqual(manager.launchSpecificNotePath, "notes/startup.md")
         XCTAssertTrue(manager.autoSave)
         // Fixed sidebars always have 3 entries
         XCTAssertEqual(manager.sidebars.count, 3)

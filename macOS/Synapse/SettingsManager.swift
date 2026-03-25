@@ -144,6 +144,37 @@ enum SidebarPosition: String, Codable, CaseIterable {
     case right = "right"
 }
 
+/// Determines what opens when the app launches
+enum LaunchBehavior: String, Codable, CaseIterable, Identifiable {
+    case previouslyOpenNotes = "previouslyOpenNotes"
+    case dailyNote = "dailyNote"
+    case specificNote = "specificNote"
+    
+    var id: String { rawValue }
+    
+    var displayName: String {
+        switch self {
+        case .previouslyOpenNotes:
+            return "Previously open notes"
+        case .dailyNote:
+            return "Your daily note"
+        case .specificNote:
+            return "A specific note"
+        }
+    }
+    
+    var description: String {
+        switch self {
+        case .previouslyOpenNotes:
+            return "Restore all tabs from your last session"
+        case .dailyNote:
+            return "Open today's daily note automatically"
+        case .specificNote:
+            return "Always open a specific note on launch"
+        }
+    }
+}
+
 /// A sidebar container that can hold multiple panes and be positioned on left or right
 struct Sidebar: Identifiable, Codable, Equatable {
     let id: UUID
@@ -200,7 +231,10 @@ class SettingsManager: ObservableObject {
     @Published var dailyNotesTemplate: String {
         didSet { save() }
     }
-    @Published var dailyNotesOpenOnStartup: Bool {
+    @Published var launchBehavior: LaunchBehavior {
+        didSet { save() }
+    }
+    @Published var launchSpecificNotePath: String {
         didSet { save() }
     }
     @Published var autoSave: Bool {
@@ -412,7 +446,9 @@ class SettingsManager: ObservableObject {
         var dailyNotesEnabled: Bool?
         var dailyNotesFolder: String?
         var dailyNotesTemplate: String?
-        var dailyNotesOpenOnStartup: Bool?
+        var dailyNotesOpenOnStartup: Bool?  // Legacy - migrated to launchBehavior
+        var launchBehavior: String?
+        var launchSpecificNotePath: String?
         var autoSave: Bool
         var autoPush: Bool
         var sidebarPaneHeights: [String: CGFloat]?
@@ -441,6 +477,8 @@ class SettingsManager: ObservableObject {
             dailyNotesFolder = try container.decodeIfPresent(String.self, forKey: .dailyNotesFolder)
             dailyNotesTemplate = try container.decodeIfPresent(String.self, forKey: .dailyNotesTemplate)
             dailyNotesOpenOnStartup = try container.decodeIfPresent(Bool.self, forKey: .dailyNotesOpenOnStartup)
+            launchBehavior = try container.decodeIfPresent(String.self, forKey: .launchBehavior)
+            launchSpecificNotePath = try container.decodeIfPresent(String.self, forKey: .launchSpecificNotePath)
             autoSave = try container.decodeIfPresent(Bool.self, forKey: .autoSave) ?? false
             autoPush = try container.decodeIfPresent(Bool.self, forKey: .autoPush) ?? false
             sidebarPaneHeights = try container.decodeIfPresent([String: CGFloat].self, forKey: .sidebarPaneHeights)
@@ -469,7 +507,9 @@ class SettingsManager: ObservableObject {
         var dailyNotesEnabled: Bool?
         var dailyNotesFolder: String?
         var dailyNotesTemplate: String?
-        var dailyNotesOpenOnStartup: Bool?
+        var dailyNotesOpenOnStartup: Bool?  // Legacy - migrated to launchBehavior
+        var launchBehavior: String?
+        var launchSpecificNotePath: String?
         var autoSave: Bool
         var autoPush: Bool
         var pinnedItems: [PinnedItem]?
@@ -490,6 +530,8 @@ class SettingsManager: ObservableObject {
             dailyNotesFolder: String?,
             dailyNotesTemplate: String?,
             dailyNotesOpenOnStartup: Bool?,
+            launchBehavior: String?,
+            launchSpecificNotePath: String?,
             autoSave: Bool,
             autoPush: Bool,
             pinnedItems: [PinnedItem]?,
@@ -509,6 +551,8 @@ class SettingsManager: ObservableObject {
             self.dailyNotesFolder = dailyNotesFolder
             self.dailyNotesTemplate = dailyNotesTemplate
             self.dailyNotesOpenOnStartup = dailyNotesOpenOnStartup
+            self.launchBehavior = launchBehavior
+            self.launchSpecificNotePath = launchSpecificNotePath
             self.autoSave = autoSave
             self.autoPush = autoPush
             self.pinnedItems = pinnedItems
@@ -531,6 +575,8 @@ class SettingsManager: ObservableObject {
             dailyNotesFolder = try container.decodeIfPresent(String.self, forKey: .dailyNotesFolder)
             dailyNotesTemplate = try container.decodeIfPresent(String.self, forKey: .dailyNotesTemplate)
             dailyNotesOpenOnStartup = try container.decodeIfPresent(Bool.self, forKey: .dailyNotesOpenOnStartup)
+            launchBehavior = try container.decodeIfPresent(String.self, forKey: .launchBehavior)
+            launchSpecificNotePath = try container.decodeIfPresent(String.self, forKey: .launchSpecificNotePath)
             autoSave = try container.decodeIfPresent(Bool.self, forKey: .autoSave) ?? false
             autoPush = try container.decodeIfPresent(Bool.self, forKey: .autoPush) ?? false
             pinnedItems = try container.decodeIfPresent([PinnedItem].self, forKey: .pinnedItems)
@@ -611,7 +657,8 @@ class SettingsManager: ObservableObject {
         self.dailyNotesEnabled = false
         self.dailyNotesFolder = "daily"
         self.dailyNotesTemplate = ""
-        self.dailyNotesOpenOnStartup = false
+        self.launchBehavior = .previouslyOpenNotes
+        self.launchSpecificNotePath = ""
         self.autoSave = false
         self.autoPush = false
         self.sidebars = FixedSidebar.all
@@ -663,7 +710,8 @@ class SettingsManager: ObservableObject {
         self.dailyNotesEnabled = false
         self.dailyNotesFolder = "daily"
         self.dailyNotesTemplate = ""
-        self.dailyNotesOpenOnStartup = false
+        self.launchBehavior = .previouslyOpenNotes
+        self.launchSpecificNotePath = ""
         self.autoSave = false
         self.autoPush = false
         self.sidebars = FixedSidebar.all
@@ -710,7 +758,17 @@ class SettingsManager: ObservableObject {
             dailyNotesEnabled = config.dailyNotesEnabled ?? false
             dailyNotesFolder = config.dailyNotesFolder ?? "daily"
             dailyNotesTemplate = config.dailyNotesTemplate ?? ""
-            dailyNotesOpenOnStartup = config.dailyNotesOpenOnStartup ?? false
+            
+            // Migration: if dailyNotesOpenOnStartup was true, migrate to launchBehavior = .dailyNote
+            if let savedBehavior = config.launchBehavior {
+                launchBehavior = LaunchBehavior(rawValue: savedBehavior) ?? .previouslyOpenNotes
+            } else if config.dailyNotesOpenOnStartup == true {
+                launchBehavior = .dailyNote
+            } else {
+                launchBehavior = .previouslyOpenNotes
+            }
+            launchSpecificNotePath = config.launchSpecificNotePath ?? ""
+            
             autoSave = config.autoSave
             autoPush = config.autoPush
             sidebars = Self.applyPaneAssignments(config.sidebarPaneAssignments)
@@ -738,7 +796,8 @@ class SettingsManager: ObservableObject {
         dailyNotesEnabled = false
         dailyNotesFolder = "daily"
         dailyNotesTemplate = ""
-        dailyNotesOpenOnStartup = false
+        launchBehavior = .previouslyOpenNotes
+        launchSpecificNotePath = ""
         autoSave = false
         autoPush = false
         sidebars = FixedSidebar.all
@@ -767,7 +826,17 @@ class SettingsManager: ObservableObject {
             dailyNotesEnabled = vaultConfig.dailyNotesEnabled ?? false
             dailyNotesFolder = vaultConfig.dailyNotesFolder ?? "daily"
             dailyNotesTemplate = vaultConfig.dailyNotesTemplate ?? ""
-            dailyNotesOpenOnStartup = vaultConfig.dailyNotesOpenOnStartup ?? false
+            
+            // Migration: if dailyNotesOpenOnStartup was true, migrate to launchBehavior = .dailyNote
+            if let savedBehavior = vaultConfig.launchBehavior {
+                launchBehavior = LaunchBehavior(rawValue: savedBehavior) ?? .previouslyOpenNotes
+            } else if vaultConfig.dailyNotesOpenOnStartup == true {
+                launchBehavior = .dailyNote
+            } else {
+                launchBehavior = .previouslyOpenNotes
+            }
+            launchSpecificNotePath = vaultConfig.launchSpecificNotePath ?? ""
+            
             autoSave = vaultConfig.autoSave
             autoPush = vaultConfig.autoPush
             pinnedItems = vaultConfig.pinnedItems ?? []
@@ -788,7 +857,8 @@ class SettingsManager: ObservableObject {
         dailyNotesEnabled = false
         dailyNotesFolder = "daily"
         dailyNotesTemplate = ""
-        dailyNotesOpenOnStartup = false
+        launchBehavior = .previouslyOpenNotes
+        launchSpecificNotePath = ""
         autoSave = false
         autoPush = false
         pinnedItems = []
@@ -809,7 +879,8 @@ class SettingsManager: ObservableObject {
         dailyNotesEnabled = false
         dailyNotesFolder = "daily"
         dailyNotesTemplate = ""
-        dailyNotesOpenOnStartup = false
+        launchBehavior = .previouslyOpenNotes
+        launchSpecificNotePath = ""
         autoSave = false
         autoPush = false
         pinnedItems = []
@@ -989,7 +1060,8 @@ class SettingsManager: ObservableObject {
         let dailyNotesEnabled: Bool
         let dailyNotesFolder: String
         let dailyNotesTemplate: String
-        let dailyNotesOpenOnStartup: Bool
+        let launchBehavior: LaunchBehavior
+        let launchSpecificNotePath: String
         let autoSave: Bool
         let autoPush: Bool
         let sidebarPaneAssignments: [String: [SidebarPaneItem]]
@@ -1020,7 +1092,8 @@ class SettingsManager: ObservableObject {
             dailyNotesEnabled     = s.dailyNotesEnabled
             dailyNotesFolder      = s.dailyNotesFolder
             dailyNotesTemplate    = s.dailyNotesTemplate
-            dailyNotesOpenOnStartup = s.dailyNotesOpenOnStartup
+            launchBehavior        = s.launchBehavior
+            launchSpecificNotePath = s.launchSpecificNotePath
             autoSave              = s.autoSave
             autoPush              = s.autoPush
             // Snapshot pane assignments as a dict keyed by sidebar UUID string
@@ -1082,7 +1155,9 @@ class SettingsManager: ObservableObject {
                 var dailyNotesEnabled: Bool?
                 var dailyNotesFolder: String?
                 var dailyNotesTemplate: String?
-                var dailyNotesOpenOnStartup: Bool?
+                var dailyNotesOpenOnStartup: Bool?  // Legacy - no longer used
+                var launchBehavior: String?
+                var launchSpecificNotePath: String?
                 var autoSave: Bool
                 var autoPush: Bool
                 var sidebarPaneAssignments: [String: [SidebarPaneItem]]?
@@ -1108,7 +1183,9 @@ class SettingsManager: ObservableObject {
                 dailyNotesEnabled: dailyNotesEnabled,
                 dailyNotesFolder: dailyNotesFolder,
                 dailyNotesTemplate: dailyNotesTemplate,
-                dailyNotesOpenOnStartup: dailyNotesOpenOnStartup,
+                dailyNotesOpenOnStartup: nil,  // No longer used - migrated to launchBehavior
+                launchBehavior: launchBehavior.rawValue,
+                launchSpecificNotePath: launchSpecificNotePath.isEmpty ? nil : launchSpecificNotePath,
                 autoSave: autoSave,
                 autoPush: autoPush,
                 sidebarPaneAssignments: sidebarPaneAssignments,
@@ -1144,7 +1221,9 @@ class SettingsManager: ObservableObject {
                 dailyNotesEnabled: dailyNotesEnabled,
                 dailyNotesFolder: dailyNotesFolder,
                 dailyNotesTemplate: dailyNotesTemplate,
-                dailyNotesOpenOnStartup: dailyNotesOpenOnStartup,
+                dailyNotesOpenOnStartup: nil,  // No longer used - migrated to launchBehavior
+                launchBehavior: launchBehavior.rawValue,
+                launchSpecificNotePath: launchSpecificNotePath.isEmpty ? nil : launchSpecificNotePath,
                 autoSave: autoSave,
                 autoPush: autoPush,
                 pinnedItems: pinnedItems.isEmpty ? nil : pinnedItems,

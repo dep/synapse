@@ -30,6 +30,90 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            // MARK: - Launch Behavior Section
+            Section {
+                VStack(alignment: .leading, spacing: 16) {
+                    ForEach(LaunchBehavior.allCases) { behavior in
+                        LaunchBehaviorOptionRow(
+                            behavior: behavior,
+                            isSelected: settings.launchBehavior == behavior,
+                            isEnabled: behavior != .dailyNote || settings.dailyNotesEnabled,
+                            settings: settings
+                        )
+                    }
+                    
+                    if settings.launchBehavior == .dailyNote && !settings.dailyNotesEnabled {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.orange)
+                            Text("Enable Daily Notes to use this option")
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.top, 4)
+                    }
+                    
+                    if settings.launchBehavior == .specificNote {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Selected Note:")
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(.secondary)
+                                
+                                Spacer()
+                                
+                                if !settings.launchSpecificNotePath.isEmpty {
+                                    Button("Choose...") {
+                                        pickLaunchNote()
+                                    }
+                                    .font(.system(size: 11))
+                                }
+                            }
+                            
+                            if settings.launchSpecificNotePath.isEmpty {
+                                Button("Choose Note...") {
+                                    pickLaunchNote()
+                                }
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                            } else {
+                                HStack {
+                                    Text(settings.launchSpecificNotePath)
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                    
+                                    Spacer()
+                                    
+                                    Button("Clear") {
+                                        settings.launchSpecificNotePath = ""
+                                    }
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.red)
+                                }
+                                .padding(8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .fill(Color.secondary.opacity(0.1))
+                                )
+                            }
+                        }
+                        .padding(.top, 8)
+                    }
+                    
+                    Text("Choose what opens automatically when Synapse starts.")
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 8)
+                }
+                .padding(.vertical, 4)
+            } header: {
+                Text("On Launch")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+            }
+
             // MARK: - Editor Section
             Section {
                 VStack(alignment: .leading, spacing: 16) {
@@ -366,9 +450,6 @@ struct SettingsView: View {
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                             }
-
-                            Toggle("Open today's note on startup", isOn: $settings.dailyNotesOpenOnStartup)
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
                         }
                     }
                 }
@@ -614,6 +695,76 @@ struct SettingsView: View {
                 self.isDetecting = false
             }
         }
+    }
+    
+    // MARK: - Launch Note Picker
+    
+    private func pickLaunchNote() {
+        guard let rootURL = appState.rootURL else { return }
+        
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = rootURL
+        panel.message = "Choose a note to open on launch"
+        panel.prompt = "Select"
+        
+        if panel.runModal() == .OK, let url = panel.url {
+            // Calculate relative path from vault root
+            let relativePath = url.path.replacingOccurrences(of: rootURL.path, with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: .init(charactersIn: "/"))
+            settings.launchSpecificNotePath = relativePath
+        }
+    }
+}
+
+// MARK: - Launch Behavior Option Row
+
+struct LaunchBehaviorOptionRow: View {
+    let behavior: LaunchBehavior
+    let isSelected: Bool
+    let isEnabled: Bool
+    @ObservedObject var settings: SettingsManager
+    
+    var body: some View {
+        Button(action: {
+            if isEnabled {
+                settings.launchBehavior = behavior
+            }
+        }) {
+            HStack(spacing: 12) {
+                // Selection indicator
+                ZStack {
+                    Circle()
+                        .stroke(isEnabled ? Color.accentColor : Color.gray.opacity(0.3), lineWidth: 2)
+                        .frame(width: 20, height: 20)
+                    
+                    if isSelected {
+                        Circle()
+                            .fill(isEnabled ? Color.accentColor : Color.gray.opacity(0.3))
+                            .frame(width: 12, height: 12)
+                    }
+                }
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(behavior.displayName)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(isEnabled ? .primary : .secondary)
+                    
+                    Text(behavior.description)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                
+                Spacer()
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1.0 : 0.6)
     }
 }
 
