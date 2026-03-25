@@ -124,8 +124,28 @@ struct MarkdownPreviewRenderer {
         if raw.hasSuffix("\n") {
             raw.removeLast()
         }
-        let code = escapeHTML(raw)
-        return "<pre><code>\(code)</code></pre>"
+        
+        // Check if this is a fenced code block with language info
+        let language: String?
+        if case let .fencedCodeBlock(_, infoString) = block.kind,
+           let lang = infoString,
+           !lang.isEmpty {
+            language = lang
+        } else {
+            language = nil
+        }
+        
+        // Generate syntax-highlighted HTML if language is supported
+        let highlightedCode: String
+        if SyntaxHighlighter.isSupportedLanguage(language) {
+            highlightedCode = SyntaxHighlighter.highlightedHTML(for: raw, language: language)
+        } else {
+            highlightedCode = escapeHTML(raw)
+        }
+
+        let languageClass = language?.lowercased() ?? ""
+        let rawCodeComment = escapeHTML(raw)
+        return "<pre><code class=\"hljs\(languageClass.isEmpty ? "" : " language-\(languageClass)")\">\(highlightedCode)</code><!-- raw-code: \(rawCodeComment) --></pre>"
     }
 
     private func renderTable(block: MarkdownBlock, source: String, columnCount: Int) -> String {
@@ -276,6 +296,8 @@ struct MarkdownPreviewRenderer {
             return "<a href=\"wikilink://\(escapeAttribute(destination))\" class=\"wikilink\">\(label)</a>"
         case .embed:
             return "<span class=\"embed\">\(label)</span>"
+        case .highlight:
+            return "<mark>\(label)</mark>"
         }
     }
 

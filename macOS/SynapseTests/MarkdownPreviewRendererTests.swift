@@ -41,7 +41,13 @@ final class MarkdownPreviewRendererTests: XCTestCase {
         let html = renderer.renderBody(from: markdown)
 
         XCTAssertTrue(html.contains("<blockquote>Quoted line</blockquote>"))
-        XCTAssertTrue(html.contains("<pre><code>let answer = 42</code></pre>"))
+        // Check for code block with syntax highlighting (spans for keywords and numbers)
+        XCTAssertTrue(html.contains("<pre><code class=\"hljs language-swift\">"))
+        XCTAssertTrue(html.contains("hljs-keyword"))
+        XCTAssertTrue(html.contains("let"))
+        XCTAssertTrue(html.contains("hljs-number"))
+        XCTAssertTrue(html.contains("42"))
+        XCTAssertTrue(html.contains("</code><!-- raw-code: let answer = 42 --></pre>"))
     }
 
     func test_renderBody_rendersCalloutBlockquoteWithClass() {
@@ -81,5 +87,40 @@ final class MarkdownPreviewRendererTests: XCTestCase {
         XCTAssertFalse(html.contains("<table>"))
         XCTAssertTrue(html.contains("<p>| Name | Value |</p>"))
         XCTAssertTrue(html.contains("<p>not a separator row</p>"))
+    }
+
+    func test_renderBody_rendersHighlightSyntaxAsMarkElement() {
+        let markdown = "This is ==highlighted text== in a paragraph."
+
+        let html = renderer.renderBody(from: markdown)
+
+        XCTAssertTrue(html.contains("<mark>highlighted text</mark>"))
+    }
+
+    func test_renderBody_rendersHighlightWithOtherInlineFormatting() {
+        let markdown = "**==bold and highlighted==** and ==highlighted with *italic* inside=="
+
+        let html = renderer.renderBody(from: markdown)
+
+        XCTAssertTrue(html.contains("<mark>bold and highlighted</mark>"))
+        XCTAssertTrue(html.contains("<mark>highlighted with <em>italic</em> inside</mark>"))
+    }
+
+    func test_renderBody_ignoresEmptyHighlight() {
+        let markdown = "This ==== is not a highlight."
+
+        let html = renderer.renderBody(from: markdown)
+
+        XCTAssertFalse(html.contains("<mark>"))
+        XCTAssertTrue(html.contains("<p>This ==== is not a highlight.</p>"))
+    }
+
+    func test_renderBody_rendersUnclosedHighlightAsLiteral() {
+        let markdown = "This ==is not closed"
+
+        let html = renderer.renderBody(from: markdown)
+
+        XCTAssertFalse(html.contains("<mark>"))
+        XCTAssertTrue(html.contains("==is not closed"))
     }
 }
