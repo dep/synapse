@@ -156,6 +156,33 @@ final class MarkdownDocumentParserTests: XCTestCase {
         XCTAssertEqual(substring(markdown, range: document.blocks[0].range), markdown)
     }
 
+    func test_parse_contiguousBlockquoteLinesBecomeSingleBlock() {
+        let markdown = """
+        > First line
+        > Second line
+
+        After blank line
+        """
+
+        let document = parser.parse(markdown)
+
+        XCTAssertEqual(document.blocks.count, 2)
+        XCTAssertEqual(document.blocks[0].kind, .blockquote)
+        XCTAssertTrue(substring(markdown, range: document.blocks[0].range).contains("> First line"))
+        XCTAssertTrue(substring(markdown, range: document.blocks[0].range).contains("> Second line"))
+        XCTAssertEqual(document.blocks[1].kind, .paragraph)
+    }
+
+    func test_parse_blockquote_carriesInlineTokensInContent() {
+        let markdown = "> See [[Other Note]] for details.\n"
+        let document = parser.parse(markdown)
+
+        XCTAssertEqual(document.blocks.count, 1)
+        XCTAssertEqual(document.blocks[0].kind, .blockquote)
+        XCTAssertEqual(document.blocks[0].inlineTokens.count, 1)
+        XCTAssertEqual(document.blocks[0].inlineTokens[0].kind, .wikiLink(destination: "Other Note", alias: nil))
+    }
+
     private func substring(_ text: String, range: NSRange) -> String {
         (text as NSString).substring(with: range)
     }
