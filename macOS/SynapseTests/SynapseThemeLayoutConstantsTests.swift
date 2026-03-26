@@ -133,15 +133,22 @@ final class SynapseThemeLayoutConstantsTests: XCTestCase {
     }
 
     func test_editorBackground_isDarkColor() {
-        // The editor uses a dark theme; background luminance must be low.
-        let white = SynapseTheme.editorBackground.usingColorSpace(.sRGB)?.whiteComponent ?? 1.0
-        XCTAssertLessThan(white, 0.2, "Editor background must be a dark colour (white < 0.2) — got: \(white)")
+        // The editor uses a dark theme; background lightness must be low.
+        // `whiteComponent` is not valid on sRGB NSColors; use RGB channels instead.
+        guard let avg = averageSRGBChannelBrightness(SynapseTheme.editorBackground) else {
+            XCTFail("Editor background must convert to sRGB")
+            return
+        }
+        XCTAssertLessThan(avg, 0.2, "Editor background must be a dark colour (avg sRGB channel < 0.2) — got: \(avg)")
     }
 
     func test_editorForeground_isLightColor() {
         // Foreground must contrast against the dark background.
-        let white = SynapseTheme.editorForeground.usingColorSpace(.sRGB)?.whiteComponent ?? 0.0
-        XCTAssertGreaterThan(white, 0.8, "Editor foreground must be a light colour (white > 0.8) — got: \(white)")
+        guard let avg = averageSRGBChannelBrightness(SynapseTheme.editorForeground) else {
+            XCTFail("Editor foreground must convert to sRGB")
+            return
+        }
+        XCTAssertGreaterThan(avg, 0.8, "Editor foreground must be a light colour (avg sRGB channel > 0.8) — got: \(avg)")
     }
 
     func test_editorSelection_hasNonTrivialAlpha() {
@@ -190,5 +197,11 @@ final class SynapseThemeLayoutConstantsTests: XCTestCase {
         let selOnly = graphNodeColor(isSelected: true, isGhost: false)
         XCTAssertEqual("\(both)", "\(selOnly)",
                        "isSelected=true should always return the accent color regardless of isGhost")
+    }
+
+    /// Average of sRGB R, G, B in 0...1. `whiteComponent` is invalid on non-grayscale sRGB `NSColor`s.
+    private func averageSRGBChannelBrightness(_ color: NSColor) -> CGFloat? {
+        guard let srgb = color.usingColorSpace(.sRGB) else { return nil }
+        return (srgb.redComponent + srgb.greenComponent + srgb.blueComponent) / 3
     }
 }
