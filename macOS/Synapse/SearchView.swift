@@ -349,15 +349,24 @@ struct AllFilesSearchView: View {
         }
         isSearching = true
 
-        // Capture allFiles on the main thread to avoid data races
+        // Capture allFiles and the content cache snapshot on the main thread to avoid data races.
         let q = newQuery
         let files = appState.allFiles
+        let cacheSnapshot = appState.noteContentCache
 
         let workItem = DispatchWorkItem { [weak appState] in
             let needle = q.lowercased()
             var found: [FileSearchResult] = []
             for url in files {
-                guard let content = try? String(contentsOf: url, encoding: .utf8) else { continue }
+                // Prefer cached content to avoid disk I/O on every keystroke.
+                let content: String
+                if let cached = cacheSnapshot[url] {
+                    content = cached.content
+                } else if let fromDisk = try? String(contentsOf: url, encoding: .utf8) {
+                    content = fromDisk
+                } else {
+                    continue
+                }
                 let lines = content.components(separatedBy: "\n")
                 for (idx, line) in lines.enumerated() {
                     if line.lowercased().contains(needle) {
