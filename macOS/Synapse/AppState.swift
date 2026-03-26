@@ -147,6 +147,8 @@ class AppState: ObservableObject {
     @Published var allFiles: [URL] = []
     @Published var allProjectFiles: [URL] = []
     @Published var recentFiles: [URL] = []
+    /// True while the background indexing pass (content parsing) is in progress.
+    @Published var isIndexing: Bool = false
     
     // Signal that fires when file content changes (for UI refresh)
     @Published var lastContentChange: UUID = UUID()
@@ -262,6 +264,18 @@ class AppState: ObservableObject {
     /// Pending debounce work item for the DispatchSource file watcher.
     private var scanDebounceWorkItem: DispatchWorkItem?
     private let machineName: String = Host.current().localizedName ?? ProcessInfo.processInfo.hostName
+
+    // MARK: - Content Cache (Issue #144)
+    /// Per-file content cache keyed by standardized file URL.
+    /// Exposed for testing; consumers should use the derived caches instead.
+    private(set) var noteContentCache: [URL: CachedFile] = [:]
+    /// Aggregate tag counts derived from the per-file cache. Updated incrementally.
+    private(set) var cachedTagCounts: [String: Int] = [:]
+    /// Reverse-link index: maps normalized note title → set of file URLs that link to it.
+    /// Updated incrementally on FS changes.
+    private(set) var cachedBacklinks: [String: Set<URL>] = [:]
+    /// Generation counter for the background indexing pass (mirrors scanGeneration).
+    private var indexGeneration: Int = 0
 
     // MARK: - Runtime State File
     private var stateFileWriteTimer: Timer?
@@ -799,6 +813,107 @@ class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Content Cache
+
+    /// Builds a CachedFile entry for the given URL by reading from disk.
+    /// Returns nil if the file cannot be read.
+    private func buildCacheEntry(for url: URL) -> CachedFile? {
+        guard let content = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        let modDate = fileModificationDate(for: url)
+        let links = wikiLinks(in: content)
+        let tags = extractTags(from: content)
+        return CachedFile(content: content, modificationDate: modDate, wikiLinks: links, tags: tags)
+    }
+
+    /// Rebuilds the full content cache from the current `allFiles` list.
+    /// Called from the background indexing pass after the file list is available.
+    /// `generation` guards against stale completions.
+    private func rebuildFullCache(files: [URL], generation: Int) {
+        var newCache: [URL: CachedFile] = [:]
+        var newTagCounts: [String: Int] = [:]
+        var newBacklinks: [String: Set<URL>] = [:]
+
+        for url in files {
+            guard let entry = buildCacheEntry(for: url) else { continue }
+            newCache[url] = entry
+            for tag in entry.tags {
+                newTagCounts[tag, default: 0] += 1
+            }
+            for link in entry.wikiLinks {
+                newBacklinks[link, default: []].insert(url)
+            }
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.indexGeneration == generation else { return }
+            self.noteContentCache = newCache
+            self.cachedTagCounts = newTagCounts
+            self.cachedBacklinks = newBacklinks
+            self.isIndexing = false
+        }
+    }
+
+    /// Performs an incremental cache update for the given file URLs.
+    /// - For each URL that no longer exists on disk, removes its cache entry.
+    /// - For each URL whose modificationDate has changed (or is new), re-reads and re-parses.
+    /// - Unchanged files are skipped.
+    /// Exposed internal for testing.
+    func updateCacheIncrementally(for urls: [URL]) {
+        for url in urls {
+            let fm = FileManager.default
+            if !fm.fileExists(atPath: url.path) {
+                // File deleted — remove from cache and derived structures
+                if let old = noteContentCache[url] {
+                    for tag in old.tags {
+                        cachedTagCounts[tag, default: 1] -= 1
+                        if cachedTagCounts[tag, default: 0] <= 0 { cachedTagCounts.removeValue(forKey: tag) }
+                    }
+                    for link in old.wikiLinks {
+                        cachedBacklinks[link]?.remove(url)
+                        if cachedBacklinks[link]?.isEmpty == true { cachedBacklinks.removeValue(forKey: link) }
+                    }
+                    noteContentCache.removeValue(forKey: url)
+                }
+                continue
+            }
+
+            let currentMod = fileModificationDate(for: url)
+            if let existing = noteContentCache[url],
+               existing.modificationDate == currentMod {
+                // Unchanged — skip
+                continue
+            }
+
+            // New or modified — re-read, diff derived caches
+            let old = noteContentCache[url]
+            guard let newEntry = buildCacheEntry(for: url) else { continue }
+
+            // Diff tags
+            let oldTags = Set(old?.tags ?? [])
+            let newTags = Set(newEntry.tags)
+            for removed in oldTags.subtracting(newTags) {
+                cachedTagCounts[removed, default: 1] -= 1
+                if cachedTagCounts[removed, default: 0] <= 0 { cachedTagCounts.removeValue(forKey: removed) }
+            }
+            for added in newTags.subtracting(oldTags) {
+                cachedTagCounts[added, default: 0] += 1
+            }
+
+            // Diff backlinks
+            let oldLinks = Set(old?.wikiLinks ?? [])
+            let newLinks = Set(newEntry.wikiLinks)
+            for removed in oldLinks.subtracting(newLinks) {
+                cachedBacklinks[removed]?.remove(url)
+                if cachedBacklinks[removed]?.isEmpty == true { cachedBacklinks.removeValue(forKey: removed) }
+            }
+            for added in newLinks.subtracting(oldLinks) {
+                cachedBacklinks[added, default: []].insert(url)
+            }
+
+            noteContentCache[url] = newEntry
+        }
+    }
+
     // MARK: - Tags
 
     private static let extractTagsRegex = try? NSRegularExpression(pattern: #"#([a-zA-Z0-9][a-zA-Z0-9_\-\.]*)"#)
@@ -853,8 +968,14 @@ class AppState: ObservableObject {
         }.sorted()
     }
 
-    /// Returns all unique tags across all notes with their counts
+    /// Returns all unique tags across all notes with their counts.
+    /// Reads from the in-memory content cache (no disk I/O).
     func allTags() -> [String: Int] {
+        // If the cache is populated, use it directly.
+        if !noteContentCache.isEmpty {
+            return cachedTagCounts
+        }
+        // Fallback: scan from disk (e.g. cache not yet built).
         var tagCounts: [String: Int] = [:]
         for url in allFiles {
             guard let content = try? String(contentsOf: url, encoding: .utf8) else { continue }
@@ -866,9 +987,16 @@ class AppState: ObservableObject {
         return tagCounts
     }
 
-    /// Returns all notes that contain a specific tag (case-insensitive)
+    /// Returns all notes that contain a specific tag (case-insensitive).
+    /// Reads from the in-memory content cache (no disk I/O).
     func notesWithTag(_ tag: String) -> [URL] {
         let normalizedTag = tag.lowercased()
+        if !noteContentCache.isEmpty {
+            return noteContentCache.compactMap { url, entry in
+                entry.tags.contains(normalizedTag) ? url : nil
+            }
+        }
+        // Fallback: scan from disk.
         return allFiles.filter { url in
             guard let content = try? String(contentsOf: url, encoding: .utf8) else { return false }
             let tags = extractTags(from: content)
@@ -907,10 +1035,16 @@ class AppState: ObservableObject {
 
         let selectedTitle = normalizedNoteReference(noteTitle(for: selectedFile))
         var inbound: [URL] = []
-        for url in allFiles where url != selectedFile {
-            guard let content = try? String(contentsOf: url, encoding: .utf8) else { continue }
-            if wikiLinks(in: content).contains(selectedTitle) {
-                inbound.append(url)
+        if !cachedBacklinks.isEmpty {
+            // Fast path: use the pre-built reverse-link index.
+            inbound = Array(cachedBacklinks[selectedTitle] ?? []).filter { $0 != selectedFile }
+        } else {
+            // Fallback: scan from disk.
+            for url in allFiles where url != selectedFile {
+                guard let content = try? String(contentsOf: url, encoding: .utf8) else { continue }
+                if wikiLinks(in: content).contains(selectedTitle) {
+                    inbound.append(url)
+                }
             }
         }
 
@@ -940,15 +1074,23 @@ class AppState: ObservableObject {
             nodes[nodeID] = NoteGraphNode(id: nodeID, title: title, url: url, isGhost: false)
         }
 
-        // Walk every file's links to create edges (and ghost nodes for unresolved links)
+        // Walk every file's links to create edges (and ghost nodes for unresolved links).
+        // Use the content cache when available to avoid disk I/O.
         for url in allFiles {
-            guard let content = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            let cachedLinks: [String]
+            if let entry = noteContentCache[url] {
+                cachedLinks = entry.wikiLinks
+            } else if let content = try? String(contentsOf: url, encoding: .utf8) {
+                cachedLinks = wikiLinks(in: content)
+            } else {
+                continue
+            }
             let fromTitle = noteTitle(for: url)
             let fromID = normalizedNoteReference(fromTitle)
             guard !fromID.isEmpty else { continue }
 
             var seenTargets = Set<String>()
-            for link in wikiLinks(in: content) {
+            for link in cachedLinks {
                 guard seenTargets.insert(link).inserted else { continue }
 
                 if index[link] != nil {
@@ -1167,9 +1309,13 @@ class AppState: ObservableObject {
         canGoBack = false
         canGoForward = false
 
-        // Clear all files
+        // Clear all files and content cache
         allFiles = []
         allProjectFiles = []
+        noteContentCache = [:]
+        cachedTagCounts = [:]
+        cachedBacklinks = [:]
+        isIndexing = false
         commandPaletteMode = .files
         pendingTemplateRename = nil
 
@@ -1428,6 +1574,29 @@ class AppState: ObservableObject {
                 guard let self, self.scanGeneration == generation else { return }
                 self.allProjectFiles = project
                 self.allFiles = visible
+                // In tests: run the indexing pass synchronously on the same thread so
+                // cache-dependent assertions work without async expectations.
+                self.indexGeneration += 1
+                let idxGen = self.indexGeneration
+                self.isIndexing = true
+                self.rebuildFullCache(files: visible, generation: idxGen)
+                // rebuildFullCache dispatches to main async internally, but in tests
+                // we want it immediate — call synchronously here instead.
+                self.noteContentCache = { () -> [URL: CachedFile] in
+                    var cache: [URL: CachedFile] = [:]
+                    var tags: [String: Int] = [:]
+                    var backlinks: [String: Set<URL>] = [:]
+                    for url in visible {
+                        guard let entry = self.buildCacheEntry(for: url) else { continue }
+                        cache[url] = entry
+                        for tag in entry.tags { tags[tag, default: 0] += 1 }
+                        for link in entry.wikiLinks { backlinks[link, default: []].insert(url) }
+                    }
+                    self.cachedTagCounts = tags
+                    self.cachedBacklinks = backlinks
+                    self.isIndexing = false
+                    return cache
+                }()
             }
         } else {
             scanQueue.async { [weak self] in
@@ -1436,6 +1605,14 @@ class AppState: ObservableObject {
                         guard let self, self.scanGeneration == generation else { return }
                         self.allProjectFiles = project
                         self.allFiles = visible
+                        // Kick off background indexing pass; file tree is usable immediately.
+                        self.indexGeneration += 1
+                        let idxGen = self.indexGeneration
+                        self.isIndexing = true
+                        let filesToIndex = visible
+                        self.scanQueue.async { [weak self] in
+                            self?.rebuildFullCache(files: filesToIndex, generation: idxGen)
+                        }
                     }
                 }
             }
@@ -2044,6 +2221,8 @@ class AppState: ObservableObject {
         isDirty = false
         lastObservedModificationDate = fileModificationDate(for: url)
         lastContentChange = UUID()
+        // Update only the saved file's cache entry — don't re-read everything.
+        updateCacheIncrementally(for: [url])
         stageGitChanges()
     }
 
