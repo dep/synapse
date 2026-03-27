@@ -176,6 +176,14 @@ struct SynapseApp: App {
                 }
                 .keyboardShortcut("k", modifiers: .command)
                 .disabled(appState.rootURL == nil)
+
+                Divider()
+
+                Button("Pull & Refresh") {
+                    appState.pullAndRefresh()
+                }
+                .keyboardShortcut("r", modifiers: .command)
+                .disabled(appState.rootURL == nil)
             }
 
             CommandGroup(replacing: .saveItem) {
