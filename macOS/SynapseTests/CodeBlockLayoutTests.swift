@@ -3,7 +3,7 @@ import AppKit
 @testable import Synapse
 
     /// Tests for code block visual layout improvements:
-    /// - extra top padding and 10px bottom padding for fenced code blocks via NSParagraphStyle
+    /// - no extra top padding and 10px bottom padding for fenced code blocks via NSParagraphStyle
 /// - Minimum bounding-rect height for the copy-button position calculation
 final class CodeBlockLayoutTests: XCTestCase {
 
@@ -35,7 +35,7 @@ final class CodeBlockLayoutTests: XCTestCase {
 
     // MARK: - Padding via NSParagraphStyle
 
-    func test_codeBlock_openingFenceLine_hasParagraphSpacingBefore() {
+    func test_codeBlock_openingFenceLine_hasNoParagraphSpacingBefore() {
         let text = "```\nhello code\n```"
         textView.setPlainText(text)
 
@@ -47,8 +47,8 @@ final class CodeBlockLayoutTests: XCTestCase {
         let style = storage.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
 
         XCTAssertNotNil(style, "Opening fence line should have a paragraphStyle attribute")
-        XCTAssertEqual(style?.paragraphSpacingBefore ?? 0, 10, accuracy: 0.5,
-                       "Opening fence line should have 10px paragraphSpacingBefore")
+        XCTAssertEqual(style?.paragraphSpacingBefore ?? 0, 0, accuracy: 0.5,
+                       "Opening fence line should not have top paragraph spacing")
     }
 
     func test_codeBlock_closingFenceLine_hasParagraphSpacingAfter() {
@@ -67,6 +67,41 @@ final class CodeBlockLayoutTests: XCTestCase {
         XCTAssertNotNil(style, "Closing fence line should have a paragraphStyle attribute")
         XCTAssertEqual(style?.paragraphSpacing ?? 0, 10, accuracy: 0.5,
                        "Closing fence line should have 10px paragraphSpacing (after)")
+    }
+
+    func test_codeBlock_hasFullWidthBackgroundMarker() {
+        let text = "```\nhello code\n```"
+        textView.setPlainText(text)
+
+        guard let storage = textView.textStorage else {
+            XCTFail("No text storage")
+            return
+        }
+
+        // Marker must be present on the closing fence so drawBackground can extend fill to full width.
+        let closingFenceStart = (text as NSString).range(of: "```", options: [], range: NSRange(location: 4, length: text.count - 4)).location
+        let marker = storage.attribute(.codeBlockFullWidthBackground, at: closingFenceStart, effectiveRange: nil)
+
+        XCTAssertNotNil(marker, "Closing fence line should carry .codeBlockFullWidthBackground so its background is drawn full-width")
+    }
+
+    func test_previewStyling_collapsesOpeningFenceLineHeight() {
+        let text = "```\nhello code\n```"
+        textView.setPlainText(text)
+        textView.applyPreviewStyling()
+
+        guard let storage = textView.textStorage else {
+            XCTFail("No text storage")
+            return
+        }
+
+        let style = storage.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+
+        XCTAssertNotNil(style, "Opening fence line should keep a paragraphStyle attribute")
+        XCTAssertEqual(style?.minimumLineHeight ?? -1, 0, accuracy: 0.5,
+                       "Opening fence line should collapse to zero line height in preview mode")
+        XCTAssertEqual(style?.maximumLineHeight ?? -1, 0, accuracy: 0.5,
+                       "Opening fence line should collapse to zero line height in preview mode")
     }
 
     // MARK: - Copy button minimum height

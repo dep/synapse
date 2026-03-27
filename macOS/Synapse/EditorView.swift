@@ -1261,6 +1261,10 @@ private struct EditorFontSignature: Equatable {
 extension NSAttributedString.Key {
     static let wikilinkTarget = NSAttributedString.Key("Synapse.wikilinkTarget")
     static let tagTarget = NSAttributedString.Key("Synapse.tagTarget")
+    /// Marks a character range so `LinkAwareTextView.drawBackground(in:)` draws
+    /// its background color across the full container width, not just the glyph bounds.
+    /// The value must be an `NSColor`.
+    static let codeBlockFullWidthBackground = NSAttributedString.Key("Synapse.codeBlockFullWidthBackground")
 }
 
 /// Thread-safe regex cache for markdown styling outside of LinkAwareTextView.
@@ -1462,6 +1466,23 @@ extension LinkAwareTextView {
 
         for range in previewSemanticHiding.hiddenRanges where NSIntersectionRange(range, scopeRange).length > 0 {
             storage.addAttributes(hiddenAttrs, range: range)
+        }
+
+        for block in parsedDocument.blocks {
+            guard case .fencedCodeBlock = block.kind else { continue }
+            guard NSIntersectionRange(block.range, searchRange).length > 0 else { continue }
+
+            let firstLineRange = (text as NSString).lineRange(for: NSRange(location: block.range.location, length: 0))
+            let lastLineLocation = block.range.location + block.range.length - 1
+            let lastLineRange = (text as NSString).lineRange(for: NSRange(location: lastLineLocation, length: 0))
+
+            for lineRange in [firstLineRange, lastLineRange] {
+                let paragraphStyle = (storage.attribute(.paragraphStyle, at: lineRange.location, effectiveRange: nil) as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+                paragraphStyle.minimumLineHeight = 0
+                paragraphStyle.maximumLineHeight = 0
+                paragraphStyle.lineSpacing = 0
+                storage.addAttribute(.paragraphStyle, value: paragraphStyle, range: lineRange)
+            }
         }
 
         // Bold **text** — hide the ** delimiters
@@ -1695,6 +1716,8 @@ extension LinkAwareTextView {
                 .font: monoFont,
                 .backgroundColor: MarkdownTheme.codeBackground,
                 .foregroundColor: SynapseTheme.editorForeground,
+                // Marker read by drawBackground(in:) to extend the fill to full width.
+                .codeBlockFullWidthBackground: MarkdownTheme.codeBackground,
             ], range: block.range)
 
             if SyntaxHighlighter.isSupportedLanguage(infoString) {
@@ -1707,20 +1730,17 @@ extension LinkAwareTextView {
                 )
             }
 
-            // Add top padding to the opening fence line and bottom padding to the closing fence line
-            // so the code block has breathing room and the copy button has space to sit in.
+            // Add bottom padding to the closing fence line so the code block has breathing room
+            // and the copy button has space to sit in.
             let nsStr = text as NSString
-            // First line of block → paragraphSpacingBefore
             let firstLineRange = nsStr.lineRange(for: NSRange(location: block.range.location, length: 0))
             let firstParaStyle = (storage.attribute(.paragraphStyle, at: firstLineRange.location, effectiveRange: nil) as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
-            firstParaStyle.paragraphSpacingBefore = codePad
+            firstParaStyle.paragraphSpacingBefore = 0
             storage.addAttribute(.paragraphStyle, value: firstParaStyle, range: firstLineRange)
             // Last line of block → paragraphSpacing (after) and full-width background
             let lastLineRange = nsStr.lineRange(for: NSRange(location: block.range.location + block.range.length - 1, length: 0))
             let lastParaStyle = (storage.attribute(.paragraphStyle, at: lastLineRange.location, effectiveRange: nil) as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
             lastParaStyle.paragraphSpacing = codePad
-            // Extend the last line's background to the full line width by appending a trailing tab stop
-            // at a very large position so the NSTextView background fill spans the container edge.
             lastParaStyle.tailIndent = 0
             lastParaStyle.lineBreakMode = .byWordWrapping
             storage.addAttribute(.paragraphStyle, value: lastParaStyle, range: lastLineRange)
@@ -2195,6 +2215,60 @@ class LinkAwareTextView: NSTextView {
     private static let youtubeDetector: NSDataDetector? = {
         try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
     }()
+
+    /// Extends code-block background fills to the full container width.
+    /// NSAttributedString's .backgroundColor only covers the glyph bounds for that run.
+    /// For the closing fence line the background stops at the last visible glyph,
+    /// leaving a gap on the right. We intercept drawBackground and repaint any run
+    /// that carries the custom `.codeBlockFullWidthBackground` marker attribute as a
+    /// full-width band.
+    override func drawBackground(in rect: NSRect) {
+        super.drawBackground(in: rect)
+
+        guard let storage = textStorage,
+              let layoutManager = layoutManager,
+              let textContainer = textContainer else { return }
+
+        let containerWidth = textContainer.containerSize.width
+        let insetX = textContainerOrigin.x
+        let insetY = textContainerOrigin.y
+
+        var charIndex = 0
+        let length = storage.length
+        while charIndex < length {
+            var effectiveRange = NSRange(location: NSNotFound, length: 0)
+            guard let color = storage.attribute(.codeBlockFullWidthBackground, at: charIndex, effectiveRange: &effectiveRange) as? NSColor,
+                  effectiveRange.location != NSNotFound else {
+                charIndex = effectiveRange.location != NSNotFound ? effectiveRange.location + effectiveRange.length : charIndex + 1
+                continue
+            }
+
+            let glyphRange = layoutManager.glyphRange(forCharacterRange: effectiveRange, actualCharacterRange: nil)
+            var lineStart = glyphRange.location
+            let glyphEnd = glyphRange.location + glyphRange.length
+
+            while lineStart < glyphEnd {
+                var lineGlyphRange = NSRange(location: NSNotFound, length: 0)
+                let lineRect = layoutManager.lineFragmentRect(forGlyphAt: lineStart, effectiveRange: &lineGlyphRange, withoutAdditionalLayout: true)
+                guard lineGlyphRange.location != NSNotFound else { break }
+
+                let bandY = lineRect.origin.y + insetY
+                let bandHeight = lineRect.height
+                guard bandHeight > 0 else {
+                    lineStart = lineGlyphRange.location + lineGlyphRange.length
+                    continue
+                }
+
+                let bandRect = NSRect(x: insetX, y: bandY, width: containerWidth, height: bandHeight)
+                if bandRect.intersects(rect) {
+                    color.setFill()
+                    bandRect.fill()
+                }
+                lineStart = lineGlyphRange.location + lineGlyphRange.length
+            }
+            charIndex = effectiveRange.location + effectiveRange.length
+        }
+    }
 
     override func mouseDown(with event: NSEvent) {
         if activatePaneOnReadOnlyInteraction(isEditable: isEditable, onActivatePane: onActivatePane) {
