@@ -1081,13 +1081,20 @@ class AppState: ObservableObject {
         return tokens
     }
 
+    /// Minimum query word length required to use the index.
+    /// Words shorter than this fall back to scanning all files to avoid
+    /// returning an oversized candidate set for very short prefixes like "a".
+    static let searchIndexMinWordLength = 3
+
     /// Returns the set of files that are candidates for the given search query.
     ///
     /// Strategy (substring-safe):
     ///   1. Lower-case the query and split into words.
-    ///   2. For each word, collect all index keys that have that word as a prefix
+    ///   2. Words shorter than `searchIndexMinWordLength` chars cause a full-file fallback
+    ///      (too many index keys would match a 1–2 char prefix).
+    ///   3. For each qualifying word, collect all index keys that have it as a prefix
     ///      (handles substrings like "swif" matching indexed word "swift").
-    ///   3. Union the file sets for all matching keys, then intersect across words
+    ///   4. Union the file sets for all matching keys, then intersect across words
     ///      so all words must appear somewhere in the file.
     ///
     /// Falls back to `allFiles` if the index is empty (index still being built).
@@ -1098,6 +1105,12 @@ class AppState: ObservableObject {
             .components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }
         guard !queryWords.isEmpty else { return Set(allFiles) }
+
+        // If any word is shorter than the minimum, fall back to all files.
+        // This avoids prefix-scanning the entire index for single-character queries.
+        guard queryWords.allSatisfy({ $0.count >= Self.searchIndexMinWordLength }) else {
+            return Set(allFiles)
+        }
 
         // For each query word, find all index keys that have it as a prefix,
         // then union the file sets.

@@ -215,6 +215,37 @@ final class SearchIndexTests: XCTestCase {
         XCTAssertFalse(candidates.contains(onlyApple),
                        "Multi-word query should intersect: only files with ALL words are candidates")
     }
+
+    // MARK: - Minimum word length fallback
+
+    func test_candidateFiles_shortQueryFallsBackToAllFiles() {
+        // 1- and 2-char queries are below the minimum; should return all files
+        // rather than doing an expensive near-total prefix scan.
+        let file = makeFile(named: "note.md", content: "hi there")
+        sut.openFolder(tempDir)
+        let candidates1 = sut.candidateFiles(for: "h")
+        let candidates2 = sut.candidateFiles(for: "hi")
+        XCTAssertTrue(candidates1.contains(file),
+                      "1-char query must fall back to all files")
+        XCTAssertTrue(candidates2.contains(file),
+                      "2-char query must fall back to all files")
+    }
+
+    func test_candidateFiles_threeCharQueryUsesIndex() {
+        // 3-char query meets the minimum — index should be consulted.
+        let match = makeFile(named: "match.md", content: "concurrency rocks")
+        let noMatch = makeFile(named: "other.md", content: "nothing relevant")
+        sut.openFolder(tempDir)
+        let candidates = sut.candidateFiles(for: "con")
+        XCTAssertTrue(candidates.contains(match),
+                      "3-char prefix 'con' should match 'concurrency'")
+        XCTAssertFalse(candidates.contains(noMatch),
+                       "File without matching word should be excluded")
+    }
+
+    func test_searchIndexMinWordLength_isThree() {
+        XCTAssertEqual(AppState.searchIndexMinWordLength, 3)
+    }
 }
 
 
