@@ -1631,13 +1631,14 @@ class AppState: ObservableObject {
                 if git.hasConflicts() {
                     DispatchQueue.main.async {
                         self.gitSyncStatus = .conflict("Merge conflicts detected. Resolve them manually in a terminal, then push.")
-                        self.reloadSelectedFileFromDiskIfNeeded()
+                        // Match pullAndRefresh: always reload after pull (watcher may skip during .pulling; mtime can be unchanged).
+                        self.reloadSelectedFileFromDiskIfNeeded(force: true)
                     }
                     return
                 }
 
                 DispatchQueue.main.async {
-                    self.reloadSelectedFileFromDiskIfNeeded()
+                    self.reloadSelectedFileFromDiskIfNeeded(force: true)
                     self.gitSyncStatus = .idle
                 }
             } catch {
