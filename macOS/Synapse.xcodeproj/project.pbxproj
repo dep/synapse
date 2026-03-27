@@ -60,6 +60,7 @@
 		49CFC13D35F5F772C572BA0F /* AppStateTemplateRenameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3EB97BB362AAC57D3AF9F8E /* AppStateTemplateRenameTests.swift */; };
 		4DCEA0C615CA64683100C661 /* TemplatesDirectoryUIBehaviorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47250559CE52FF1D2C46C549 /* TemplatesDirectoryUIBehaviorTests.swift */; };
 		5027113BDFD3F4EFCBB359A4 /* FileTreeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9573DDE37ACEA626605DC7AF /* FileTreeView.swift */; };
+		52E378E429A5FE561E26291E /* SearchIndexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE3C045946343A8A05384584 /* SearchIndexTests.swift */; };
 		551714EE22EB8ECCFFD677AE /* PreviewModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD6DCFD172F25E6DEEB43B60 /* PreviewModeTests.swift */; };
 		563EA784036219818F794EFE /* SlashCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 625A829CF8CCA20BA72C67E4 /* SlashCommands.swift */; };
 		5695FF7D1400796C99784DD1 /* GitServiceAskpassTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA3A7EF0579E049C50EA6BBC /* GitServiceAskpassTests.swift */; };
@@ -362,6 +363,7 @@
 		D989BB1299DADE947BAB87AA /* DailyNotesOpenOnStartupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyNotesOpenOnStartupTests.swift; sourceTree = "<group>"; };
 		DA183A2B420DA7C4261DEBD8 /* EditorStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorStateTests.swift; sourceTree = "<group>"; };
 		DD6DCFD172F25E6DEEB43B60 /* PreviewModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewModeTests.swift; sourceTree = "<group>"; };
+		DE3C045946343A8A05384584 /* SearchIndexTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchIndexTests.swift; sourceTree = "<group>"; };
 		E077B978A164674094EE6435 /* MarkdownTablePrettifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownTablePrettifierTests.swift; sourceTree = "<group>"; };
 		E3EB97BB362AAC57D3AF9F8E /* AppStateTemplateRenameTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateTemplateRenameTests.swift; sourceTree = "<group>"; };
 		E877F68AF193B04EA5544A74 /* MarkdownEditorRefreshPlanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownEditorRefreshPlanTests.swift; sourceTree = "<group>"; };
@@ -572,6 +574,7 @@
 				DD6DCFD172F25E6DEEB43B60 /* PreviewModeTests.swift */,
 				EE18D002D809BC5CEBCF6A3D /* RespectGitignoreSettingTests.swift */,
 				B5D92FC21925B030CA71BEB4 /* SaveButtonVisibilityTests.swift */,
+				DE3C045946343A8A05384584 /* SearchIndexTests.swift */,
 				91A80215C2DB89F815C1432F /* SearchNotificationConstantsTests.swift */,
 				BC46BFFEED9FA35C09827E99 /* SettingsManagerApplyPaneAssignmentsTests.swift */,
 				380760DBBA1A62E71C1C9D15 /* SettingsManagerBareExtensionsTests.swift */,
@@ -668,9 +671,10 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+				};
 			};
 			buildConfigurationList = F9E134B30A5BBF25B9343AD5 /* Build configuration list for PBXProject "Synapse" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -685,6 +689,7 @@
 				14519BB0FD8BF9DAF35FBD70 /* XCRemoteSwiftPackageReference "Yams" */,
 			);
 			preferredProjectObjectVersion = 77;
+			productRefGroup = 8B9CF596FCB07B1002F10E36 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -811,6 +816,7 @@
 				551714EE22EB8ECCFFD677AE /* PreviewModeTests.swift in Sources */,
 				58903190093959EBD4D1EB43 /* RespectGitignoreSettingTests.swift in Sources */,
 				26E5832E8B9FBDFE5A7ABC95 /* SaveButtonVisibilityTests.swift in Sources */,
+				52E378E429A5FE561E26291E /* SearchIndexTests.swift in Sources */,
 				86FA7F45CA801A83187CDE93 /* SearchNotificationConstantsTests.swift in Sources */,
 				95F5195578D814DC00240BDA /* SettingsManagerApplyPaneAssignmentsTests.swift in Sources */,
 				7A972695B65AFE2D1DA7A523 /* SettingsManagerBareExtensionsTests.swift in Sources */,

@@ -349,9 +349,12 @@ struct AllFilesSearchView: View {
         }
         isSearching = true
 
-        // Capture allFiles and the content cache snapshot on the main thread to avoid data races.
+        // Capture candidate files and content cache snapshot on the main thread.
+        // candidateFiles(for:) uses the word index to pre-filter — only files that
+        // contain at least one of the query words are scanned line-by-line.
         let q = newQuery
-        let files = appState.allFiles
+        let candidates = appState.candidateFiles(for: q)
+        let files = appState.allFiles.filter { candidates.contains($0) }
         let cacheSnapshot = appState.noteContentCache
 
         let workItem = DispatchWorkItem { [weak appState] in
@@ -379,6 +382,18 @@ struct AllFilesSearchView: View {
                     }
                 }
                 if found.count >= 200 { break }
+            }
+            // Sort by file modification date — most recently modified files first,
+            // so today's notes surface above older ones for the same query.
+            let modDates: [URL: Date] = cacheSnapshot.reduce(into: [:]) { d, pair in
+                d[pair.key] = pair.value.modificationDate
+            }
+            found.sort {
+                let a = modDates[$0.url] ?? .distantPast
+                let b = modDates[$1.url] ?? .distantPast
+                if a != b { return a > b }
+                // Stable secondary sort: earlier line number first within the same file
+                return $0.lineNumber < $1.lineNumber
             }
             DispatchQueue.main.async {
                 // Only update if this search wasn't cancelled
