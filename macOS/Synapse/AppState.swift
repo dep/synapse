@@ -1711,6 +1711,45 @@ class AppState: ObservableObject {
         rebuildFileLists(reloadSettings: true)
     }
 
+    /// CMD-R: git pull (if the vault has a remote) then refresh the file list.
+    /// If there is no git remote the pull is skipped and only the file list is refreshed.
+    func pullAndRefresh() {
+        guard let git = gitService, git.hasRemote() else {
+            refreshAllFiles()
+            return
+        }
+        guard case .idle = gitSyncStatus else {
+            // Already syncing — just refresh the file list
+            refreshAllFiles()
+            return
+        }
+        gitSyncStatus = .pulling
+        gitQueue.async { [weak self] in
+            guard let self else { return }
+            do {
+                try git.pullRebase()
+                if git.hasConflicts() {
+                    DispatchQueue.main.async {
+                        self.gitSyncStatus = .conflict("Merge conflicts detected. Resolve them manually in a terminal, then push.")
+                        self.refreshAllFiles()
+                        self.reloadSelectedFileFromDiskIfNeeded()
+                    }
+                    return
+                }
+                DispatchQueue.main.async {
+                    self.gitSyncStatus = .idle
+                    self.refreshAllFiles()
+                    self.reloadSelectedFileFromDiskIfNeeded()
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.gitSyncStatus = .idle
+                    self.refreshAllFiles()
+                }
+            }
+        }
+    }
+
     /// Rescans the vault file tree. When `reloadSettings` is true, persists any pending debounced
     /// settings and reloads YAML first (manual refresh / after file ops). The directory watcher
     /// uses `reloadSettings: false` so saving a note does not reload settings and undo in-memory UI prefs.
