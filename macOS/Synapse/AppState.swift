@@ -1732,14 +1732,16 @@ class AppState: ObservableObject {
                     DispatchQueue.main.async {
                         self.gitSyncStatus = .conflict("Merge conflicts detected. Resolve them manually in a terminal, then push.")
                         self.refreshAllFiles()
-                        self.reloadSelectedFileFromDiskIfNeeded()
+                        self.reloadSelectedFileFromDiskIfNeeded(force: true)
                     }
                     return
                 }
                 DispatchQueue.main.async {
                     self.gitSyncStatus = .idle
                     self.refreshAllFiles()
-                    self.reloadSelectedFileFromDiskIfNeeded()
+                    // force: true so the editor always reflects the pulled content,
+                    // even when git preserves the file's modification timestamp.
+                    self.reloadSelectedFileFromDiskIfNeeded(force: true)
                 }
             } catch {
                 DispatchQueue.main.async {
