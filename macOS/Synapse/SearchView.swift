@@ -349,9 +349,12 @@ struct AllFilesSearchView: View {
         }
         isSearching = true
 
-        // Capture allFiles and the content cache snapshot on the main thread to avoid data races.
+        // Capture candidate files and content cache snapshot on the main thread.
+        // candidateFiles(for:) uses the word index to pre-filter — only files that
+        // contain at least one of the query words are scanned line-by-line.
         let q = newQuery
-        let files = appState.allFiles
+        let candidates = appState.candidateFiles(for: q)
+        let files = appState.allFiles.filter { candidates.contains($0) }
         let cacheSnapshot = appState.noteContentCache
 
         let workItem = DispatchWorkItem { [weak appState] in

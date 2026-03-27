@@ -294,6 +294,18 @@ class AppState: ObservableObject {
     /// Generation counter for the background indexing pass (mirrors scanGeneration).
     private var indexGeneration: Int = 0
 
+    // MARK: - Search Index (Issue #148)
+
+    /// Cached O(1) note title index: normalised title → file URL.
+    /// Built from `allFiles` whenever the file list changes.
+    /// Replaces the ad-hoc `noteIndex()` helper which rebuilt the map on every call.
+    private(set) var cachedNoteIndex: [String: URL] = [:]
+
+    /// Inverted word index: lowercase word token → set of files whose content contains it.
+    /// Built from `noteContentCache` and updated incrementally.
+    /// Used by `candidateFiles(for:)` to pre-filter before the expensive line-by-line scan.
+    private(set) var wordSearchIndex: [String: Set<URL>] = [:]
+
     // MARK: - Runtime State File
     private var stateFileWriteTimer: Timer?
     private var pendingStateFileWrite: DispatchWorkItem?
@@ -927,6 +939,7 @@ class AppState: ObservableObject {
         var newCache: [URL: CachedFile] = [:]
         var newTagCounts: [String: Int] = [:]
         var newBacklinks: [String: Set<URL>] = [:]
+        var newWords: [String: Set<URL>] = [:]
 
         for url in files {
             guard let entry = buildCacheEntry(for: url) else { continue }
@@ -937,6 +950,9 @@ class AppState: ObservableObject {
             for link in entry.wikiLinks {
                 newBacklinks[link, default: []].insert(url)
             }
+            for word in Self.wordTokens(from: entry.content) {
+                newWords[word, default: []].insert(url)
+            }
         }
 
         DispatchQueue.main.async { [weak self] in
@@ -944,6 +960,7 @@ class AppState: ObservableObject {
             self.noteContentCache = newCache
             self.cachedTagCounts = newTagCounts
             self.cachedBacklinks = newBacklinks
+            self.wordSearchIndex = newWords
             self.isIndexing = false
             // Fire targeted notifications after full rebuild
             self.vaultIndex.notifyTagsDidChange()
@@ -975,6 +992,11 @@ class AppState: ObservableObject {
                         if cachedBacklinks[link]?.isEmpty == true { cachedBacklinks.removeValue(forKey: link) }
                     }
                     if !old.wikiLinks.isEmpty { linksChanged = true }
+                    // Remove word index entries for deleted file
+                    for word in Self.wordTokens(from: old.content) {
+                        wordSearchIndex[word]?.remove(url)
+                        if wordSearchIndex[word]?.isEmpty == true { wordSearchIndex.removeValue(forKey: word) }
+                    }
                     noteContentCache.removeValue(forKey: url)
                 }
                 continue
@@ -1015,12 +1037,84 @@ class AppState: ObservableObject {
             }
             if oldLinks != newLinks { linksChanged = true }
 
+            // Diff word search index
+            let oldWords = Self.wordTokens(from: old?.content ?? "")
+            let newWords = Self.wordTokens(from: newEntry.content)
+            for removed in oldWords.subtracting(newWords) {
+                wordSearchIndex[removed]?.remove(url)
+                if wordSearchIndex[removed]?.isEmpty == true { wordSearchIndex.removeValue(forKey: removed) }
+            }
+            for added in newWords.subtracting(oldWords) {
+                wordSearchIndex[added, default: []].insert(url)
+            }
+
             noteContentCache[url] = newEntry
         }
 
         // Fire targeted notifications only when the relevant data actually changed
         if tagsChanged { vaultIndex.notifyTagsDidChange() }
         if linksChanged { vaultIndex.notifyGraphDidChange() }
+    }
+
+    // MARK: - Search Index helpers (Issue #148)
+
+    /// Builds a normalised title → URL mapping from a file list.
+    /// Used to populate `cachedNoteIndex` after each vault scan.
+    private func buildNoteIndex(from files: [URL]) -> [String: URL] {
+        files
+            .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+            .reduce(into: [String: URL]()) { index, url in
+                let key = normalizedNoteReference(noteTitle(for: url))
+                guard !key.isEmpty, index[key] == nil else { return }
+                index[key] = url
+            }
+    }
+
+    /// Tokenises `text` into lowercase words for the inverted search index.
+    /// Splits on any non-alphanumeric character so punctuation doesn't bleed into tokens.
+    static func wordTokens(from text: String) -> Set<String> {
+        var tokens = Set<String>()
+        text.lowercased().enumerateSubstrings(in: text.startIndex..., options: [.byWords, .substringNotRequired]) { _, range, _, _ in
+            let word = String(text[range]).lowercased()
+            if !word.isEmpty { tokens.insert(word) }
+        }
+        return tokens
+    }
+
+    /// Returns the set of files that are candidates for the given search query.
+    ///
+    /// Strategy (substring-safe):
+    ///   1. Lower-case the query and split into words.
+    ///   2. For each word, collect all index keys that have that word as a prefix
+    ///      (handles substrings like "swif" matching indexed word "swift").
+    ///   3. Union the file sets for all matching keys, then intersect across words
+    ///      so all words must appear somewhere in the file.
+    ///
+    /// Falls back to `allFiles` if the index is empty (index still being built).
+    func candidateFiles(for query: String) -> Set<URL> {
+        guard !wordSearchIndex.isEmpty else { return Set(allFiles) }
+
+        let queryWords = query.lowercased()
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+        guard !queryWords.isEmpty else { return Set(allFiles) }
+
+        // For each query word, find all index keys that have it as a prefix,
+        // then union the file sets.
+        var result: Set<URL>? = nil
+        for queryWord in queryWords {
+            var filesForWord = Set<URL>()
+            for (indexedWord, files) in wordSearchIndex where indexedWord.hasPrefix(queryWord) {
+                filesForWord.formUnion(files)
+            }
+            if result == nil {
+                result = filesForWord
+            } else {
+                result!.formIntersection(filesForWord)
+            }
+            if result!.isEmpty { break }
+        }
+        return result ?? Set(allFiles)
     }
 
     // MARK: - Tags
@@ -1113,14 +1207,11 @@ class AppState: ObservableObject {
         }
     }
 
+    /// Returns the cached note title → URL index.
+    /// Falls back to building from allFiles if the cache hasn't been populated yet
+    /// (e.g. during the first launch before the scan completes).
     private func noteIndex() -> [String: URL] {
-        allFiles
-            .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
-            .reduce(into: [String: URL]()) { index, url in
-                let key = normalizedNoteReference(noteTitle(for: url))
-                guard !key.isEmpty, index[key] == nil else { return }
-                index[key] = url
-            }
+        cachedNoteIndex.isEmpty ? buildNoteIndex(from: allFiles) : cachedNoteIndex
     }
 
     func relationshipsForSelectedFile() -> NoteLinkRelationships? {
@@ -1432,6 +1523,8 @@ class AppState: ObservableObject {
         noteContentCache = [:]
         cachedTagCounts = [:]
         cachedBacklinks = [:]
+        cachedNoteIndex = [:]
+        wordSearchIndex = [:]
         isIndexing = false
         vaultIndex.notifyFilesDidChange()
         vaultIndex.notifyTagsDidChange()
@@ -1695,6 +1788,7 @@ class AppState: ObservableObject {
                 guard let self, self.scanGeneration == generation else { return }
                 self.allProjectFiles = project
                 self.allFiles = visible
+                self.cachedNoteIndex = self.buildNoteIndex(from: visible)
                 self.vaultIndex.notifyFilesDidChange()
                 // In tests: run the indexing pass synchronously on the same thread so
                 // cache-dependent assertions work without async expectations.
@@ -1708,14 +1802,17 @@ class AppState: ObservableObject {
                     var cache: [URL: CachedFile] = [:]
                     var tags: [String: Int] = [:]
                     var backlinks: [String: Set<URL>] = [:]
+                    var words: [String: Set<URL>] = [:]
                     for url in visible {
                         guard let entry = self.buildCacheEntry(for: url) else { continue }
                         cache[url] = entry
                         for tag in entry.tags { tags[tag, default: 0] += 1 }
                         for link in entry.wikiLinks { backlinks[link, default: []].insert(url) }
+                        for word in Self.wordTokens(from: entry.content) { words[word, default: []].insert(url) }
                     }
                     self.cachedTagCounts = tags
                     self.cachedBacklinks = backlinks
+                    self.wordSearchIndex = words
                     self.isIndexing = false
                     self.vaultIndex.notifyTagsDidChange()
                     self.vaultIndex.notifyGraphDidChange()
@@ -1729,6 +1826,7 @@ class AppState: ObservableObject {
                         guard let self, self.scanGeneration == generation else { return }
                         self.allProjectFiles = project
                         self.allFiles = visible
+                        self.cachedNoteIndex = self.buildNoteIndex(from: visible)
                         self.vaultIndex.notifyFilesDidChange()
                         // Kick off background indexing pass; file tree is usable immediately.
                         self.indexGeneration += 1
