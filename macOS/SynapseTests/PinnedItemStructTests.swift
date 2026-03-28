@@ -112,6 +112,35 @@ final class PinnedItemStructTests: XCTestCase {
         XCTAssertEqual(item.vaultPath, tempDir.path)
     }
 
+    func test_matchesVaultPath_singleVault() {
+        let item = PinnedItem(tagName: "swift", vaultURL: tempDir)
+
+        XCTAssertTrue(item.matchesVaultPath(tempDir.path))
+        XCTAssertFalse(item.matchesVaultPath("/nonexistent/vault"))
+    }
+
+    func test_matchesVaultPath_multipleVaultPathsFromJSON() throws {
+        let alternateVault = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: alternateVault, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: alternateVault) }
+
+        let json = """
+        {
+          "id": "\(UUID().uuidString)",
+          "name": "swift",
+          "isFolder": false,
+          "isTag": true,
+          "vaultPaths": ["\(alternateVault.path)", "\(tempDir.path)"]
+        }
+        """
+        let decoded = try JSONDecoder().decode(PinnedItem.self, from: Data(json.utf8))
+
+        XCTAssertTrue(decoded.matchesVaultPath(alternateVault.path))
+        XCTAssertTrue(decoded.matchesVaultPath(tempDir.path))
+        XCTAssertFalse(decoded.matchesVaultPath("/other/vault"))
+    }
+
     // MARK: - exists — files
 
     func test_exists_existingFile_returnsTrue() {

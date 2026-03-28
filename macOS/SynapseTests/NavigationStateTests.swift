@@ -54,6 +54,10 @@ final class NavigationStateTests: XCTestCase {
         XCTAssertNil(sut.navigationState.splitOrientation)
     }
 
+    func test_navigationState_activePaneIndex_initiallyZero() {
+        XCTAssertEqual(sut.navigationState.activePaneIndex, 0)
+    }
+
     // MARK: - AppState properties forward to NavigationState
 
     func test_appState_tabs_forwardsToNavigationState() {
@@ -83,5 +87,10 @@ final class NavigationStateTests: XCTestCase {
 
     func test_appState_splitOrientation_forwardsToNavigationState() {
         XCTAssertEqual(sut.splitOrientation, sut.navigationState.splitOrientation)
+    }
+
+    func test_appState_activePaneIndex_forwardsToNavigationState() {
+        sut.activePaneIndex = 1
+        XCTAssertEqual(sut.navigationState.activePaneIndex, 1)
     }
 }
