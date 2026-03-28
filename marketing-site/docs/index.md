@@ -45,7 +45,7 @@ Synapse packs a robust set of features to boost your productivity.
 - **Command Palette:** Quickly find files or insert templates from anywhere.
 - **Mobile Search:** Search within the current note from the editor toolbar, or search across your entire vault from the file drawer.
 
-![](images/hero-2.png)
+![](images/graph.png)
 
 ### Graph View
 Visualize connections between your notes.
