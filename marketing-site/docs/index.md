@@ -142,6 +142,7 @@ Synapse relies heavily on keyboard shortcuts to help you navigate and edit quick
 | New Untitled Note | `CMD + T` |
 | Close Vault / Exit | `CMD + SHIFT + N` |
 | Save | `CMD + S` |
+| Reload (Pull & Refresh) | `CMD + R` |
 | Command Palette | `CMD + K` or `CMD + P` (`CMD + K` on selected text opens the wiki link picker) |
 
 ### Search
