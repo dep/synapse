@@ -142,7 +142,7 @@ struct SynapseApp: App {
                     .environmentObject(themeEnv)
                     .tint(SynapseTheme.accent)
                     .preferredColorScheme(themeEnv.isLightTheme ? .light : .dark)
-                    .frame(minHeight: 300)
+                    .frame(minWidth: 530, minHeight: 300)
                     .onAppear {
                         autoUpdater.checkForUpdatesOnLaunch()
                         // Wire up app delegate to appState
