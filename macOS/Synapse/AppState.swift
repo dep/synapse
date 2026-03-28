@@ -1714,20 +1714,56 @@ class AppState: ObservableObject {
 
     /// CMD-R: git pull (if the vault has a remote) then refresh the file list.
     /// If there is no git remote the pull is skipped and only the file list is refreshed.
+    ///
+    /// Before pulling, any uncommitted local changes are automatically committed with a
+    /// "WIP: auto-save before refresh" message so no work is ever lost during a sync.
+    /// If the editor has dirty (unsaved) in-memory content it is flushed to disk first.
     func pullAndRefresh() {
-        guard let git = gitService, git.hasRemote() else {
-            refreshAllFiles()
+        // Flush in-memory dirty content to disk before we inspect git status,
+        // so the WIP commit captures the latest edits.
+        if isDirty, let url = selectedFile ?? activeTab?.fileURL {
+            try? fileContent.write(to: url, atomically: true, encoding: .utf8)
+            isDirty = false
+            lastObservedModificationDate = fileModificationDate(for: url)
+            lastContentChange = UUID()
+        }
+
+        guard let git = gitService else {
+            refreshAllFiles()       // no git — just rescan
             return
         }
+
         guard case .idle = gitSyncStatus else {
             // Already syncing — just refresh the file list
             refreshAllFiles()
             return
         }
+
+        guard git.hasRemote() else {
+            // Local-only repo: still auto-commit any uncommitted work, then refresh.
+            gitQueue.async { [weak self] in
+                guard let self else { return }
+                if git.hasChanges() {
+                    try? git.stageAll()
+                    try? git.commit(message: "WIP: auto-save before refresh")
+                }
+                DispatchQueue.main.async {
+                    self.refreshAllFiles()
+                    self.reloadSelectedFileFromDiskIfNeeded(force: true)
+                }
+            }
+            return
+        }
+
         gitSyncStatus = .pulling
         gitQueue.async { [weak self] in
             guard let self else { return }
             do {
+                // Auto-commit any uncommitted work before pulling so nothing is lost.
+                if git.hasChanges() {
+                    try git.stageAll()
+                    try git.commit(message: "WIP: auto-save before refresh")
+                }
                 try git.pullRebase()
                 if git.hasConflicts() {
                     DispatchQueue.main.async {
