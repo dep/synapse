@@ -112,6 +112,49 @@ final class PullAndRefreshWIPAutoSaveTests: XCTestCase {
         )
     }
 
+    // MARK: - WIP commit: dirty inactive split pane is flushed (Issue #174 follow-up)
+
+    func test_pullAndRefresh_withDirtyInactiveSplitPane_flushesToDiskBeforeWIPCommit() throws {
+        try initGitRepo()
+
+        let fileA = tempDir.appendingPathComponent("NoteA.md")
+        let fileB = tempDir.appendingPathComponent("NoteB.md")
+        try "Content A\n".write(to: fileA, atomically: true, encoding: .utf8)
+        try "Content B\n".write(to: fileB, atomically: true, encoding: .utf8)
+        gitRun("add", "-A")
+        gitRun("commit", "-m", "add notes")
+
+        sut.openFolder(tempDir)
+        sut.openFile(fileA)
+        sut.splitVertically()
+        sut.openFile(fileB)
+        sut.fileContent = "Modified B from inactive pane\n"
+        sut.isDirty = true
+        // Focus pane 0: pane 1's dirty buffer lives only in `paneStates[1]`.
+        sut.activePaneIndex = 0
+        XCTAssertFalse(sut.isDirty, "Pre-condition: active pane clean, inactive pane holds edits")
+
+        sut.pullAndRefresh()
+
+        let exp = expectation(description: "WIP commit after inactive pane flush")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
+            exp.fulfill()
+        }
+        waitForExpectations(timeout: 5)
+
+        let diskB = try String(contentsOf: fileB, encoding: .utf8)
+        XCTAssertEqual(
+            diskB,
+            "Modified B from inactive pane\n",
+            "Inactive split pane edits must be written before git sees the working tree"
+        )
+        let commits = gitLog()
+        XCTAssertTrue(
+            commits.contains { $0.hasPrefix("WIP:") },
+            "Expected WIP commit after flushing all panes. Commits: \(commits)"
+        )
+    }
+
     // MARK: - WIP commit: dirty in-memory editor content is saved to disk and committed
 
     func test_pullAndRefresh_withDirtyEditorContent_savesToDiskAndCreatesWIPCommit() throws {

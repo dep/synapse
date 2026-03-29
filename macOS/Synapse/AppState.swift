@@ -1720,13 +1720,9 @@ class AppState: ObservableObject {
     /// If the editor has dirty (unsaved) in-memory content it is flushed to disk first.
     func pullAndRefresh() {
         // Flush in-memory dirty content to disk before we inspect git status,
-        // so the WIP commit captures the latest edits.
-        if isDirty, let url = selectedFile ?? activeTab?.fileURL {
-            try? fileContent.write(to: url, atomically: true, encoding: .utf8)
-            isDirty = false
-            lastObservedModificationDate = fileModificationDate(for: url)
-            lastContentChange = UUID()
-        }
+        // so the WIP commit captures the latest edits. Must include inactive split
+        // panes: their buffers live only in `paneStates`, not in top-level `isDirty`.
+        flushAllUnsavedEditorBuffersToDiskForGit()
 
         guard let git = gitService else {
             refreshAllFiles()       // no git — just rescan
@@ -2812,6 +2808,23 @@ class AppState: ObservableObject {
         return false
     }
     
+    /// Writes every dirty editor buffer to disk without syncing to remote.
+    /// Used before git operations that read the working tree (e.g. CMD-R WIP commit).
+    private func flushAllUnsavedEditorBuffersToDiskForGit() {
+        if isDirty, let url = selectedFile ?? activeTab?.fileURL {
+            try? fileContent.write(to: url, atomically: true, encoding: .utf8)
+            isDirty = false
+            lastObservedModificationDate = fileModificationDate(for: url)
+            lastContentChange = UUID()
+        }
+        for index in paneStates.indices where index != activePaneIndex {
+            if paneStates[index].isDirty, let url = paneStates[index].selectedFile {
+                try? paneStates[index].fileContent.write(to: url, atomically: true, encoding: .utf8)
+                paneStates[index].isDirty = false
+            }
+        }
+    }
+
     /// Saves all unsaved changes across all panes
     func saveAllUnsavedChanges() {
         // Save current pane if dirty
