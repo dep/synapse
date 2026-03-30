@@ -74,8 +74,8 @@ extension AppTheme {
             "text.primary":         "#F5F5DC", // Parchment
             "text.secondary":       "#C2B280", // Sand
             "text.muted":           "#706A55",
-            "accent":               "#D4AF37", // Celestial Gold
-            "accent.soft":          "#A68931",
+            "accent":               "#8B4A1C", // Deep Sacred Ember
+            "accent.soft":          "#6B3615",
             "border":               "#1F1C12",
             "divider":              "#14120B",
             "row":                  "#080808",
@@ -114,8 +114,8 @@ extension AppTheme {
             "text.primary":         "#EBEBEB",
             "text.secondary":       "#ADADAD",
             "text.muted":           "#737373",
-            "accent":               "#47A8FA",
-            "accent.soft":          "#337AE3",
+            "accent":               "#1F6FBF",
+            "accent.soft":          "#174F8A",
             "border":               "#141414",
             "divider":              "#0F0F0F",
             "row":                  "#0A0A0A",
@@ -174,8 +174,8 @@ extension AppTheme {
             "text.primary":         "#F8F8F2",
             "text.secondary":       "#BFBFBF",
             "text.muted":           "#6272A4",
-            "accent":               "#BD93F9",
-            "accent.soft":          "#9F7FD6",
+            "accent":               "#7B4FBF",
+            "accent.soft":          "#5E3A99",
             "border":               "#3D3F52",
             "divider":              "#343746",
             "row":                  "#2D2F40",
@@ -234,8 +234,8 @@ extension AppTheme {
             "text.primary":         "#F7F36B",
             "text.secondary":       "#F3A8FF",
             "text.muted":           "#8D88C7",
-            "accent":               "#00F5D4",
-            "accent.soft":          "#00C2A8",
+            "accent":               "#00917D",
+            "accent.soft":          "#006B5C",
             "border":               "#2A245E",
             "divider":              "#1E1A45",
             "row":                  "#14112E",

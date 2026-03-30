@@ -141,7 +141,7 @@ struct ContentView: View {
     @EnvironmentObject var themeEnv: ThemeEnvironment
     @State private var keyEventMonitor: Any?
     @State private var leftSidebarWidth: CGFloat = SynapseTheme.Layout.minLeftSidebarWidth
-    @State private var rightSidebarPrimaryWidth: CGFloat = SynapseTheme.Layout.minRightSidebarWidth
+    @State private var rightSidebarPrimaryWidth: CGFloat = SynapseTheme.Layout.minRightSidebarWidth + 100
     @State private var rightSidebarSecondaryWidth: CGFloat = 180 * SynapseTheme.Layout.phi
     @State private var showUpdateBanner: Bool = false
     /// Tracks which sidebars were collapsed automatically (by window resize) so
