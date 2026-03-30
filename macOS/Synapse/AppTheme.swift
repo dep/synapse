@@ -41,7 +41,8 @@ struct AppTheme: Codable, Equatable, Identifiable {
 extension AppTheme {
 
     static let builtInThemeNames: Set<String> = [
-        "Synapse (Dark)", "Synapse (Light)", "Solarized (Dark)", "Dracula (Dark)",
+        "Synapse (Dark)", "Synapse (Light)", "Sacred (Dark)", "Sacred (Light)",
+        "Solarized (Dark)", "Dracula (Dark)",
         "GitHub (Dark)", "Minimalist (Dark)", "Cyberpunk (Dark)", "Rainbow (Light)", "Rainbow (Dark)",
         "Protanopia (Dark)", "Deuteranopia (Dark)"
     ]
@@ -50,6 +51,8 @@ extension AppTheme {
     static let builtInThemes: [AppTheme] = [
         .synapseDark,
         .synapseLight,
+        .sacredDark,
+        .sacredLight,
         .solarized,
         .dracula,
         .githubDark,
@@ -60,6 +63,46 @@ extension AppTheme {
         .protanopiaDark,
         .deuteranopiaDark,
     ]
+
+    // MARK: Sacred (Dark)
+    static let sacredDark = AppTheme(
+        name: "Sacred (Dark)",
+        colors: [
+            "background.primary":   "#050505",
+            "background.secondary": "#0A0A0A",
+            "background.elevated":  "#121212",
+            "text.primary":         "#F5F5DC", // Parchment
+            "text.secondary":       "#C2B280", // Sand
+            "text.muted":           "#706A55",
+            "accent":               "#D4AF37", // Celestial Gold
+            "accent.soft":          "#A68931",
+            "border":               "#1F1C12",
+            "divider":              "#14120B",
+            "row":                  "#080808",
+            "success":              "#9DC183", // Sage
+            "error":                "#8B0000", // Crimson
+        ]
+    )
+
+    // MARK: Sacred (Light)
+    static let sacredLight = AppTheme(
+        name: "Sacred (Light)",
+        colors: [
+            "background.primary":   "#FDFDFD", // Alabaster
+            "background.secondary": "#F5F5F0", // Pearl
+            "background.elevated":  "#FFFFFF",
+            "text.primary":         "#3C2F2F", // Deep Sepia
+            "text.secondary":       "#5D4A4A",
+            "text.muted":           "#8E7E7E",
+            "accent":               "#B76E79", // Rose Gold
+            "accent.soft":          "#D4A5AB",
+            "border":               "#E8E1E1",
+            "divider":              "#F2EBEB",
+            "row":                  "#FAFAFA",
+            "success":              "#6B8E23", // Olive
+            "error":                "#A52A2A", // Brown-Red
+        ]
+    )
 
     // MARK: Synapse (Dark) (current/default)
     static let synapseDark = AppTheme(
