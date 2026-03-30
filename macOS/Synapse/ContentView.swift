@@ -30,8 +30,25 @@ private enum SidebarDropPayload {
     case file(URL)
 }
 
+/// Type identifier added to drags that originate from the file tree sidebar.
+/// Used to distinguish file-move drags from open-in-pane drags so that the
+/// sidebar pane drop handler ignores them.
+let fileTreeDragTypeIdentifier = "com.synapse.file-tree-drag"
+
 func sidebarFileItemProvider(for fileURL: URL) -> NSItemProvider {
-    NSItemProvider(object: fileURL as NSURL)
+    let provider = NSItemProvider(object: fileURL as NSURL)
+    // Register the marker so sidebar pane drop handlers can reject this drag.
+    provider.registerDataRepresentation(forTypeIdentifier: fileTreeDragTypeIdentifier,
+                                        visibility: .all) { completion in
+        completion(Data(), nil)
+        return nil
+    }
+    return provider
+}
+
+/// Returns true when a drag came from the file tree (file-move intent).
+func isFileTreeDrag(_ provider: NSItemProvider) -> Bool {
+    provider.hasItemConformingToTypeIdentifier(fileTreeDragTypeIdentifier)
 }
 
 let sidebarItemTokenPrefix = "synapse-sidebar-item:"
@@ -53,7 +70,10 @@ func sidebarItem(from token: String) -> SidebarPaneItem? {
 }
 
 private func canHandleSidebarDrop(_ providers: [NSItemProvider]) -> Bool {
-    providers.contains {
+    // Reject drags that originated from the file tree — those are file-move ops,
+    // not open-in-pane ops.
+    guard !providers.contains(where: { isFileTreeDrag($0) }) else { return false }
+    return providers.contains {
         $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) ||
         $0.hasItemConformingToTypeIdentifier(UTType.plainText.identifier)
     }

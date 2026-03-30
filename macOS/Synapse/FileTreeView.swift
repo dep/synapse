@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum FileTreeMode: String, CaseIterable {
     case folder = "folder"
@@ -151,6 +152,9 @@ struct FileTreeView: View {
     @State private var dragOverFolderURL: URL? = nil
     /// Pending conflict requiring user confirmation before overwrite.
     @State private var moveConflict: FileMoveConflict? = nil
+    /// Set to true while a drag-drop move is in progress so the allFiles
+    /// onChange handler skips the full refresh (avoiding scroll-to-top).
+    @State private var isMoveInProgress = false
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -167,8 +171,10 @@ struct FileTreeView: View {
                 revealSelection(with: proxy)
             }
             .onChange(of: appState.allFiles) { _, _ in
+                // Skip full refresh during a move to prevent ScrollView jumping to top.
+                // presentMoveFile clears the relevant cache entries directly.
+                guard !isMoveInProgress else { return }
                 refresh()
-                revealSelection(with: proxy)
             }
             .onChange(of: appState.selectedFile) { _, newFile in
                 expandPath(to: newFile)
@@ -504,46 +510,37 @@ struct FileTreeView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 8)
         } else {
-            // ZStack layout: root drop zone sits behind the node rows.
-            // SwiftUI hit-tests from front to back, so folder-row drops are captured
-            // by the row modifiers first; only drops into empty space reach the root zone.
-            ZStack(alignment: .topLeading) {
-                // Back layer: root-level drop zone fills the full height
-                Color.clear
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentShape(Rectangle())
-                    .onDrop(of: [.fileURL], isTargeted: Binding(
-                        get: { dragOverFolderURL == appState.rootURL },
-                        set: { targeted in
-                            dragOverFolderURL = targeted ? appState.rootURL : nil
-                        }
-                    )) { providers in
+            LazyVStack(alignment: .leading, spacing: 6) {
+                RootDropTargetRow(
+                    rootURL: appState.rootURL,
+                    vaultName: appState.rootURL?.lastPathComponent ?? "Root",
+                    isTargeted: dragOverFolderURL == appState.rootURL,
+                    onDrop: { providers in
                         guard let root = appState.rootURL else { return false }
                         handleDrop(providers: providers, toFolder: root)
                         return true
+                    },
+                    setTargeted: { targeted in
+                        dragOverFolderURL = targeted ? appState.rootURL : nil
                     }
-                // Front layer: the actual node rows.
-                // Row drop modifiers take priority over the back-layer root zone because
-                // SwiftUI drop hit-tests from front (last child) to back (first child).
-                LazyVStack(alignment: .leading, spacing: 6) {
-                    ForEach(nodes) { node in
-                        FileNodeRow(
-                            node: node,
-                            depth: 0,
-                            expandedDirs: $expandedDirs,
-                            dragOverFolderURL: $dragOverFolderURL,
-                            loadChildren: { loadChildren(for: $0) },
-                            onCreateNote: { presentCreateNote(in: $0) },
-                            onCreateFolder: { presentCreateFolder(in: $0) },
-                            onRename: { presentRename(for: $0, isDirectory: $1) },
-                            onDelete: { presentDelete(for: $0, isDirectory: $1) },
-                            onMoveFile: { presentMoveFile(from: $0, toFolder: $1) }
-                        )
-                    }
+                )
+
+                ForEach(nodes) { node in
+                    FileNodeRow(
+                        node: node,
+                        depth: 0,
+                        expandedDirs: $expandedDirs,
+                        dragOverFolderURL: $dragOverFolderURL,
+                        loadChildren: { loadChildren(for: $0) },
+                        onCreateNote: { presentCreateNote(in: $0) },
+                        onCreateFolder: { presentCreateFolder(in: $0) },
+                        onRename: { presentRename(for: $0, isDirectory: $1) },
+                        onDelete: { presentDelete(for: $0, isDirectory: $1) },
+                        onMoveFile: { presentMoveFile(from: $0, toFolder: $1) }
+                    )
                 }
-                .padding(.vertical, 4)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
+            .padding(.vertical, 4)
         }
     }
 
@@ -751,9 +748,14 @@ struct FileTreeView: View {
 
     /// Initiates a file move, showing a conflict alert if needed.
     func presentMoveFile(from sourceURL: URL, toFolder destinationFolder: URL) {
+        isMoveInProgress = true
+        defer { isMoveInProgress = false }
         do {
             try appState.moveFile(at: sourceURL, toFolder: destinationFolder)
-            refresh()
+            // Invalidate only the two affected directories so they reload
+            // in-place without resetting the whole scroll position.
+            childrenCache[sourceURL.deletingLastPathComponent()] = nil
+            childrenCache[destinationFolder] = nil
         } catch FileBrowserError.itemAlreadyExists {
             moveConflict = FileMoveConflict(sourceURL: sourceURL, destinationFolder: destinationFolder)
         } catch {
@@ -765,9 +767,12 @@ struct FileTreeView: View {
     private func confirmMoveWithOverwrite() {
         guard let conflict = moveConflict else { return }
         moveConflict = nil
+        isMoveInProgress = true
+        defer { isMoveInProgress = false }
         do {
             try appState.moveFile(at: conflict.sourceURL, toFolder: conflict.destinationFolder, overwrite: true)
-            refresh()
+            childrenCache[conflict.sourceURL.deletingLastPathComponent()] = nil
+            childrenCache[conflict.destinationFolder] = nil
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -923,6 +928,51 @@ struct FileNodeRow: View {
     }
 }
 
+private struct RootDropTargetRow: View {
+    let rootURL: URL?
+    let vaultName: String
+    let isTargeted: Bool
+    let onDrop: ([NSItemProvider]) -> Bool
+    let setTargeted: (Bool) -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "tray.and.arrow.down")
+                .foregroundStyle(SynapseTheme.textMuted)
+                .frame(width: 16)
+            Text("Drop to Root")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(SynapseTheme.textPrimary)
+            Text(vaultName)
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .foregroundStyle(SynapseTheme.textMuted)
+                .lineLimit(1)
+            Spacer()
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
+        .background {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(isTargeted ? SynapseTheme.accent.opacity(0.18) : SynapseTheme.panel)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .stroke(isTargeted ? SynapseTheme.accent : SynapseTheme.border, lineWidth: 1)
+                }
+        }
+        .contentShape(Rectangle())
+        .onDrop(
+            of: [UTType(fileTreeDragTypeIdentifier)].compactMap { $0 },
+            isTargeted: Binding(
+                get: { isTargeted },
+                set: setTargeted
+            ),
+            perform: onDrop
+        )
+        .padding(.horizontal, 2)
+        .opacity(rootURL == nil ? 0 : 1)
+    }
+}
+
 private struct FileNodeDragModifier: ViewModifier {
     let fileURL: URL?
 
@@ -954,7 +1004,7 @@ private struct FolderDropModifier: ViewModifier {
         if isFolder {
             content
                 .onDrop(
-                    of: [.fileURL],
+                    of: [UTType(fileTreeDragTypeIdentifier)].compactMap { $0 },
                     isTargeted: Binding(
                         get: { dragOverFolderURL == folderURL },
                         set: { targeted in
