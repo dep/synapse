@@ -152,9 +152,12 @@ struct FileTreeView: View {
     @State private var dragOverFolderURL: URL? = nil
     /// Pending conflict requiring user confirmation before overwrite.
     @State private var moveConflict: FileMoveConflict? = nil
-    /// Set to true while a drag-drop move is in progress so the allFiles
-    /// onChange handler skips the full refresh (avoiding scroll-to-top).
-    @State private var isMoveInProgress = false
+    /// Count of `allFiles` updates we expect from an in-flight `moveFile` refresh.
+    /// `refreshAllFiles()` completes asynchronously after `moveFile` returns, so a
+    /// simple boolean cleared in `defer` races the `onChange` and still triggers a
+    /// full `refresh()` that wipes `childrenCache` and jumps scroll. Each increment
+    /// consumes one `onChange` delivery.
+    @State private var pendingMoveRefreshSkips = 0
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -171,9 +174,12 @@ struct FileTreeView: View {
                 revealSelection(with: proxy)
             }
             .onChange(of: appState.allFiles) { _, _ in
-                // Skip full refresh during a move to prevent ScrollView jumping to top.
-                // presentMoveFile clears the relevant cache entries directly.
-                guard !isMoveInProgress else { return }
+                // Skip full refresh for the async scan kicked off by moveFile so the
+                // tree keeps scroll position; presentMoveFile invalidates affected dirs only.
+                if pendingMoveRefreshSkips > 0 {
+                    pendingMoveRefreshSkips -= 1
+                    return
+                }
                 refresh()
             }
             .onChange(of: appState.selectedFile) { _, newFile in
@@ -747,22 +753,25 @@ struct FileTreeView: View {
 
     /// Initiates a file move, showing a conflict alert if needed.
     func presentMoveFile(from sourceURL: URL, toFolder destinationFolder: URL) {
-        isMoveInProgress = true
         defer {
-            isMoveInProgress = false
             // Clear the global drag flag so sidebar pane drops work again for
             // non-file-tree drags.
             isFileTreeDragActive = false
         }
         do {
+            // moveFile schedules refreshAllFiles(); match that with a skip so onChange
+            // does not run refresh() before the async scan finishes.
+            pendingMoveRefreshSkips += 1
             try appState.moveFile(at: sourceURL, toFolder: destinationFolder)
             // Invalidate only the two affected directories so they reload
             // in-place without resetting the whole scroll position.
             childrenCache[sourceURL.deletingLastPathComponent()] = nil
             childrenCache[destinationFolder] = nil
         } catch FileBrowserError.itemAlreadyExists {
+            pendingMoveRefreshSkips -= 1
             moveConflict = FileMoveConflict(sourceURL: sourceURL, destinationFolder: destinationFolder)
         } catch {
+            pendingMoveRefreshSkips -= 1
             errorMessage = error.localizedDescription
         }
     }
@@ -771,13 +780,13 @@ struct FileTreeView: View {
     private func confirmMoveWithOverwrite() {
         guard let conflict = moveConflict else { return }
         moveConflict = nil
-        isMoveInProgress = true
-        defer { isMoveInProgress = false }
         do {
+            pendingMoveRefreshSkips += 1
             try appState.moveFile(at: conflict.sourceURL, toFolder: conflict.destinationFolder, overwrite: true)
             childrenCache[conflict.sourceURL.deletingLastPathComponent()] = nil
             childrenCache[conflict.destinationFolder] = nil
         } catch {
+            pendingMoveRefreshSkips -= 1
             errorMessage = error.localizedDescription
         }
     }

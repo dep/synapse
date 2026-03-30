@@ -2314,8 +2314,10 @@ class AppState: ObservableObject {
         let destination = standardized(destinationFolder.appendingPathComponent(url.lastPathComponent))
         let sourceStd = standardized(url)
 
-        // No-op: already in the target folder.
+        // No-op: already in the target folder. Still refresh so observers (file tree,
+        // search index) stay consistent with disk; matches the post-move refresh path.
         if sourceStd.deletingLastPathComponent() == standardized(destinationFolder) {
+            refreshAllFiles()
             return sourceStd
         }
 
