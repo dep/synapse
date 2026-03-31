@@ -90,3 +90,7 @@ Or run tests in Xcode:
 1. Open the project: `open macOS/Synapse.xcodeproj`
 2. Select the `Synapse` scheme
 3. Press `Cmd-U` to run all tests
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
