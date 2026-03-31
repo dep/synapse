@@ -12,7 +12,7 @@ Synapse is a powerful Markdown-based knowledge management application exclusivel
 
 ## Setup & Installation
 
-1. **Download the App:** [Download the latest release of Synapse](https://github.com/dep/synapse/releases).
+1. **Download the App:** [Download the latest release (DMG) of Synapse](https://github.com/dep/synapse/releases).
 2. **Installation:**
    Drag the Synapse application to your `Applications` folder.
 3. **Open a Vault:**
