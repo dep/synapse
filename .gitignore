@@ -1,5 +1,17 @@
 .DS_Store
 
+.agents/
+.claude/
+.codex/
+.cursor/
+.opencode/
+AGENTS.md
+CLAUDE.md
+CODEX.md
+CURSOR.md
+agent-sync.json
+dist/
+
 **/node_modules/
 **/package-lock.json
 
