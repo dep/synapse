@@ -227,8 +227,13 @@ struct ContentView: View {
                     UpdateBannerView(
                         version: version,
                         isPresented: $showUpdateBanner,
-                        onDownload: {
-                            autoUpdater.openReleasesPage()
+                        downloadProgress: autoUpdater.downloadProgress,
+                        restartRequired: autoUpdater.restartRequired,
+                        onInstall: {
+                            autoUpdater.downloadAndInstall()
+                        },
+                        onRestart: {
+                            autoUpdater.relaunch()
                         }
                     )
                     Spacer()
@@ -378,6 +383,13 @@ struct ContentView: View {
         }
         .onChange(of: autoUpdater.updateAvailable) { available in
             if available {
+                withAnimation {
+                    showUpdateBanner = true
+                }
+            }
+        }
+        .onChange(of: autoUpdater.restartRequired) { needed in
+            if needed {
                 withAnimation {
                     showUpdateBanner = true
                 }

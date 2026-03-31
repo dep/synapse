@@ -1047,7 +1047,7 @@
 					"@loader_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.Synapse.app.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.SynapseNotes.app.tests;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Synapse.app/Contents/MacOS/Synapse";
@@ -1122,7 +1122,7 @@
 					"@loader_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.Synapse.app.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.SynapseNotes.app.tests;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Synapse.app/Contents/MacOS/Synapse";
@@ -1142,7 +1142,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.Synapse.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.SynapseNotes.app;
 				PRODUCT_NAME = Synapse;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
@@ -1165,7 +1165,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.Synapse.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.SynapseNotes.app;
 				PRODUCT_NAME = Synapse;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
