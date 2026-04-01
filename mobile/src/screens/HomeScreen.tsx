@@ -12,7 +12,7 @@ import { OnboardingStorage } from '../services/onboardingStorage';
 import { DailyNoteService } from '../services/DailyNoteService';
 import { TemplateStorage } from '../services/TemplateStorage';
 import { PinningStorage, PinnedItem } from '../services/PinningStorage';
-import { GitService } from '../services/gitService';
+import { GitService, GitErrorType, GitError } from '../services/gitService';
 import { emitRepositoryRefresh } from '../services/repositoryEvents';
 import * as FileSystem from 'expo-file-system/legacy';
 
@@ -111,6 +111,16 @@ export function HomeScreen({ navigation, route }: HomeScreenProps) {
       await emitRepositoryRefresh(repoPath);
     } catch (error) {
       console.error('[HomeScreen] Background pull failed:', error);
+      if (error instanceof GitError && error.type === GitErrorType.AUTH_FAILURE) {
+        Alert.alert(
+          'GitHub Authentication Failed',
+          'Your GitHub token is invalid or expired. Please update it in Settings.',
+          [
+            { text: 'Dismiss', style: 'cancel' },
+            { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
+          ],
+        );
+      }
     } finally {
       setIsSyncing(false);
     }

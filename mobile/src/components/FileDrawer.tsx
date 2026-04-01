@@ -196,9 +196,8 @@ export function FileDrawer({
         duration: 250,
         useNativeDriver: true,
       }).start();
-      // Always load if we haven't loaded for current vaultPath
-      const needsLoad = lastLoadedVaultPath !== vaultPath;
-      loadRootFiles(needsLoad);
+      // Always refresh when drawer opens so new notes are visible
+      loadRootFiles(true);
     } else {
       Animated.timing(slideAnim, {
         toValue: -Dimensions.get('window').width * 0.8,
@@ -209,12 +208,12 @@ export function FileDrawer({
   }, [isOpen, vaultPath]);
 
   // Eagerly pre-load flat file list whenever the drawer opens so switching to
-  // Files view is instant. If already loaded or loading, this is a no-op.
+  // Files view is instant. Always force-refresh so new notes are visible.
   useEffect(() => {
-    if (isOpen && flatFiles.length === 0 && !isLoadingFlat) {
-      loadFlatFiles();
+    if (isOpen && !isLoadingFlat) {
+      loadFlatFiles(true);
     }
-  }, [isOpen, vaultPath, flatFiles.length, isLoadingFlat, loadFlatFiles]);
+  }, [isOpen, vaultPath]);
 
   const updateNodeChildren = useCallback((nodes: FileNode[], targetPath: string, children: FileNode[]): FileNode[] => {
     return nodes.map((node) => {
@@ -298,6 +297,10 @@ export function FileDrawer({
 
   const sortFiles = useCallback((nodes: FileNode[]): FileNode[] => {
     const sorted = [...nodes].sort((a, b) => {
+      // Folders always before files
+      if (a.isDirectory !== b.isDirectory) {
+        return a.isDirectory ? -1 : 1;
+      }
       switch (sortOption) {
         case 'name-asc':
           return a.name.localeCompare(b.name);

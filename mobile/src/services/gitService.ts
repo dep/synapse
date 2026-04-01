@@ -876,13 +876,20 @@ export class GitService {
     }
 
     const remoteState = await this.fetchGitHubApiRemoteState(metadata);
+
+    // Nothing changed since last sync — skip all file work
+    if (remoteState.commitSha === metadata.commitSha) {
+      return;
+    }
+
     const remoteBlobs = remoteState.tree.filter((entry) => entry.type === 'blob');
     const nextFiles: RepoMetadataFile['files'] = { ...metadata.files };
 
-    for (const blob of remoteBlobs) {
+    await Promise.all(remoteBlobs.map(async (blob) => {
       const targetPath = joinRepoPath(dir, blob.path);
-      const localInfo = await FileSystem.getInfoAsync(toExpoUri(targetPath));
       const previousEntry = metadata.files[blob.path];
+
+      const localInfo = await FileSystem.getInfoAsync(toExpoUri(targetPath));
 
       if (!localInfo.exists) {
         await this.downloadGitHubBlobToPath(metadata, blob.sha, targetPath);
@@ -891,7 +898,7 @@ export class GitService {
           mode: blob.mode,
           type: blob.mode === '120000' ? 'symlink' : 'blob',
         };
-        continue;
+        return;
       }
 
       if (previousEntry && previousEntry.sha !== blob.sha) {
@@ -907,7 +914,7 @@ export class GitService {
             mode: blob.mode,
             type: blob.mode === '120000' ? 'symlink' : 'blob',
           };
-          continue;
+          return;
         }
       }
 
@@ -920,7 +927,7 @@ export class GitService {
           type: blob.mode === '120000' ? 'symlink' : 'blob',
         };
       }
-    }
+    }));
 
     await this.saveRepoMetadata(dir, {
       ...metadata,
@@ -1208,6 +1215,21 @@ export class GitService {
     
     credentials[repoUrl] = { username, token };
     
+    await AsyncStorage.setItem(CREDENTIALS_KEY, JSON.stringify(credentials));
+  }
+
+  // Updates the token for every stored credential entry (including 'default' and
+  // any repo-specific keys set during clone). Use this when the user rotates their PAT.
+  static async updateTokenEverywhere(token: string): Promise<void> {
+    const existingData = await AsyncStorage.getItem(CREDENTIALS_KEY);
+    const credentials: CredentialsMap = existingData ? JSON.parse(existingData) : {};
+
+    for (const key of Object.keys(credentials)) {
+      credentials[key] = { ...credentials[key], token };
+    }
+    // Always ensure the 'default' key is present too
+    credentials['default'] = { username: credentials['default']?.username ?? 'token', token };
+
     await AsyncStorage.setItem(CREDENTIALS_KEY, JSON.stringify(credentials));
   }
 

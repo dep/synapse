@@ -8,6 +8,7 @@ import { RootStackParamList } from '../navigation/AppNavigator';
 import { OnboardingStorage } from '../services/onboardingStorage';
 import { SettingsStorage } from '../services/SettingsStorage';
 import { TemplateStorage } from '../services/TemplateStorage';
+import { GitService } from '../services/gitService';
 import * as FileSystem from 'expo-file-system/legacy';
 
 type SettingsScreenProps = NativeStackScreenProps<RootStackParamList, 'Settings'>;
@@ -31,6 +32,10 @@ export function SettingsScreen({ navigation }: SettingsScreenProps) {
   // File browser settings
   const [fileExtensionFilter, setFileExtensionFilter] = useState('*.md, *.txt');
   const [hiddenFileFolderFilter, setHiddenFileFolderFilter] = useState('');
+
+  // GitHub token
+  const [githubToken, setGithubToken] = useState('');
+  const [isSavingToken, setIsSavingToken] = useState(false);
 
   useEffect(() => {
     OnboardingStorage.getActiveRepositoryPath().then(path => {
@@ -132,6 +137,21 @@ export function SettingsScreen({ navigation }: SettingsScreenProps) {
   const repoName = repoPath
     ? repoPath.replace(/\/+$/, '').split('/').pop() || repoPath
     : null;
+
+  const handleSaveToken = async () => {
+    const trimmed = githubToken.trim();
+    if (!trimmed) return;
+    setIsSavingToken(true);
+    try {
+      await GitService.updateTokenEverywhere(trimmed);
+      setGithubToken('');
+      Alert.alert('Token Saved', 'Your GitHub token has been updated.');
+    } catch (e) {
+      Alert.alert('Error', 'Failed to save token.');
+    } finally {
+      setIsSavingToken(false);
+    }
+  };
 
   const handleRemoveRepo = () => {
     Alert.alert(
@@ -493,6 +513,44 @@ export function SettingsScreen({ navigation }: SettingsScreenProps) {
                 </TouchableOpacity>
               </>
             )}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+            GitHub Token
+          </Text>
+
+          <View style={[styles.card, { backgroundColor: theme.colors.card, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3 }]}>
+            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+              Personal Access Token
+            </Text>
+            <Text style={[styles.hintText, { color: theme.colors.text, opacity: 0.5, marginBottom: 8 }]}>
+              Update your GitHub PAT if you're seeing authentication errors.
+            </Text>
+            <TextInput
+              style={[styles.textInput, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+              value={githubToken}
+              onChangeText={setGithubToken}
+              placeholder="ghp_xxxxxxxxxxxx"
+              placeholderTextColor={theme.colors.text + '60'}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TouchableOpacity
+              style={[styles.addButton, { backgroundColor: theme.colors.primary, marginTop: 8, opacity: githubToken.trim() ? 1 : 0.4 }]}
+              onPress={handleSaveToken}
+              disabled={isSavingToken || !githubToken.trim()}
+            >
+              {isSavingToken ? (
+                <ActivityIndicator size="small" color={theme.colors.background} />
+              ) : (
+                <Text style={[styles.addButtonText, { color: theme.colors.background }]}>
+                  Save Token
+                </Text>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>

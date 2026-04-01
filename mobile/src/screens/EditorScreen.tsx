@@ -283,14 +283,6 @@ export function EditorScreen({ route, navigation }: EditorScreenProps) {
     setIsLoading(true);
     setError(null);
     try {
-      const repositoryPath = await OnboardingStorage.getActiveRepositoryPath();
-      if (repositoryPath) {
-        try {
-          await GitService.refreshRemote(repositoryPath);
-        } catch (pullErr) {
-          console.warn('Git refresh failed, using local version:', pullErr);
-        }
-      }
       const fileContent = await FileSystemService.readFile(filePath);
       setContent(fileContent);
       setOriginalContent(fileContent);
@@ -779,13 +771,6 @@ export function EditorScreen({ route, navigation }: EditorScreenProps) {
     setIsRefreshing(true);
     setRefreshStatus(null);
     try {
-      const repositoryPath = await OnboardingStorage.getActiveRepositoryPath();
-      setRefreshStatus(`repo: ${repositoryPath ?? 'none'}`);
-      if (repositoryPath) {
-        setRefreshStatus(`pulling from: ${repositoryPath}`);
-        await GitService.refreshRemote(repositoryPath);
-        setRefreshStatus('pull done — reading file…');
-      }
       const fileContent = await FileSystemService.readFile(filePath);
       setContent(fileContent);
       setOriginalContent(fileContent);
