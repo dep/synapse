@@ -134,6 +134,10 @@ final class FileTreeDragDropTests: XCTestCase {
         let content = try String(contentsOf: result, encoding: .utf8)
         XCTAssertEqual(content, "new-content", "Overwrite should replace the destination with the source content")
         XCTAssertFalse(FileManager.default.fileExists(atPath: src.path))
+
+        let stagingLeftovers = try FileManager.default.contentsOfDirectory(atPath: destFolder.path)
+            .filter { $0.hasPrefix(".synapse-move-") }
+        XCTAssertTrue(stagingLeftovers.isEmpty, "Overwrite should not leave staging files in the destination folder")
     }
 
     // MARK: - moveFile: updates selectedFile

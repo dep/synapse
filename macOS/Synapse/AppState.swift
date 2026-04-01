@@ -2325,13 +2325,33 @@ class AppState: ObservableObject {
             guard overwrite else {
                 throw FileBrowserError.itemAlreadyExists(url.lastPathComponent)
             }
-            try fm.removeItem(at: destination)
-        }
-
-        do {
-            try fm.moveItem(at: sourceStd, to: destination)
-        } catch {
-            throw FileBrowserError.operationFailed("Could not move \(url.lastPathComponent).")
+            // Atomic replace: never delete the destination until the source is safely
+            // on disk at a staging path (same pattern as SynapseAppInstaller).
+            let parent = destination.deletingLastPathComponent()
+            let stagingName = ".synapse-move-\(Process().processIdentifier)-\(UUID().uuidString.prefix(8))"
+            let stagingURL = parent.appendingPathComponent(stagingName)
+            do {
+                try fm.moveItem(at: sourceStd, to: stagingURL)
+            } catch {
+                throw FileBrowserError.operationFailed("Could not move \(url.lastPathComponent).")
+            }
+            do {
+                _ = try fm.replaceItemAt(
+                    destination,
+                    withItemAt: stagingURL,
+                    backupItemName: nil,
+                    options: []
+                )
+            } catch {
+                try? fm.moveItem(at: stagingURL, to: sourceStd)
+                throw FileBrowserError.operationFailed("Could not move \(url.lastPathComponent).")
+            }
+        } else {
+            do {
+                try fm.moveItem(at: sourceStd, to: destination)
+            } catch {
+                throw FileBrowserError.operationFailed("Could not move \(url.lastPathComponent).")
+            }
         }
 
         updateSelectionAfterMove(from: sourceStd, to: destination)
