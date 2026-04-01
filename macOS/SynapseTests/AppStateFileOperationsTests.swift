@@ -142,6 +142,42 @@ final class AppStateFileOperationsTests: XCTestCase {
         }
     }
 
+    // MARK: - createAndOpenNewFolder (startup)
+
+    func test_createAndOpenNewFolder_createsFolderAndOpensIt() throws {
+        // Given: A path where we want to create a new folder
+        let parentDir = tempDir.deletingLastPathComponent()
+        let newFolderName = "TestVault" + UUID().uuidString.prefix(8)
+        let newFolderURL = parentDir.appendingPathComponent(newFolderName, isDirectory: true)
+
+        // Clean up if exists
+        try? FileManager.default.removeItem(at: newFolderURL)
+
+        // When: Create and open the new folder
+        sut.createAndOpenNewFolder(at: newFolderURL)
+
+        // Then: Folder should exist and be opened
+        var isDir: ObjCBool = false
+        XCTAssertTrue(FileManager.default.fileExists(atPath: newFolderURL.path, isDirectory: &isDir))
+        XCTAssertTrue(isDir.boolValue)
+        XCTAssertEqual(sut.rootURL?.standardizedFileURL.path, newFolderURL.standardizedFileURL.path)
+
+        // Cleanup
+        try? FileManager.default.removeItem(at: newFolderURL)
+    }
+
+    func test_createAndOpenNewFolder_withExistingFolder_opensIt() throws {
+        // Given: An existing folder
+        let existingFolder = tempDir.appendingPathComponent("ExistingFolder", isDirectory: true)
+        try FileManager.default.createDirectory(at: existingFolder, withIntermediateDirectories: true)
+
+        // When: Try to create folder at same path
+        sut.createAndOpenNewFolder(at: existingFolder)
+
+        // Then: Should open the existing folder
+        XCTAssertEqual(sut.rootURL?.standardizedFileURL.path, existingFolder.standardizedFileURL.path)
+    }
+
     // MARK: - deleteItem
 
     func test_deleteItem_removesFileFromDisk() throws {

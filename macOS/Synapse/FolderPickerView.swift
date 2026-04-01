@@ -42,19 +42,25 @@ struct FolderPickerView: View {
                     VStack(spacing: SynapseTheme.Layout.spaceMedium) {
                         Button(action: appState.pickFolder) {
                             Label("Open Folder…", systemImage: "folder.badge.plus")
-                                .frame(width: 130 * SynapseTheme.Layout.phi)
+                                .frame(width: 140 * SynapseTheme.Layout.phi)
                         }
                         .buttonStyle(PrimaryChromeButtonStyle())
                         .keyboardShortcut(.defaultAction)
 
+                        Button(action: appState.pickAndCreateNewFolder) {
+                            Label("New Folder…", systemImage: "folder.badge.gear")
+                                .frame(width: 140 * SynapseTheme.Layout.phi)
+                        }
+                        .buttonStyle(ChromeButtonStyle())
+
                         Button(action: { isCloneSheetPresented = true }) {
                             Label("Clone Repository…", systemImage: "arrow.down.to.line")
-                                .frame(width: 130 * SynapseTheme.Layout.phi)
+                                .frame(width: 140 * SynapseTheme.Layout.phi)
                         }
                         .buttonStyle(ChromeButtonStyle())
                     }
 
-                    Text("Open a local folder or clone a remote git repository.")
+                    Text("Open an existing folder, create a new one, or clone a git repository.")
                         .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundStyle(SynapseTheme.textMuted)
                 }

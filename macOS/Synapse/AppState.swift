@@ -2264,6 +2264,46 @@ class AppState: ObservableObject {
         }
     }
 
+    /// Creates a new folder at the specified URL and opens it in Synapse.
+    /// If the folder already exists, it will just open it.
+    /// This is used from the startup screen (FolderPickerView) to create new vaults.
+    func createAndOpenNewFolder(at url: URL) {
+        let fm = FileManager.default
+
+        // Create the folder if it doesn't exist
+        if !fm.fileExists(atPath: url.path) {
+            do {
+                try fm.createDirectory(at: url, withIntermediateDirectories: true, attributes: nil)
+            } catch {
+                print("[ERROR] Failed to create folder at \(url.path): \(error)")
+                return
+            }
+        }
+
+        // Open the folder in Synapse
+        openFolder(url)
+    }
+
+    /// Shows a save panel to create a new folder and opens it.
+    /// This is called from the FolderPickerView when user clicks "New Folder..."
+    func pickAndCreateNewFolder() {
+        let panel = NSSavePanel()
+        panel.title = "Create New Folder"
+        panel.message = "Choose a name and location for your new folder"
+        panel.prompt = "Create"
+        panel.canCreateDirectories = true
+        panel.showsHiddenFiles = false
+        panel.isExtensionHidden = false
+        panel.allowedContentTypes = []  // Allow any folder name
+
+        // Set a default filename
+        panel.nameFieldStringValue = "MyVault"
+
+        if panel.runModal() == .OK, let url = panel.url {
+            createAndOpenNewFolder(at: url)
+        }
+    }
+
     @discardableResult
     func renameItem(at url: URL, to newName: String) throws -> URL {
         let fm = FileManager.default
