@@ -151,6 +151,10 @@ struct ContentView: View {
     @State private var leftSidebarWidth: CGFloat = SynapseTheme.Layout.minLeftSidebarWidth
     @State private var rightSidebarPrimaryWidth: CGFloat = SynapseTheme.Layout.minRightSidebarWidth + 100
     @State private var rightSidebarSecondaryWidth: CGFloat = 180 * SynapseTheme.Layout.phi
+    // Captured at drag start for absolute-position resizing
+    @State private var dragStartLeft: CGFloat = 0
+    @State private var dragStartRightPrimary: CGFloat = 0
+    @State private var dragStartRightSecondary: CGFloat = 0
     @State private var showUpdateBanner: Bool = false
     /// Tracks which sidebars were collapsed automatically (by window resize) so
     /// we only auto-expand those — never sidebars the user manually collapsed.
@@ -174,17 +178,21 @@ struct ContentView: View {
                             settings: appState.settings,
                             expandedWidth: leftSidebarWidth
                         )
-                        ResizeDivider(axis: .vertical) { delta in
-                            leftSidebarWidth = max(SynapseTheme.Layout.minLeftSidebarWidth, min(SynapseTheme.Layout.maxLeftSidebarWidth, leftSidebarWidth + delta))
+                        ResizeDivider(axis: .vertical, onDragStart: {
+                            dragStartLeft = leftSidebarWidth
+                        }) { translation in
+                            leftSidebarWidth = max(SynapseTheme.Layout.minLeftSidebarWidth, min(SynapseTheme.Layout.maxLeftSidebarWidth, dragStartLeft + translation))
                         }
 
                         SplitPaneEditorView()
                             .environmentObject(appState)
 
-                        ResizeDivider(axis: .vertical) { delta in
+                        ResizeDivider(axis: .vertical, onDragStart: {
+                            dragStartRightPrimary = rightSidebarPrimaryWidth
+                        }) { translation in
                             rightSidebarPrimaryWidth = max(
                                 SynapseTheme.Layout.minRightSidebarWidth,
-                                min(SynapseTheme.Layout.maxRightSidebarWidth, rightSidebarPrimaryWidth - delta)
+                                min(SynapseTheme.Layout.maxRightSidebarWidth, dragStartRightPrimary - translation)
                             )
                         }
 
@@ -194,9 +202,12 @@ struct ContentView: View {
                             settings: appState.settings,
                             expandedWidth: rightSidebarPrimaryWidth
                         )
-                        ResizeDivider(axis: .vertical) { delta in
-                            let newPrimary = rightSidebarPrimaryWidth + delta
-                            let newSecondary = rightSidebarSecondaryWidth - delta
+                        ResizeDivider(axis: .vertical, onDragStart: {
+                            dragStartRightPrimary = rightSidebarPrimaryWidth
+                            dragStartRightSecondary = rightSidebarSecondaryWidth
+                        }) { translation in
+                            let newPrimary = dragStartRightPrimary + translation
+                            let newSecondary = dragStartRightSecondary - translation
                             guard newPrimary >= SynapseTheme.Layout.minRightSidebarWidth,
                                   newPrimary <= SynapseTheme.Layout.maxRightSidebarWidth,
                                   newSecondary >= SynapseTheme.Layout.minRightSidebarWidth,
@@ -622,7 +633,7 @@ private struct SidebarSlotView: View {
         }
         .frame(width: width)
         .background(SynapseTheme.panel)
-        .animation(.easeInOut(duration: 0.18), value: width)
+        .animation(ResizeDivider.isAnyDragging ? nil : .easeInOut(duration: 0.18), value: width)
     }
 }
 
@@ -1008,12 +1019,18 @@ private struct RootNoteSheet: View {
 
 
 struct ResizeDivider: View {
+    /// Shared flag: true while any ResizeDivider is actively being dragged.
+    /// SidebarSlotView checks this to suppress its width animation during resize.
+    static var isAnyDragging = false
+
     var disabled: Bool = false
     var axis: Axis = .horizontal
+    /// Called once at drag start so callers can capture initial sizes.
+    var onDragStart: (() -> Void)?
+    /// Called with the total translation from the drag start point (not incremental deltas).
     let onDrag: (CGFloat) -> Void
 
     @State private var isDragging = false
-    @State private var last: CGFloat = 0
 
     var body: some View {
         ZStack {
@@ -1043,17 +1060,21 @@ struct ResizeDivider: View {
             }
         }
         .gesture(
-            DragGesture(minimumDistance: 1)
+            DragGesture(minimumDistance: 1, coordinateSpace: .global)
                 .onChanged { value in
                     guard !disabled else { return }
-                    if !isDragging { isDragging = true; last = 0 }
-                    let delta = (axis == .vertical ? value.translation.width : value.translation.height) - last
-                    last = axis == .vertical ? value.translation.width : value.translation.height
-                    onDrag(delta)
+                    if !isDragging {
+                        isDragging = true
+                        Self.isAnyDragging = true
+                        onDragStart?()
+                    }
+                    let translation = axis == .vertical ? value.translation.width : value.translation.height
+                    var t = Transaction(); t.disablesAnimations = true
+                    withTransaction(t) { onDrag(translation) }
                 }
                 .onEnded { _ in
                     isDragging = false
-                    last = 0
+                    Self.isAnyDragging = false
                     NSCursor.pop()
                 }
         )
@@ -1075,6 +1096,8 @@ struct DynamicSidebarView: View {
     @ObservedObject var settings: SettingsManager
     @EnvironmentObject var themeEnv: ThemeEnvironment
     @State private var isDropTarget = false
+    // Captured at vertical pane drag start for absolute-position resizing
+    @State private var dragStartPaneHeights: (CGFloat, CGFloat) = (0, 0)
 
     private var isCollapsedToRail: Bool { settings.isSidebarCollapsed(sidebar.id) }
     private var railAlignment: Alignment { sidebar.position == .left ? .trailing : .leading }
@@ -1169,9 +1192,10 @@ struct DynamicSidebarView: View {
                         VStack(spacing: 0) {
                             ForEach(Array(sidebar.panes.enumerated()), id: \.element.id) { index, pane in
                                 let collapsed = settings.collapsedPanes.contains(pane.storageKey)
+                                let rawH = expandedHeight(for: pane, total: geo.size.height)
                                 let paneH = collapsed
                                     ? SidebarPaneWrapper.headerHeight
-                                    : expandedHeight(for: pane, total: geo.size.height)
+                                    : pane.maxHeight.map { min($0, rawH) } ?? rawH
 
                                 SidebarPaneInContainer(pane: pane, sidebarId: sidebar.id, settings: settings)
                                     .frame(height: paneH)
@@ -1179,11 +1203,17 @@ struct DynamicSidebarView: View {
                                 if index < sidebar.panes.count - 1 {
                                     let next = sidebar.panes[index + 1]
                                     let eitherCollapsed = collapsed || settings.collapsedPanes.contains(next.storageKey)
-                                    ResizeDivider(disabled: eitherCollapsed, axis: .horizontal) { delta in
-                                        let cur  = expandedHeight(for: pane, total: geo.size.height)
-                                        let nxt  = expandedHeight(for: next, total: geo.size.height)
-                                        let newCur = cur + delta; let newNxt = nxt - delta
-                                        guard newCur >= 80 && newNxt >= 80 else { return }
+                                    ResizeDivider(disabled: eitherCollapsed, axis: .horizontal, onDragStart: {
+                                        dragStartPaneHeights = (
+                                            expandedHeight(for: pane, total: geo.size.height),
+                                            expandedHeight(for: next, total: geo.size.height)
+                                        )
+                                    }) { translation in
+                                        let maxCur = pane.maxHeight ?? .infinity
+                                        let maxNxt = next.maxHeight ?? .infinity
+                                        let newCur = dragStartPaneHeights.0 + translation
+                                        let newNxt = dragStartPaneHeights.1 - translation
+                                        guard newCur >= 80 && newNxt >= 80 && newCur <= maxCur && newNxt <= maxNxt else { return }
                                         settings.sidebarPaneHeights[pane.storageKey] = newCur
                                         settings.sidebarPaneHeights[next.storageKey] = newNxt
                                     }

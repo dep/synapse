@@ -111,6 +111,11 @@ enum SidebarPaneItem: Codable, Equatable, Hashable, Identifiable {
 
     var storageKey: String { id }
 
+    var maxHeight: CGFloat? {
+        guard case .builtIn(.calendar) = self else { return nil }
+        return 280
+    }
+
     var builtInPane: SidebarPane? {
         guard case .builtIn(let pane) = self else { return nil }
         return pane
