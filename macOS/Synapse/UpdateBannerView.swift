@@ -71,23 +71,15 @@ struct UpdateBannerView: View {
     }
 
     private var iconName: String {
-        if restartRequired { return "checkmark.circle.fill" }
-        if downloadProgress != nil { return "arrow.down.circle.fill" }
-        return "arrow.down.circle.fill"
+        UpdateBannerCopy.iconName(downloadProgress: downloadProgress, restartRequired: restartRequired)
     }
 
     private var titleText: String {
-        if restartRequired { return "Synapse v\(version) installed" }
-        if downloadProgress != nil {
-            let pct = Int((downloadProgress ?? 0) * 100)
-            return "Downloading v\(version)… \(pct)%"
-        }
-        return "Update available: v\(version)"
+        UpdateBannerCopy.title(version: version, downloadProgress: downloadProgress, restartRequired: restartRequired)
     }
 
     private var subtitleText: String {
-        if restartRequired { return "Restart to finish updating" }
-        return "Click Install to update automatically"
+        UpdateBannerCopy.subtitle(downloadProgress: downloadProgress, restartRequired: restartRequired)
     }
 }
 

@@ -53,11 +53,11 @@ class SynapseAppDelegate: NSObject, NSApplicationDelegate {
             var isDirectory: ObjCBool = false
             if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue {
                 // Check if this is a vault root or a subfolder
-                let vaultRoot = findVaultRoot(for: url)
+                let vaultRoot = VaultRootResolver.vaultRoot(for: url)
                 appState.openFolder(vaultRoot)
             } else {
                 // It's a file - find the vault root and open the file within it
-                let vaultRoot = findVaultRoot(for: url)
+                let vaultRoot = VaultRootResolver.vaultRoot(for: url)
                 appState.openFolder(vaultRoot)
                 // After opening the vault, open the specific file
                 DispatchQueue.main.async {
@@ -67,44 +67,6 @@ class SynapseAppDelegate: NSObject, NSApplicationDelegate {
         }
 
         sender.reply(toOpenOrPrint: .success)
-    }
-
-    /// Find the vault root for a given URL
-    /// - If the URL is a file, walks up to find the vault root (directory containing .synapse folder)
-    /// - If the URL is a directory, checks if it's the vault root or walks up to find it
-    private func findVaultRoot(for url: URL) -> URL {
-        let fileManager = FileManager.default
-
-        // Start from the file's directory if it's a file
-        var currentDir = url
-        var isDirectory: ObjCBool = false
-        if fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) && !isDirectory.boolValue {
-            currentDir = url.deletingLastPathComponent()
-        }
-
-        // Walk up the directory tree looking for .synapse folder
-        while currentDir.path != "/" && currentDir.path != "/Users" {
-            let synapseDir = currentDir.appendingPathComponent(".synapse", isDirectory: true)
-            if fileManager.fileExists(atPath: synapseDir.path) {
-                return currentDir
-            }
-
-            let parentDir = currentDir.deletingLastPathComponent()
-            // Stop if we can't go up anymore
-            if parentDir.path == currentDir.path {
-                break
-            }
-            currentDir = parentDir
-        }
-
-        // If no .synapse folder found, return the original directory
-        // This handles legacy vaults without .synapse folder
-        var originalIsDirectory: ObjCBool = false
-        if fileManager.fileExists(atPath: url.path, isDirectory: &originalIsDirectory) && originalIsDirectory.boolValue {
-            return url
-        } else {
-            return url.deletingLastPathComponent()
-        }
     }
 }
 

@@ -172,7 +172,7 @@ private struct CloneRepositorySheet: View {
     }
 
     private var canClone: Bool {
-        !remoteURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && destinationURL != nil
+        CloneRepositoryValidation.canClone(remoteURL: remoteURL, destinationURL: destinationURL)
     }
 
     private func pickDestination() {
