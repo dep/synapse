@@ -3330,4 +3330,195 @@ class AppState: ObservableObject {
         guard let stateURL = stateFileURL else { return }
         try? FileManager.default.removeItem(at: stateURL)
     }
+
+    // MARK: - Flat Folder Navigator (Issue #200)
+
+    /// The current directory being displayed in the flat folder navigator.
+    /// Defaults to rootURL when not explicitly set.
+    @Published var flatNavigatorCurrentDirectory: URL?
+
+    /// Navigation path tracking for the flat folder navigator.
+    /// Contains the history of directories navigated through (for breadcrumb support).
+    private var flatNavigatorPathStack: [URL] = []
+
+    /// Tracks whether the back button is currently being hovered during a drag operation.
+    @Published var flatNavigatorBackButtonIsDragHovering: Bool = false
+
+    /// Timer for delayed navigation when hovering over back button during drag.
+    private var flatNavigatorBackButtonDragTimer: Timer?
+
+    /// Returns the navigation path as an array of URLs from root to current.
+    var flatNavigatorPath: [URL] {
+        guard let root = rootURL else { return [] }
+        guard let current = flatNavigatorCurrentDirectory else { return [root] }
+        
+        var path: [URL] = [root]
+        let rootPath = root.standardizedFileURL.path
+        let currentPath = current.standardizedFileURL.path
+        
+        // Build path from root to current
+        if currentPath.hasPrefix(rootPath) && current != root {
+            var components = currentPath.dropFirst(rootPath.count)
+                .split(separator: "/")
+                .map(String.init)
+            
+            var buildingPath = root
+            for component in components {
+                buildingPath = buildingPath.appendingPathComponent(component, isDirectory: true)
+                path.append(buildingPath)
+            }
+        }
+        
+        return path
+    }
+
+    /// Returns the display name of the current directory.
+    var flatNavigatorCurrentDirectoryName: String {
+        guard let current = flatNavigatorCurrentDirectory else {
+            return rootURL?.lastPathComponent ?? "Library"
+        }
+        return current.lastPathComponent
+    }
+
+    /// Returns the contents of the current directory for flat navigator display.
+    var flatNavigatorCurrentContents: [URL] {
+        guard let directory = flatNavigatorCurrentDirectory ?? rootURL else { return [] }
+        
+        let fm = FileManager.default
+        guard let contents = try? fm.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey],
+            options: []
+        ) else { return [] }
+        
+        // Filter and sort: folders first, then files, alphabetically within each group
+        var items: [(url: URL, isDirectory: Bool, name: String)] = []
+        
+        for url in contents {
+            let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+            let name = url.lastPathComponent
+            
+            // Skip hidden files and .git
+            if name.hasPrefix(".") { continue }
+            if isDir && name == ".git" { continue }
+            if !isDir && name.hasPrefix(".") { continue }
+            
+            // Apply settings filters
+            if !settings.shouldShowFile(url) && !isDir { continue }
+            if isDir && settings.shouldHideItem(named: name) { continue }
+            
+            items.append((url, isDir, name))
+        }
+        
+        // Sort: directories first, then by name
+        items.sort {
+            if $0.isDirectory != $1.isDirectory {
+                return $0.isDirectory // Directories first
+            }
+            return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+        
+        return items.map { $0.url }
+    }
+
+    /// Returns true if the user can navigate back (i.e., not at root).
+    var canNavigateBackInFlatNavigator: Bool {
+        guard let root = rootURL else { return false }
+        guard let current = flatNavigatorCurrentDirectory else { return false }
+        return current.standardizedFileURL != root.standardizedFileURL
+    }
+
+    /// Navigate into a folder in the flat navigator.
+    func navigateToFolder(_ folder: URL) {
+        guard let root = rootURL else { return }
+        
+        // Validate the folder is within the vault
+        let rootPath = root.standardizedFileURL.path
+        let folderPath = folder.standardizedFileURL.path
+        guard folderPath.hasPrefix(rootPath) else { return }
+        
+        // Verify it's actually a directory
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else { return }
+        
+        flatNavigatorCurrentDirectory = folder
+        flatNavigatorPathStack.append(folder)
+    }
+
+    /// Navigate back up one level in the flat navigator.
+    func navigateBackInFlatNavigator() {
+        guard let root = rootURL else { return }
+        let current = flatNavigatorCurrentDirectory ?? root
+        
+        // If at root, do nothing
+        if current.standardizedFileURL == root.standardizedFileURL {
+            // Ensure flatNavigatorCurrentDirectory is set to root
+            flatNavigatorCurrentDirectory = root
+            return
+        }
+        
+        // Navigate to parent
+        let parent = current.deletingLastPathComponent()
+        flatNavigatorCurrentDirectory = parent
+        
+        // Pop from path stack if applicable
+        if !flatNavigatorPathStack.isEmpty {
+            flatNavigatorPathStack.removeLast()
+        }
+    }
+
+    /// Navigate directly to the root directory.
+    func navigateToRootInFlatNavigator() {
+        flatNavigatorCurrentDirectory = rootURL
+        flatNavigatorPathStack.removeAll()
+    }
+
+    /// Called when drag hover starts over the back button.
+    func flatNavigatorBackButtonDragHoverStarted() {
+        flatNavigatorBackButtonIsDragHovering = true
+        
+        // Schedule navigation up after a delay (same pattern as folder auto-expand)
+        flatNavigatorBackButtonDragTimer?.invalidate()
+        let timer = Timer(timeInterval: 0.6, repeats: false) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.navigateBackInFlatNavigator()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        flatNavigatorBackButtonDragTimer = timer
+    }
+
+    /// Called when drag hover ends over the back button.
+    func flatNavigatorBackButtonDragHoverEnded() {
+        flatNavigatorBackButtonIsDragHovering = false
+        flatNavigatorBackButtonDragTimer?.invalidate()
+        flatNavigatorBackButtonDragTimer = nil
+    }
+
+    /// Drop a file onto a pinned item (folder only).
+    func dropFile(_ fileURL: URL, ontoPinnedItem pinnedItem: PinnedItem) throws -> URL {
+        // Validate source file exists
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            throw FileBrowserError.operationFailed("Source file does not exist")
+        }
+        
+        // Validate target is a folder
+        guard pinnedItem.isFolder else {
+            throw FileBrowserError.operationFailed("Target is not a folder")
+        }
+        
+        guard let targetURL = pinnedItem.url else {
+            throw FileBrowserError.operationFailed("Target folder not found")
+        }
+        
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: targetURL.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            throw FileBrowserError.operationFailed("Target is not a folder")
+        }
+        
+        // Use existing moveFile functionality
+        return try moveFile(at: fileURL, toFolder: targetURL)
+    }
 }

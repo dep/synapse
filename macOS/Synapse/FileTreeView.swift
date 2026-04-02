@@ -153,6 +153,8 @@ struct FileTreeView: View {
     @State private var dragOverFolderURL: URL? = nil
     /// Pending conflict requiring user confirmation before overwrite.
     @State private var moveConflict: FileMoveConflict? = nil
+    /// Tracks which pinned folder is currently being hovered as a drop target (Issue #200).
+    @State private var dragOverPinnedFolderID: UUID? = nil
     /// Count of `allFiles` updates we expect from an in-flight `moveFile` refresh.
     /// `refreshAllFiles()` completes asynchronously after `moveFile` returns, so a
     /// simple boolean cleared in `defer` races the `onChange` and still triggers a
@@ -377,7 +379,18 @@ struct FileTreeView: View {
 
             if !isPinnedSectionCollapsed {
                 ForEach(appState.pinnedItems) { item in
-                    PinnedItemRow(item: item)
+                    PinnedItemRow(
+                        item: item,
+                        dragOverPinnedFolderID: $dragOverPinnedFolderID,
+                        onDropFile: { fileURL, pinnedItem in
+                            // Handle drop onto pinned folder (Issue #200)
+                            do {
+                                _ = try appState.dropFile(fileURL, ontoPinnedItem: pinnedItem)
+                            } catch {
+                                errorMessage = error.localizedDescription
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -517,7 +530,11 @@ struct FileTreeView: View {
 
     @ViewBuilder
     private var folderTreeContent: some View {
-        if nodes.isEmpty {
+        // Flat Folder Navigator (Issue #200): shows one directory level at a time
+        let currentContents = appState.flatNavigatorCurrentContents
+        let isAtRoot = !appState.canNavigateBackInFlatNavigator
+        
+        if currentContents.isEmpty && isAtRoot {
             VStack(alignment: .leading, spacing: 8) {
                 Text("No notes yet")
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
@@ -530,32 +547,55 @@ struct FileTreeView: View {
             .padding(.vertical, 8)
         } else {
             LazyVStack(alignment: .leading, spacing: 6) {
-                RootDropTargetRow(
-                    vaultName: appState.rootURL?.lastPathComponent ?? "Root",
-                    isTargeted: dragOverFolderURL == appState.rootURL,
-                    onDrop: { providers in
-                        guard let root = appState.rootURL else { return false }
-                        handleDrop(providers: providers, toFolder: root)
-                        return true
-                    },
-                    setTargeted: { targeted in
-                        dragOverFolderURL = targeted ? appState.rootURL : nil
-                    }
-                )
-
-                ForEach(nodes) { node in
-                    FileNodeRow(
-                        node: node,
-                        depth: 0,
-                        expandedDirs: $expandedDirs,
-                        dragOverFolderURL: $dragOverFolderURL,
-                        loadChildren: { loadChildren(for: $0) },
-                        onCreateNote: { presentCreateNote(in: $0) },
-                        onCreateFolder: { presentCreateFolder(in: $0) },
-                        onRename: { presentRename(for: $0, isDirectory: $1) },
-                        onDelete: { presentDelete(for: $0, isDirectory: $1) },
-                        onMoveFile: { presentMoveFile(from: $0, toFolder: $1) }
+                // Back Button (Issue #200): shown when not at root
+                if !isAtRoot {
+                    FlatNavigatorBackButton(
+                        folderName: appState.flatNavigatorCurrentDirectoryName,
+                        isDragHovering: appState.flatNavigatorBackButtonIsDragHovering,
+                        onTap: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                appState.navigateBackInFlatNavigator()
+                            }
+                        },
+                        onDragHoverStarted: {
+                            appState.flatNavigatorBackButtonDragHoverStarted()
+                        },
+                        onDragHoverEnded: {
+                            appState.flatNavigatorBackButtonDragHoverEnded()
+                        }
                     )
+                }
+
+                // Flat list of folders and files at current level
+                ForEach(currentContents, id: \.self) { url in
+                    let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+                    if isDirectory {
+                        FlatFolderRow(
+                            folderURL: url,
+                            isSelected: appState.selectedFile == url,
+                            isDragTarget: dragOverFolderURL == url,
+                            onTap: {
+                                // Navigate into folder (Issue #200)
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    appState.navigateToFolder(url)
+                                }
+                            },
+                            onDrop: { providers in
+                                handleDrop(providers: providers, toFolder: url)
+                                return true
+                            },
+                            setDragTarget: { targeted in
+                                dragOverFolderURL = targeted ? url : nil
+                            }
+                        )
+                    } else {
+                        FlatFileRow(
+                            fileURL: url,
+                            isSelected: appState.selectedFile == url,
+                            onTap: { appState.openFile(url) },
+                            onCmdTap: { appState.openFileInNewTab(url) }
+                        )
+                    }
                 }
             }
             .padding(.vertical, 4)
@@ -1073,6 +1113,12 @@ private struct FolderDropModifier: ViewModifier {
 struct PinnedItemRow: View {
     @EnvironmentObject var appState: AppState
     let item: PinnedItem
+    @Binding var dragOverPinnedFolderID: UUID?
+    let onDropFile: (URL, PinnedItem) -> Void
+
+    private var isDragTarget: Bool {
+        item.isFolder && dragOverPinnedFolderID == item.id
+    }
 
     var body: some View {
         Button(action: handleTap) {
@@ -1097,7 +1143,15 @@ struct PinnedItemRow: View {
             .padding(.horizontal, 8)
             .background {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(SynapseTheme.row)
+                    .fill(isDragTarget
+                          ? SynapseTheme.accent.opacity(0.18)
+                          : SynapseTheme.row)
+            }
+            .overlay {
+                if isDragTarget {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .stroke(SynapseTheme.accent, lineWidth: 1.5)
+                }
             }
         }
         .buttonStyle(.plain)
@@ -1116,6 +1170,13 @@ struct PinnedItemRow: View {
                     handleCmdClick()
                 }
         )
+        // Drop target for pinned folders (Issue #200)
+        .modifier(PinnedFolderDropModifier(
+            isFolder: item.isFolder,
+            item: item,
+            dragOverPinnedFolderID: $dragOverPinnedFolderID,
+            onDropFile: onDropFile
+        ))
         .contextMenu {
             if item.isTag {
                 Button("Unpin") { appState.unpinTag(item.name) }
@@ -1151,6 +1212,41 @@ struct PinnedItemRow: View {
             } else {
                 appState.openFileInNewTab(url)
             }
+        }
+    }
+}
+
+// MARK: - Pinned Folder Drop Modifier (Issue #200)
+/// Applies onDrop only to pinned folder items, enabling drag-and-drop file moving to pinned folders.
+private struct PinnedFolderDropModifier: ViewModifier {
+    let isFolder: Bool
+    let item: PinnedItem
+    @Binding var dragOverPinnedFolderID: UUID?
+    let onDropFile: (URL, PinnedItem) -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isFolder {
+            content
+                .onDrop(
+                    of: [.fileURL],
+                    isTargeted: Binding(
+                        get: { dragOverPinnedFolderID == item.id },
+                        set: { targeted in
+                            dragOverPinnedFolderID = targeted ? item.id : nil
+                        }
+                    )
+                ) { providers in
+                    dragOverPinnedFolderID = nil
+                    guard let provider = providers.first else { return false }
+                    provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { itemData, _ in
+                        guard let fileURL = extractSidebarFileURL(from: itemData) else { return }
+                        DispatchQueue.main.async { onDropFile(fileURL, item) }
+                    }
+                    return true
+                }
+        } else {
+            content
         }
     }
 }
@@ -1285,13 +1381,13 @@ private struct BrowserItemEditorSheet: View {
                     }
                 }
             }
+        }
 
-            HStack {
-                Spacer()
-                Button("Cancel") { dismiss() }
-                Button(action.buttonTitle, action: performSubmit)
-                    .keyboardShortcut(.defaultAction)
-            }
+        HStack {
+            Spacer()
+            Button("Cancel") { dismiss() }
+            Button(action.buttonTitle, action: performSubmit)
+                .keyboardShortcut(.defaultAction)
         }
         .padding(20)
         .frame(width: 340)
@@ -1302,3 +1398,176 @@ private struct BrowserItemEditorSheet: View {
         dismiss()
     }
 }
+
+// MARK: - Flat Folder Navigator Components (Issue #200)
+
+/// Back button for the flat folder navigator - navigates up one level.
+/// Supports drag hover to navigate up during drag operations.
+private struct FlatNavigatorBackButton: View {
+    let folderName: String
+    let isDragHovering: Bool
+    let onTap: () -> Void
+    let onDragHoverStarted: () -> Void
+    let onDragHoverEnded: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(isDragHovering ? SynapseTheme.accent : SynapseTheme.textMuted)
+                Text(folderName)
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(isDragHovering ? SynapseTheme.accent : SynapseTheme.textPrimary)
+                Spacer()
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .background {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isDragHovering ? SynapseTheme.accent.opacity(0.18) : SynapseTheme.row)
+            }
+            .overlay {
+                if isDragHovering {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(SynapseTheme.accent, lineWidth: 1.5)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 2)
+        .onHover { hovering in
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+        // Drag hover support for navigating up during drag operations
+        .onDrop(
+            of: [.fileURL],
+            isTargeted: Binding(
+                get: { isDragHovering },
+                set: { targeted in
+                    if targeted {
+                        onDragHoverStarted()
+                    } else {
+                        onDragHoverEnded()
+                    }
+                }
+            )
+        ) { _ in
+            // Drop on back button completes the navigation up
+            onDragHoverEnded()
+            return true
+        }
+    }
+}
+
+/// Row displaying a folder in the flat navigator - tap to navigate into.
+private struct FlatFolderRow: View {
+    let folderURL: URL
+    let isSelected: Bool
+    let isDragTarget: Bool
+    let onTap: () -> Void
+    let onDrop: ([NSItemProvider]) -> Bool
+    let setDragTarget: (Bool) -> Void
+
+    var folderName: String { folderURL.lastPathComponent }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "chevron.right")
+                .font(.system(size: 8, weight: .bold))
+                .frame(width: 10)
+                .foregroundStyle(SynapseTheme.textMuted)
+            Image(systemName: "folder.fill")
+                .foregroundStyle(SynapseTheme.accent)
+            Text(folderName)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .font(.system(size: 13, weight: isSelected ? .semibold : .medium, design: .rounded))
+                .foregroundStyle(isSelected ? Color.white : SynapseTheme.textPrimary)
+            Spacer()
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
+        .background {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(isDragTarget
+                      ? SynapseTheme.accent.opacity(0.18)
+                      : isSelected ? SynapseTheme.accentSoft : SynapseTheme.row)
+        }
+        .overlay {
+            if isDragTarget {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(SynapseTheme.accent, lineWidth: 1.5)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
+        .onHover { hovering in
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+        .onDrop(
+            of: [.fileURL],
+            isTargeted: Binding(
+                get: { isDragTarget },
+                set: setDragTarget
+            ),
+            perform: onDrop
+        )
+    }
+}
+
+/// Row displaying a file in the flat navigator.
+private struct FlatFileRow: View {
+    let fileURL: URL
+    let isSelected: Bool
+    let onTap: () -> Void
+    let onCmdTap: () -> Void
+
+    var fileName: String { fileURL.deletingPathExtension().lastPathComponent }
+    var isMarkdown: Bool {
+        let ext = fileURL.pathExtension.lowercased()
+        return ext == "md" || ext == "markdown"
+    }
+
+    var body: some View {
+        Button(action: handleTap) {
+            HStack(spacing: 6) {
+                Spacer().frame(width: 10) // Indent to align with folders
+                Image(systemName: isMarkdown ? "doc.text.fill" : "doc.text")
+                    .foregroundStyle(isMarkdown ? SynapseTheme.accent : SynapseTheme.textMuted)
+                    .opacity(0.8)
+                Text(fileName)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium, design: .rounded))
+                    .foregroundStyle(isSelected ? Color.white : SynapseTheme.textPrimary)
+                Spacer()
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .background {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isSelected ? SynapseTheme.accentSoft : SynapseTheme.row)
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 2)
+        .onHover { hovering in
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+        .onDrag {
+            sidebarFileItemProvider(for: fileURL)
+        }
+    }
+
+    private func handleTap() {
+        // Check if Cmd key is pressed
+        let isCmdPressed = NSEvent.modifierFlags.contains(.command)
+        if isCmdPressed {
+            onCmdTap()
+        } else {
+            onTap()
+        }
+    }
+}
+
