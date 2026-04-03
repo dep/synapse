@@ -431,6 +431,7 @@ describe('GitService', () => {
 
       mockFetch
         .mockResolvedValueOnce({ ok: true, json: async () => ({ commit: { sha: 'remote-commit-sha' } }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ tree: { sha: 'remote-tip-tree-sha' } }) })
         .mockResolvedValueOnce({ ok: true, json: async () => ({ sha: 'blob-created-sha' }) })
         .mockResolvedValueOnce({ ok: true, json: async () => ({ sha: 'tree-created-sha' }) })
         .mockResolvedValueOnce({ ok: true, json: async () => ({ sha: 'commit-created-sha' }) })
@@ -440,6 +441,11 @@ describe('GitService', () => {
 
       expect(git.push).not.toHaveBeenCalled();
       expect(mockFetch).toHaveBeenCalled();
+      const treeCreateCalls = mockFetch.mock.calls.filter(
+        (call: any[]) => call[0].includes('/git/trees') && call[1]?.method === 'POST'
+      );
+      expect(treeCreateCalls).toHaveLength(1);
+      expect(JSON.parse(treeCreateCalls[0][1].body).base_tree).toBe('remote-tip-tree-sha');
       expect(result).toEqual({ pulled: true, committed: 'commit-created-sha', pushed: true });
       expect(FileSystem.writeAsStringAsync).toHaveBeenCalledWith(
         'file:///mock/documents/vault/repo/.synapse/repo.json',
@@ -481,6 +487,7 @@ describe('GitService', () => {
 
       mockFetch
         .mockResolvedValueOnce({ ok: true, json: async () => ({ commit: { sha: 'remote-commit-sha' } }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ tree: { sha: 'remote-tip-tree-sha' } }) })
         .mockResolvedValueOnce({ ok: true, json: async () => ({ sha: 'blob-created-sha' }) })
         .mockResolvedValueOnce({ ok: true, json: async () => ({ sha: 'tree-created-sha' }) })
         .mockResolvedValueOnce({ ok: true, json: async () => ({ sha: 'commit-created-sha' }) })
@@ -535,23 +542,25 @@ describe('GitService', () => {
       mockFetch
         // 1. Fetch remote branch info → base commit
         .mockResolvedValueOnce({ ok: true, json: async () => ({ commit: { sha: 'base-commit-sha' } }) })
-        // 2. Create blob for local changes
+        // 2. Resolve base commit → tree SHA for POST /git/trees base_tree
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ tree: { sha: 'base-tree-sha' } }) })
+        // 3. Create blob for local changes
         .mockResolvedValueOnce({ ok: true, json: async () => ({ sha: 'local-blob-sha' }) })
-        // 3. Create tree (based on old base — this is the initial attempt)
+        // 4. Create tree (based on remote tip tree — initial attempt)
         .mockResolvedValueOnce({ ok: true, json: async () => ({ sha: 'initial-tree-sha' }) })
-        // 4. Create commit
+        // 5. Create commit
         .mockResolvedValueOnce({ ok: true, json: async () => ({ sha: 'initial-commit-sha' }) })
-        // 5. PATCH branch ref → fails with non-fast-forward
+        // 6. PATCH branch ref → fails with non-fast-forward
         .mockResolvedValueOnce({ ok: false, status: 422, statusText: 'Unprocessable Entity', text: async () => 'Update is not a fast forward' })
-        // 6. Fetch latest ref → remote has advanced
+        // 7. Fetch latest ref → remote has advanced
         .mockResolvedValueOnce({ ok: true, json: async () => ({ object: { sha: 'latest-remote-sha' } }) })
-        // 7. Fetch latest remote commit to get its tree SHA
+        // 8. Fetch latest remote commit to get its tree SHA
         .mockResolvedValueOnce({ ok: true, json: async () => ({ tree: { sha: 'latest-remote-tree-sha' } }) })
-        // 8. Create rebased tree (based on latest remote tree)
+        // 9. Create rebased tree (based on latest remote tree)
         .mockResolvedValueOnce({ ok: true, json: async () => ({ sha: 'rebased-tree-sha' }) })
-        // 9. Create rebased commit
+        // 10. Create rebased commit
         .mockResolvedValueOnce({ ok: true, json: async () => ({ sha: 'rebased-commit-sha' }) })
-        // 10. PATCH branch ref → succeeds (fast-forward from latestRemoteSha)
+        // 11. PATCH branch ref → succeeds (fast-forward from latestRemoteSha)
         .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
 
       const result = await GitService.sync(localPath);
@@ -563,6 +572,8 @@ describe('GitService', () => {
         call[0].includes('/git/trees') && call[1]?.method === 'POST'
       );
       expect(treeCreateCalls).toHaveLength(2);
+      const initialTreeBody = JSON.parse(treeCreateCalls[0][1].body);
+      expect(initialTreeBody.base_tree).toBe('base-tree-sha');
       const rebasedTreeBody = JSON.parse(treeCreateCalls[1][1].body);
       expect(rebasedTreeBody.base_tree).toBe('latest-remote-tree-sha');
 
