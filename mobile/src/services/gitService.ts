@@ -1031,6 +1031,14 @@ export class GitService {
     );
     const remoteCommitSha = latestBranch.commit.sha;
 
+    // GitHub's POST /git/trees `base_tree` must be a *tree* object SHA, not a commit SHA.
+    // Using the commit OID here can yield a wrong tree and drop every file not listed in `tree`.
+    const remoteCommitInfo = await this.githubRequest<{ tree: { sha: string } }>(
+      `/repos/${metadata.owner}/${metadata.repo}/git/commits/${remoteCommitSha}`,
+      metadata.repoUrl
+    );
+    const remoteTreeSha = remoteCommitInfo.tree.sha;
+
     console.log('[sync-github] Creating blobs for changed files...');
     const newTreeEntries: Array<Record<string, string | null>> = [];
     const updatedFiles = { ...metadata.files };
@@ -1076,7 +1084,7 @@ export class GitService {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base_tree: remoteCommitSha, tree: newTreeEntries }),
+        body: JSON.stringify({ base_tree: remoteTreeSha, tree: newTreeEntries }),
       }
     );
 
