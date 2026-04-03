@@ -34,9 +34,11 @@ final class MarkdownPreviewCSSTests: XCTestCase {
     }
 
     func test_headingFontSize_scalesFromBaseSize() {
-        XCTAssertEqual(MarkdownPreviewCSS.headingFontSize(level: 1, baseSize: 15), 28)
+        XCTAssertEqual(MarkdownPreviewCSS.headingFontSize(level: 1, baseSize: 15), 31)
         XCTAssertEqual(MarkdownPreviewCSS.headingFontSize(level: 2, baseSize: 15), 22)
         XCTAssertEqual(MarkdownPreviewCSS.headingFontSize(level: 3, baseSize: 15), 18)
         XCTAssertEqual(MarkdownPreviewCSS.headingFontSize(level: 4, baseSize: 15), 16)
+        XCTAssertEqual(MarkdownPreviewCSS.headingFontSize(level: 5, baseSize: 15), 15)
+        XCTAssertEqual(MarkdownPreviewCSS.headingFontSize(level: 6, baseSize: 15), 14)
     }
 }

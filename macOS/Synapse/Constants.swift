@@ -73,10 +73,19 @@ extension SynapseTheme {
     enum Editor {
         static let bodyFontSize: CGFloat = 15
         static let monoFontSize: CGFloat = 13
-        static let h1FontSize: CGFloat = bodyFontSize * (Layout.phi * Layout.phi) // ~39
-        static let h2FontSize: CGFloat = bodyFontSize * Layout.phi               // ~24
-        static let h3FontSize: CGFloat = bodyFontSize * (Layout.phi * 0.8)       // ~18
-        static let h4FontSize: CGFloat = bodyFontSize * 1.07                     // ~16
+
+        /// Multipliers vs body size — below φ-based scaling so headings sit closer to body text.
+        static let headingH1Multiplier: CGFloat = 2.05
+        static let headingH2Multiplier: CGFloat = 1.45
+        static let headingH3Multiplier: CGFloat = 1.18
+        static let headingH4Multiplier: CGFloat = 1.05
+        static let headingH5Multiplier: CGFloat = 1.0
+        static let headingH6Multiplier: CGFloat = 0.95
+
+        static let h1FontSize: CGFloat = bodyFontSize * headingH1Multiplier
+        static let h2FontSize: CGFloat = bodyFontSize * headingH2Multiplier
+        static let h3FontSize: CGFloat = bodyFontSize * headingH3Multiplier
+        static let h4FontSize: CGFloat = bodyFontSize * headingH4Multiplier
         static let maxInlinePreviewWidth: CGFloat = 320 * Layout.phi             // ~518
     }
 }

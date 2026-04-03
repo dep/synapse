@@ -54,10 +54,9 @@ final class EditorFontStylingTests: XCTestCase {
         settings.editorFontSize = 15
         let font = MarkdownTheme.h1Font(for: settings)
 
-        // H1 uses phi² scaling: round(base * phi * phi) where phi² ≈ 2.618
-        let expectedSize: CGFloat = round(15 * SynapseTheme.Layout.phi * SynapseTheme.Layout.phi)
+        let expectedSize: CGFloat = round(15 * SynapseTheme.Editor.headingH1Multiplier)
         XCTAssertEqual(font.pointSize, expectedSize,
-                       "H1 font should scale proportionally from base size using phi²")
+                       "H1 font should scale proportionally from base size using headingH1Multiplier")
         XCTAssertTrue(font.fontDescriptor.symbolicTraits.contains(.bold),
                       "H1 font should be bold")
     }
@@ -66,10 +65,9 @@ final class EditorFontStylingTests: XCTestCase {
         settings.editorFontSize = 15
         let font = MarkdownTheme.h2Font(for: settings)
 
-        // H2 uses phi scaling: round(base * phi) where phi ≈ 1.618
-        let expectedSize: CGFloat = round(15 * SynapseTheme.Layout.phi)
+        let expectedSize: CGFloat = round(15 * SynapseTheme.Editor.headingH2Multiplier)
         XCTAssertEqual(font.pointSize, expectedSize,
-                       "H2 font should scale proportionally from base size using phi")
+                       "H2 font should scale proportionally from base size using headingH2Multiplier")
         XCTAssertTrue(font.fontDescriptor.symbolicTraits.contains(.bold),
                       "H2 font should be bold")
     }
@@ -78,10 +76,9 @@ final class EditorFontStylingTests: XCTestCase {
         settings.editorFontSize = 15
         let font = MarkdownTheme.h3Font(for: settings)
 
-        // H3 uses phi*0.8 scaling: round(base * phi * 0.8) where phi*0.8 ≈ 1.294
-        let expectedSize: CGFloat = round(15 * SynapseTheme.Layout.phi * 0.8)
+        let expectedSize: CGFloat = round(15 * SynapseTheme.Editor.headingH3Multiplier)
         XCTAssertEqual(font.pointSize, expectedSize,
-                       "H3 font should scale proportionally from base size using phi*0.8")
+                       "H3 font should scale proportionally from base size using headingH3Multiplier")
         // On macOS, semibold is represented as bold trait with additional weight info
         // We just verify it's not the regular body font
         let bodyFont = MarkdownTheme.bodyFont(for: settings)
@@ -92,10 +89,9 @@ final class EditorFontStylingTests: XCTestCase {
         settings.editorFontSize = 15
         let font = MarkdownTheme.h4Font(for: settings)
 
-        // H4 should be 1.07x base (16/15 ≈ 1.07)
-        let expectedSize: CGFloat = round(15 * 1.07)
+        let expectedSize: CGFloat = round(15 * SynapseTheme.Editor.headingH4Multiplier)
         XCTAssertEqual(font.pointSize, expectedSize,
-                       "H4 font should scale proportionally from base size")
+                       "H4 font should scale proportionally from base size using headingH4Multiplier")
         // On macOS, semibold is represented as bold trait with additional weight info
         // We just verify it's not the regular body font
         let bodyFont = MarkdownTheme.bodyFont(for: settings)
@@ -130,8 +126,7 @@ final class EditorFontStylingTests: XCTestCase {
         let mono = MarkdownTheme.monoFont(for: settings)
 
         XCTAssertEqual(body.pointSize, 20, "Body should be base size")
-        // H1 uses phi² scaling: round(20 * 2.618) = 52
-        XCTAssertEqual(h1.pointSize, round(20 * SynapseTheme.Layout.phi * SynapseTheme.Layout.phi), "H1 should scale from new base using phi²")
+        XCTAssertEqual(h1.pointSize, round(20 * SynapseTheme.Editor.headingH1Multiplier), "H1 should scale from new base using headingH1Multiplier")
         // Mono uses phi-based scaling: max(10, 20 / 1.618) = max(10, 12.36) = 12.36
         XCTAssertEqual(mono.pointSize, max(10, 20 / SynapseTheme.Layout.phi), "Mono should use phi-based scaling from base size")
     }
@@ -145,8 +140,7 @@ final class EditorFontStylingTests: XCTestCase {
         XCTAssertEqual(body.pointSize, 15, "Default body size should be 15")
         // Mono uses phi-based scaling: max(10, 15 / 1.618) = max(10, 9.27) = 10
         XCTAssertEqual(mono.pointSize, 10, "Default mono size should use phi-based scaling")
-        // H1 uses phi² scaling: round(15 * 2.618) = 39
-        XCTAssertEqual(h1.pointSize, round(15 * SynapseTheme.Layout.phi * SynapseTheme.Layout.phi), "Default H1 should scale from 15 using phi²")
+        XCTAssertEqual(h1.pointSize, round(15 * SynapseTheme.Editor.headingH1Multiplier), "Default H1 should scale from 15 using headingH1Multiplier")
     }
 
     func test_lineHeightMultiple_usesSettingsValue() {

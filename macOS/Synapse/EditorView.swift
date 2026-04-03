@@ -1151,7 +1151,7 @@ struct MarkdownTheme {
     }
     
     static func h1Font(for settings: SettingsManager) -> NSFont {
-        let size = round(CGFloat(settings.editorFontSize) * (SynapseTheme.Layout.phi * SynapseTheme.Layout.phi))
+        let size = round(CGFloat(settings.editorFontSize) * SynapseTheme.Editor.headingH1Multiplier)
         if settings.editorBodyFontFamily.isEmpty || settings.editorBodyFontFamily == "System" {
             return NSFont.systemFont(ofSize: size, weight: .bold)
         }
@@ -1160,7 +1160,7 @@ struct MarkdownTheme {
     }
     
     static func h2Font(for settings: SettingsManager) -> NSFont {
-        let size = round(CGFloat(settings.editorFontSize) * SynapseTheme.Layout.phi)
+        let size = round(CGFloat(settings.editorFontSize) * SynapseTheme.Editor.headingH2Multiplier)
         if settings.editorBodyFontFamily.isEmpty || settings.editorBodyFontFamily == "System" {
             return NSFont.systemFont(ofSize: size, weight: .bold)
         }
@@ -1169,7 +1169,7 @@ struct MarkdownTheme {
     }
     
     static func h3Font(for settings: SettingsManager) -> NSFont {
-        let size = round(CGFloat(settings.editorFontSize) * (SynapseTheme.Layout.phi * 0.8))
+        let size = round(CGFloat(settings.editorFontSize) * SynapseTheme.Editor.headingH3Multiplier)
         if settings.editorBodyFontFamily.isEmpty || settings.editorBodyFontFamily == "System" {
             return NSFont.systemFont(ofSize: size, weight: .semibold)
         }
@@ -1178,7 +1178,7 @@ struct MarkdownTheme {
     }
     
     static func h4Font(for settings: SettingsManager) -> NSFont {
-        let size = round(CGFloat(settings.editorFontSize) * 1.07)
+        let size = round(CGFloat(settings.editorFontSize) * SynapseTheme.Editor.headingH4Multiplier)
         if settings.editorBodyFontFamily.isEmpty || settings.editorBodyFontFamily == "System" {
             return NSFont.systemFont(ofSize: size, weight: .semibold)
         }
@@ -1214,10 +1214,10 @@ struct MarkdownTheme {
     
     static let body = NSFont.systemFont(ofSize: 15)
     static let mono = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-    static let h1   = NSFont.systemFont(ofSize: 28, weight: .bold)
-    static let h2   = NSFont.systemFont(ofSize: 22, weight: .bold)
-    static let h3   = NSFont.systemFont(ofSize: 18, weight: .semibold)
-    static let h4   = NSFont.systemFont(ofSize: 16, weight: .semibold)
+    static let h1   = NSFont.systemFont(ofSize: round(SynapseTheme.Editor.h1FontSize), weight: .bold)
+    static let h2   = NSFont.systemFont(ofSize: round(SynapseTheme.Editor.h2FontSize), weight: .bold)
+    static let h3   = NSFont.systemFont(ofSize: round(SynapseTheme.Editor.h3FontSize), weight: .semibold)
+    static let h4   = NSFont.systemFont(ofSize: round(SynapseTheme.Editor.h4FontSize), weight: .semibold)
     // Use static var so these read from ThemeEnvironment.shared at each call-site
     // rather than being frozen at class-load time.
     static var dimColor:            NSColor { SynapseTheme.editorMuted }

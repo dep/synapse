@@ -35,18 +35,17 @@ struct MarkdownPreviewCSS {
 
     static func headingFontSize(level: Int, baseSize: Int) -> Int {
         let base = CGFloat(bodyFontSize(for: baseSize))
-        let value: CGFloat
-
+        let mult: CGFloat
         switch level {
-        case 1: value = round(base * 1.87)
-        case 2: value = round(base * 1.47)
-        case 3: value = round(base * 1.2)
-        case 4: value = round(base * 1.07)
-        case 5: value = round(base)
-        default: value = max(12, round(base * 0.93))
+        case 1: mult = SynapseTheme.Editor.headingH1Multiplier
+        case 2: mult = SynapseTheme.Editor.headingH2Multiplier
+        case 3: mult = SynapseTheme.Editor.headingH3Multiplier
+        case 4: mult = SynapseTheme.Editor.headingH4Multiplier
+        case 5: mult = SynapseTheme.Editor.headingH5Multiplier
+        default: mult = SynapseTheme.Editor.headingH6Multiplier
         }
-
-        return Int(value)
+        let value = round(base * mult)
+        return Int(max(level >= 6 ? 12 : 8, value))
     }
 
     private static func escape(_ fontFamily: String) -> String {

@@ -190,6 +190,31 @@ final class FlatFolderNavigatorTests: XCTestCase {
                        "Root view should NOT contain nested items")
     }
 
+    func test_flatViewContents_showsDotPrefixedFilesAndFoldersByDefault() {
+        sut.settings.fileExtensionFilter = "*" // isolate dot-prefix behavior from default *.md filter
+        let dotFolder = makeFolder(named: ".agents")
+        let dotFile = makeFile(named: ".env")
+
+        let contents = sut.flatNavigatorCurrentContents
+        let names = Set(contents.map(\.lastPathComponent))
+
+        XCTAssertTrue(names.contains(".agents"), "Dot-prefixed folders should appear unless hidden in settings")
+        XCTAssertTrue(names.contains(".env"), "Dot-prefixed files should appear unless hidden in settings")
+    }
+
+    func test_flatViewContents_hidesDotItemWhenMatchingHiddenFilter() {
+        sut.settings.fileExtensionFilter = "*"
+        makeFolder(named: ".agents")
+        makeFile(named: ".env")
+        sut.settings.hiddenFileFolderFilter = ".agents, .env"
+
+        let contents = sut.flatNavigatorCurrentContents
+        let names = Set(contents.map(\.lastPathComponent))
+
+        XCTAssertFalse(names.contains(".agents"))
+        XCTAssertFalse(names.contains(".env"))
+    }
+
     // MARK: - Pinned Folder Drop Target Tests
 
     func test_pinnedFolderCanAcceptDrop() {

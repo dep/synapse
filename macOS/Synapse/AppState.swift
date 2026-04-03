@@ -3427,14 +3427,9 @@ class AppState: ObservableObject {
             let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
             let name = url.lastPathComponent
             
-            // Skip hidden files and .git
-            if name.hasPrefix(".") { continue }
             if isDir && name == ".git" { continue }
-            if !isDir && name.hasPrefix(".") { continue }
-            
-            // Apply settings filters
-            if !settings.shouldShowFile(url) && !isDir { continue }
-            if isDir && settings.shouldHideItem(named: name) { continue }
+            if settings.shouldHideItem(named: name) { continue }
+            if !isDir && !settings.shouldShowFile(url, relativeTo: rootURL) { continue }
             
             items.append((url, isDir, name))
         }

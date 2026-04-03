@@ -78,19 +78,19 @@ final class SynapseThemeLayoutConstantsTests: XCTestCase {
     }
 
     func test_h1FontSize_isExpectedValue() {
-        XCTAssertEqual(SynapseTheme.Editor.h1FontSize, 15 * (SynapseTheme.Layout.phi * SynapseTheme.Layout.phi), accuracy: 0.1)
+        XCTAssertEqual(SynapseTheme.Editor.h1FontSize, 15 * SynapseTheme.Editor.headingH1Multiplier, accuracy: 0.01)
     }
 
     func test_h2FontSize_isExpectedValue() {
-        XCTAssertEqual(SynapseTheme.Editor.h2FontSize, 15 * SynapseTheme.Layout.phi, accuracy: 0.1)
+        XCTAssertEqual(SynapseTheme.Editor.h2FontSize, 15 * SynapseTheme.Editor.headingH2Multiplier, accuracy: 0.01)
     }
 
     func test_h3FontSize_isExpectedValue() {
-        XCTAssertEqual(SynapseTheme.Editor.h3FontSize, 15 * (SynapseTheme.Layout.phi * 0.8), accuracy: 0.1)
+        XCTAssertEqual(SynapseTheme.Editor.h3FontSize, 15 * SynapseTheme.Editor.headingH3Multiplier, accuracy: 0.01)
     }
 
-    func test_h4FontSize_is16() {
-        XCTAssertEqual(SynapseTheme.Editor.h4FontSize, 16.05, accuracy: 0.1)
+    func test_h4FontSize_isExpectedValue() {
+        XCTAssertEqual(SynapseTheme.Editor.h4FontSize, 15 * SynapseTheme.Editor.headingH4Multiplier, accuracy: 0.01)
     }
 
     func test_maxInlinePreviewWidth_isExpectedValue() {
