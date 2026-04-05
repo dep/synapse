@@ -503,6 +503,79 @@ describe('GitService', () => {
       expect(result).toEqual({ pulled: true, committed: 'commit-created-sha', pushed: true });
     });
 
+    it('should refresh from GitHub when there is nothing to push (remote may have new commits)', async () => {
+      const localPath = 'file:///mock/documents/vault/repo';
+      const metadata = {
+        version: 1,
+        transport: 'github-api',
+        repoUrl: 'https://github.com/test/repo',
+        owner: 'test',
+        repo: 'repo',
+        branch: 'main',
+        commitSha: 'stale-metadata-commit',
+        treeSha: 'stale-tree',
+        files: {
+          'README.md': { sha: 'readme-blob-sha', mode: '100644', type: 'blob' },
+        },
+      };
+
+      (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(
+        JSON.stringify({ ['https://github.com/test/repo']: { username: 'token', token: 'ghp_testtoken123' } })
+      );
+
+      (FileSystem.getInfoAsync as jest.Mock).mockImplementation(async (path: string) => {
+        if (path === 'file:///mock/documents/vault/repo/.synapse/repo.json') return { exists: true, isDirectory: false, size: 0 };
+        if (path === 'file:///mock/documents/vault/repo/README.md') return { exists: true, isDirectory: false, size: 0 };
+        if (path === 'file:///mock/documents/vault/repo/NEW.md') return { exists: false, isDirectory: false, size: 0 };
+        return { exists: false, isDirectory: false, size: 0 };
+      });
+      (FileSystem.readDirectoryAsync as jest.Mock).mockImplementation(async (path: string) => {
+        if (path === 'file:///mock/documents/vault/repo') return ['README.md', '.synapse'];
+        if (path === 'file:///mock/documents/vault/repo/.synapse') return ['repo.json'];
+        return [];
+      });
+      (FileSystem.readAsStringAsync as jest.Mock).mockImplementation(async (path: string, options?: any) => {
+        if (path === 'file:///mock/documents/vault/repo/.synapse/repo.json') return JSON.stringify(metadata);
+        if (path === 'file:///mock/documents/vault/repo/README.md' && options?.encoding === 'base64') {
+          return 'cmVhZG1lCg==';
+        }
+        return '';
+      });
+      (git.hashBlob as jest.Mock).mockResolvedValue({ oid: 'readme-blob-sha' });
+
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ commit: { sha: 'remote-tip-commit' } }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ tree: { sha: 'remote-tip-tree' } }) })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            tree: [
+              { path: 'README.md', type: 'blob', mode: '100644', sha: 'readme-blob-sha' },
+              { path: 'NEW.md', type: 'blob', mode: '100644', sha: 'new-blob-sha' },
+            ],
+          }),
+        })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ content: 'TkVXIEZJTEUK', encoding: 'base64' }) });
+
+      const result = await GitService.sync(localPath);
+
+      expect(result).toEqual({ pulled: true, committed: null, pushed: false });
+      expect(FileSystem.writeAsStringAsync).toHaveBeenCalledWith(
+        'file:///mock/documents/vault/repo/NEW.md',
+        'TkVXIEZJTEUK',
+        { encoding: 'base64' }
+      );
+      const metaWrite = (FileSystem.writeAsStringAsync as jest.Mock).mock.calls.find(
+        (call: string[]) => call[0] === 'file:///mock/documents/vault/repo/.synapse/repo.json'
+      );
+      expect(metaWrite).toBeDefined();
+      const saved = JSON.parse(metaWrite![1] as string);
+      expect(saved.commitSha).toBe('remote-tip-commit');
+      expect(saved.files['NEW.md']).toEqual(
+        expect.objectContaining({ sha: 'new-blob-sha', mode: '100644', type: 'blob' })
+      );
+    });
+
     it('should rebase local changes onto latest remote commit when push is rejected as non-fast-forward', async () => {
       const localPath = 'file:///mock/documents/vault/repo';
       const metadata = {

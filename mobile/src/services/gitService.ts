@@ -1020,7 +1020,11 @@ export class GitService {
     console.log('[sync-github] Changed files:', changedEntries.length, 'Deleted files:', deletedEntries.length);
 
     if (changedEntries.length === 0 && deletedEntries.length === 0) {
-      console.log('[sync-github] No changes to commit');
+      // Still reconcile with the remote tip. Otherwise metadata and working tree stay
+      // stale when someone else pushed: we would skip the fetch entirely and report
+      // pulled:true while never downloading new blobs.
+      console.log('[sync-github] No local changes; refreshing from remote');
+      await this.refreshViaGitHubApi(dir);
       return { pulled: true, committed: null, pushed: false };
     }
 
