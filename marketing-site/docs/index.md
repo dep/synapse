@@ -46,7 +46,10 @@ Synapse packs a robust set of features to boost your productivity.
 ### Navigation
 - **Tabs:** Cycle through your most recently used (MRU) tabs seamlessly.
 - **Split Panes:** Work efficiently by splitting your editor vertically or horizontally.
-- **Command Palette:** Quickly find files or insert templates from anywhere.
+- **Command Palette:** Quickly find files, folders, tags, or insert templates from anywhere.
+  - **Quick Actions:** Type `Root` to jump to your vault root, or `Today` to open today's daily note.
+  - **Folder Search:** Type any folder name to navigate directly to it.
+  - **Tag Search:** Type `#tagname` to search for and filter notes by tag.
 - **Mobile Search:** Search within the current note from the editor toolbar, or search across your entire vault from the file drawer.
 
 ![](images/graph.png)
