@@ -102,26 +102,32 @@ class AutoUpdater: NSObject, ObservableObject {
         let destURL = URL(fileURLWithPath: tempPath)
         try? FileManager.default.removeItem(at: destURL)
 
-        let (asyncBytes, response) = try await urlSession.bytes(from: url)
-        let total = (response as? HTTPURLResponse).flatMap {
-            Int($0.value(forHTTPHeaderField: "Content-Length") ?? "")
-        } ?? totalSize
-
-        var data = Data()
-        data.reserveCapacity(total)
-        var received = 0
-
-        for try await byte in asyncBytes {
-            data.append(byte)
-            received += 1
-            if received % 65536 == 0 {
-                downloadProgress = Double(received) / Double(total)
-            }
+        let delegate = DownloadProgressDelegate(expectedSize: totalSize) { [weak self] fraction in
+            Task { @MainActor in self?.downloadProgress = fraction }
         }
-        downloadProgress = 1.0
 
-        try data.write(to: destURL)
-        return tempPath
+        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        defer { session.finishTasksAndInvalidate() }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let task = session.downloadTask(with: url) { localURL, _, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                guard let localURL else {
+                    continuation.resume(throwing: UpdateError.downloadFailed)
+                    return
+                }
+                do {
+                    try FileManager.default.moveItem(at: localURL, to: destURL)
+                    continuation.resume(returning: tempPath)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+            task.resume()
+        }
     }
 
     private func mountDMG(at path: String) async throws -> String {
@@ -225,6 +231,32 @@ struct GitHubAsset: Codable {
     let name: String
     let browserDownloadUrl: String
     let size: Int
+}
+
+/// Tracks download progress via URLSessionDownloadDelegate for efficient chunk-level callbacks.
+private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate {
+    private let expectedSize: Int
+    private let onProgress: @Sendable (Double) -> Void
+
+    init(expectedSize: Int, onProgress: @escaping @Sendable (Double) -> Void) {
+        self.expectedSize = expectedSize
+        self.onProgress = onProgress
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
+                    didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
+                    totalBytesExpectedToWrite: Int64) {
+        let total = totalBytesExpectedToWrite > 0
+            ? totalBytesExpectedToWrite
+            : Int64(expectedSize)
+        guard total > 0 else { return }
+        onProgress(Double(totalBytesWritten) / Double(total))
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
+                    didFinishDownloadingTo location: URL) {
+        // Handled in the completion handler of the download task
+    }
 }
 
 enum UpdateError: Error {
