@@ -36,4 +36,9 @@ final class MiniBrowserURLNormalizerTests: XCTestCase {
             "https://dep.dev"
         )
     }
+
+    func test_invalidURLAfterNormalization_returnsNil() {
+        XCTAssertNil(MiniBrowserURLNormalizer.normalizedURLString(from: "https://"))
+        XCTAssertNil(MiniBrowserURLNormalizer.normalizedURLString(from: "https:// "))
+    }
 }

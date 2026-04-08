@@ -21,4 +21,11 @@ final class CloneRepositoryValidationTests: XCTestCase {
     func test_canClone_falseWhenBothMissing() {
         XCTAssertFalse(CloneRepositoryValidation.canClone(remoteURL: "", destinationURL: nil))
     }
+
+    func test_canClone_trueWhenRemoteHasLeadingOrTrailingWhitespace() {
+        let dest = URL(fileURLWithPath: "/tmp/clone-here")
+        XCTAssertTrue(
+            CloneRepositoryValidation.canClone(remoteURL: "  https://github.com/a/b.git\n", destinationURL: dest)
+        )
+    }
 }
