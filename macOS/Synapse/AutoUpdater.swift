@@ -63,6 +63,7 @@ class AutoUpdater: NSObject, ObservableObject {
                 // Download with progress
                 downloadProgress = 0.0
                 let dmgPath = try await downloadWithProgress(url: downloadURL, totalSize: dmgAsset.size)
+                downloadProgress = 1.0
 
                 // Mount DMG, copy app, unmount
                 let mountPoint = try await mountDMG(at: dmgPath)
@@ -102,31 +103,21 @@ class AutoUpdater: NSObject, ObservableObject {
         let destURL = URL(fileURLWithPath: tempPath)
         try? FileManager.default.removeItem(at: destURL)
 
-        let delegate = DownloadProgressDelegate(expectedSize: totalSize) { [weak self] fraction in
-            Task { @MainActor in self?.downloadProgress = fraction }
-        }
-
-        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
-        defer { session.finishTasksAndInvalidate() }
-
         return try await withCheckedThrowingContinuation { continuation in
-            let task = session.downloadTask(with: url) { localURL, _, error in
-                if let error {
-                    continuation.resume(throwing: error)
-                    return
-                }
-                guard let localURL else {
-                    continuation.resume(throwing: UpdateError.downloadFailed)
-                    return
-                }
-                do {
-                    try FileManager.default.moveItem(at: localURL, to: destURL)
-                    continuation.resume(returning: tempPath)
-                } catch {
-                    continuation.resume(throwing: error)
-                }
+            // URLSession does not call the download completion handler when the session has a
+            // URLSessionDownloadDelegate — progress works but the handler never runs, so the
+            // continuation would never resume. Use delegate-only completion in didCompleteWithError.
+            let delegate = DownloadProgressDelegate(
+                expectedSize: totalSize,
+                destURL: destURL,
+                returningPath: tempPath,
+                continuation: continuation
+            ) { [weak self] fraction in
+                Task { @MainActor in self?.downloadProgress = fraction }
             }
-            task.resume()
+
+            let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+            session.downloadTask(with: url).resume()
         }
     }
 
@@ -236,11 +227,32 @@ struct GitHubAsset: Codable {
 /// Tracks download progress via URLSessionDownloadDelegate for efficient chunk-level callbacks.
 private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate {
     private let expectedSize: Int
+    private let destURL: URL
+    private let returningPath: String
+    private var continuation: CheckedContinuation<String, Error>?
+    private var moveError: Error?
+    private var hasResumed = false
     private let onProgress: @Sendable (Double) -> Void
 
-    init(expectedSize: Int, onProgress: @escaping @Sendable (Double) -> Void) {
+    init(
+        expectedSize: Int,
+        destURL: URL,
+        returningPath: String,
+        continuation: CheckedContinuation<String, Error>,
+        onProgress: @escaping @Sendable (Double) -> Void
+    ) {
         self.expectedSize = expectedSize
+        self.destURL = destURL
+        self.returningPath = returningPath
+        self.continuation = continuation
         self.onProgress = onProgress
+    }
+
+    private func resumeOnce(_ body: (CheckedContinuation<String, Error>) -> Void) {
+        guard !hasResumed, let continuation else { return }
+        hasResumed = true
+        body(continuation)
+        self.continuation = nil
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
@@ -255,7 +267,25 @@ private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelega
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
                     didFinishDownloadingTo location: URL) {
-        // Handled in the completion handler of the download task
+        do {
+            try FileManager.default.moveItem(at: location, to: destURL)
+        } catch {
+            moveError = error
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        defer { session.finishTasksAndInvalidate() }
+
+        if let error {
+            resumeOnce { $0.resume(throwing: error) }
+            return
+        }
+        if let moveError {
+            resumeOnce { $0.resume(throwing: moveError) }
+            return
+        }
+        resumeOnce { $0.resume(returning: returningPath) }
     }
 }
 
