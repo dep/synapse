@@ -93,6 +93,29 @@ final class SynapseThemeLayoutConstantsTests: XCTestCase {
         XCTAssertEqual(SynapseTheme.Editor.h4FontSize, 15 * SynapseTheme.Editor.headingH4Multiplier, accuracy: 0.01)
     }
 
+    func test_headingH5ComputedSize_matchesBody() {
+        let h5 = SynapseTheme.Editor.bodyFontSize * SynapseTheme.Editor.headingH5Multiplier
+        XCTAssertEqual(h5, SynapseTheme.Editor.bodyFontSize, accuracy: 0.01,
+                       "H5 multiplier 1.0 keeps fifth-level headings at body size")
+    }
+
+    func test_headingH6ComputedSize_isNinetyFivePercentOfBody() {
+        let h6 = SynapseTheme.Editor.bodyFontSize * SynapseTheme.Editor.headingH6Multiplier
+        XCTAssertEqual(h6, SynapseTheme.Editor.bodyFontSize * 0.95, accuracy: 0.01)
+    }
+
+    func test_headingH5AndH6_multipliersMatchConstants() {
+        XCTAssertEqual(SynapseTheme.Editor.headingH5Multiplier, 1.0, accuracy: 0.001)
+        XCTAssertEqual(SynapseTheme.Editor.headingH6Multiplier, 0.95, accuracy: 0.001)
+    }
+
+    func test_headingFontSizes_h4ThroughH6_areOrdered() {
+        let h5 = SynapseTheme.Editor.bodyFontSize * SynapseTheme.Editor.headingH5Multiplier
+        let h6 = SynapseTheme.Editor.bodyFontSize * SynapseTheme.Editor.headingH6Multiplier
+        XCTAssertGreaterThanOrEqual(SynapseTheme.Editor.h4FontSize, h5)
+        XCTAssertGreaterThanOrEqual(h5, h6, "H5 should be at least as large as H6")
+    }
+
     func test_maxInlinePreviewWidth_isExpectedValue() {
         XCTAssertEqual(SynapseTheme.Editor.maxInlinePreviewWidth, 320 * SynapseTheme.Layout.phi, accuracy: 0.1)
     }

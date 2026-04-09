@@ -52,4 +52,25 @@ final class UpdateBannerCopyTests: XCTestCase {
             "Restart to finish updating"
         )
     }
+
+    func test_subtitle_whileDownloading_isEmpty() {
+        XCTAssertEqual(
+            UpdateBannerCopy.subtitle(downloadProgress: 0.01, restartRequired: false),
+            ""
+        )
+    }
+
+    func test_title_downloading_roundsPercentDown() {
+        XCTAssertEqual(
+            UpdateBannerCopy.title(version: "1.0.0", downloadProgress: 0.999, restartRequired: false),
+            "Downloading v1.0.0… 99%"
+        )
+    }
+
+    func test_icon_idleUpdate_usesArrow() {
+        XCTAssertEqual(
+            UpdateBannerCopy.iconName(downloadProgress: nil, restartRequired: false),
+            "arrow.down.circle.fill"
+        )
+    }
 }
