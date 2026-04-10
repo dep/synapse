@@ -11,17 +11,18 @@ struct FolderColor: Identifiable, Equatable {
 extension FolderColor {
     /// The full predefined palette — 12 pastels.
     static let palette: [FolderColor] = [
-        FolderColor(id: "rose",      color: Color(hex: "#F4ACAC")!),
-        FolderColor(id: "peach",     color: Color(hex: "#F4C4A4")!),
-        FolderColor(id: "honey",     color: Color(hex: "#F4DFA4")!),
-        FolderColor(id: "sage",      color: Color(hex: "#B4E4B4")!),
-        FolderColor(id: "mint",      color: Color(hex: "#B4F4D4")!),
-        FolderColor(id: "teal",      color: Color(hex: "#A4D4E4")!),
-        FolderColor(id: "sky",       color: Color(hex: "#A4C4F4")!),
-        FolderColor(id: "lavender",  color: Color(hex: "#C4B4F4")!),
-        FolderColor(id: "violet",    color: Color(hex: "#E4B4F4")!),
-        FolderColor(id: "blush",     color: Color(hex: "#F4B4D4")!),
-        FolderColor(id: "sand",      color: Color(hex: "#E4D4B4")!),
+        FolderColor(id: "rose",      label: "Rose",      color: Color(hex: "#F4ACAC")!),
+        FolderColor(id: "peach",     label: "Peach",     color: Color(hex: "#F4C4A4")!),
+        FolderColor(id: "honey",     label: "Honey",     color: Color(hex: "#F4DFA4")!),
+        FolderColor(id: "amber",     label: "Amber",     color: Color(hex: "#F4DCA4")!),
+        FolderColor(id: "sage",      label: "Sage",      color: Color(hex: "#B4E4B4")!),
+        FolderColor(id: "mint",      label: "Mint",      color: Color(hex: "#B4F4D4")!),
+        FolderColor(id: "teal",      label: "Teal",      color: Color(hex: "#A4D4E4")!),
+        FolderColor(id: "sky",       label: "Sky",       color: Color(hex: "#A4C4F4")!),
+        FolderColor(id: "lavender",  label: "Lavender",  color: Color(hex: "#C4B4F4")!),
+        FolderColor(id: "violet",    label: "Violet",    color: Color(hex: "#E4B4F4")!),
+        FolderColor(id: "blush",     label: "Blush",     color: Color(hex: "#F4B4D4")!),
+        FolderColor(id: "sand",      label: "Sand",      color: Color(hex: "#E4D4B4")!),
     ]
 
     static func color(for id: String) -> FolderColor? {
