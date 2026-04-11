@@ -12,7 +12,6 @@ Export a signed and notarized macOS app for distribution.
 - A valid `Developer ID Application` certificate with private key installed in your login keychain
 - A configured `notarytool` keychain profile named `notarytool` (see Setup below)
 - `project.yml` must remain the source of truth for release signing settings
-- `create-dmg` installed: `brew install create-dmg`
 
 ## Setup: Store Notarization Credentials
 
@@ -86,22 +85,10 @@ xcrun stapler staple /tmp/<AppName>-export/<AppName>.app && \
 spctl --assess --type execute --verbose /tmp/<AppName>-export/<AppName>.app
 ```
 
-### 4. Package as DMG for distribution
+### 4. Zip for distribution
 
 ```bash
-mkdir -p /tmp/<AppName>-dmg-src && \
-cp -R /tmp/<AppName>-export/<AppName>.app /tmp/<AppName>-dmg-src/ && \
-create-dmg \
-  --volname "<AppName>" \
-  --volicon "/tmp/<AppName>-dmg-src/<AppName>.app/Contents/Resources/AppIcon.icns" \
-  --window-pos 200 120 \
-  --window-size 660 400 \
-  --icon-size 160 \
-  --icon "<AppName>.app" 180 170 \
-  --hide-extension "<AppName>.app" \
-  --app-drop-link 480 170 \
-  ~/Desktop/<AppName>-<version>.dmg \
-  /tmp/<AppName>-dmg-src/
+cd /tmp/<AppName>-export && zip -r --symlinks ~/Desktop/<AppName>-<version>.zip <AppName>.app
 ```
 
 ## Expected Output
@@ -113,7 +100,7 @@ Successful validation should show:
 ## Artifacts
 
 - Notarized app: `/tmp/<AppName>-export/<AppName>.app`
-- Shareable DMG: `~/Desktop/<AppName>-<version>.dmg`
+- Shareable zip: `~/Desktop/<AppName>-<version>.zip`
 
 ## One-Liner
 
@@ -137,8 +124,7 @@ ditto -c -k --keepParent /tmp/<AppName>-export/<AppName>.app /tmp/<AppName>-expo
 xcrun notarytool submit /tmp/<AppName>-export/<AppName>.zip --keychain-profile "notarytool" --wait && \
 xcrun stapler staple /tmp/<AppName>-export/<AppName>.app && \
 spctl --assess --type execute --verbose /tmp/<AppName>-export/<AppName>.app && \
-mkdir -p /tmp/<AppName>-dmg-src && cp -R /tmp/<AppName>-export/<AppName>.app /tmp/<AppName>-dmg-src/ && \
-create-dmg --volname "<AppName>" --volicon "/tmp/<AppName>-dmg-src/<AppName>.app/Contents/Resources/AppIcon.icns" --window-pos 200 120 --window-size 660 400 --icon-size 160 --icon "<AppName>.app" 180 170 --hide-extension "<AppName>.app" --app-drop-link 480 170 ~/Desktop/<AppName>-<version>.dmg /tmp/<AppName>-dmg-src/
+cd /tmp/<AppName>-export && zip -r --symlinks ~/Desktop/<AppName>-<version>.zip <AppName>.app
 ```
 
 ### 5. Commit and push the version bump
@@ -150,14 +136,14 @@ git push
 
 ### 6. Create a release on GitHub
 
-Use what you know about changes SINCE THE LAST RELEASE to generate the release notes.
+Use what you know about recent changes to generate the release notes.
 
 ```bash
 gh release create <version> --title "<version>" --notes "<dynamically generated release notes>"
 ```
 
-Attach the DMG to the release.
+Attach the shareable zip to the release.
 
 ```bash
-gh release upload <version> ~/Desktop/<AppName>-<version>.dmg
+gh release upload <version> ~/Desktop/<AppName>-<version>.zip
 ```
