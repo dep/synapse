@@ -910,19 +910,28 @@ class LinkAwareTextView: NSTextView {
         super.keyDown(with: event)
     }
 
+    /// True when the first responder is this text view's own editing surface. Overlay
+    /// subviews that are their own text inputs (inline AI bar prompt, embed title/caption
+    /// fields) are deliberately NOT counted: they own their keyboard input, including ⌘V.
+    private var ownsTextEditingFocus: Bool {
+        guard let responder = window?.firstResponder else { return false }
+        // An NSTextView edits itself directly — it never delegates to a field editor —
+        // so only an exact identity match counts as "my editing is focused".
+        if responder === self { return true }
+        guard let view = responder as? NSView, view.isDescendant(of: self) else { return false }
+        // A focused descendant that is itself a text input (the AI bar's prompt, an
+        // embed's title/caption field, or the field editor vended for one) owns ⌘V.
+        return !(view is NSTextView || view is NSTextField)
+    }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if flags == .command, event.charactersIgnoringModifiers?.lowercased() == "v" {
-            // Only intercept paste when this text view (or one of its descendants) is the first responder.
-            // If focus is on a terminal or browser pane, let the event pass through naturally.
-            let responder = window?.firstResponder
-            let isSelfFocused: Bool
-            if let view = responder as? NSView {
-                isSelfFocused = view === self || view.isDescendant(of: self)
-            } else {
-                isSelfFocused = responder === self
-            }
-            guard isSelfFocused else { return false }
+            // Only intercept paste when THIS text view's own editing is focused.
+            // Overlay subviews (the inline AI bar, embed title/caption fields) carry
+            // their own text inputs; those must handle ⌘V themselves, or the paste
+            // lands in the note body instead of the field the user is typing in.
+            guard ownsTextEditingFocus else { return false }
             paste(self)
             return true
         }
