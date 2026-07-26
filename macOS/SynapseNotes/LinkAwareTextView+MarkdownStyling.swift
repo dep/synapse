@@ -190,7 +190,11 @@ extension LinkAwareTextView {
     /// Hides markdown syntax tokens (delimiters, sigils, fences) by setting
     /// their font size to near-zero and foreground color to clear, so only the
     /// styled content is visible.
-    func applyPreviewStyling(document: MarkdownDocument? = nil, refreshPlan: MarkdownEditorRefreshPlan = .fullDocument, editingSessionOpen: Bool = false) {
+    /// - Parameter deferRedraw: skips this pass's synchronous `ensureLayout`/redraw. Set
+    ///   it when the caller re-reveals the caret's block immediately afterwards, so the
+    ///   just-hidden markers are never committed to layout and then un-hidden — that
+    ///   intermediate paint is a visible one-frame blink while typing on a heading.
+    func applyPreviewStyling(document: MarkdownDocument? = nil, refreshPlan: MarkdownEditorRefreshPlan = .fullDocument, editingSessionOpen: Bool = false, deferRedraw: Bool = false) {
         guard let storage = textStorage else { return }
         let fullRange = NSRange(location: 0, length: storage.length)
         guard fullRange.length > 0 else { return }
@@ -307,7 +311,9 @@ extension LinkAwareTextView {
         }
 
         storage.endEditing()
-        requestImmediateRedraw(for: scopeRange)
+        if !deferRedraw {
+            requestImmediateRedraw(for: scopeRange)
+        }
         lastAppliedEditorDisplayMode = .preview
         refreshTaskCheckboxButtons()
 
@@ -371,13 +377,18 @@ extension LinkAwareTextView {
     /// is in, so editing always shows the syntax for the block being edited. Re-hiding
     /// of the block the caret *left* is handled by the next full applyPreviewStyling pass.
     /// No-ops when the caret stays within the same block as the previous call.
-    func revealCurrentBlockMarkdownAtCursor(document: MarkdownDocument? = nil) {
+    /// - Parameter fallbackRedrawRange: range to redraw if this call has nothing to
+    ///   reveal. Callers that passed `deferRedraw: true` to `applyPreviewStyling` must
+    ///   supply it, otherwise an early return here would leave that pass's hidden
+    ///   markers unpainted.
+    func revealCurrentBlockMarkdownAtCursor(document: MarkdownDocument? = nil, fallbackRedrawRange: NSRange? = nil) {
         guard isEditable, let storage = textStorage else { return }
         let cursor = selectedRange().location
         // Block-change gating BEFORE any parsing: if the text is unchanged and the
         // caret is still inside the block we revealed last time, there is nothing new
         // to reveal — the common case for the 1–2 selection changes per keystroke.
         if previewRevealMemo.canSkipBlockReveal(cursorLocation: cursor) {
+            if let fallbackRedrawRange { requestImmediateRedraw(for: fallbackRedrawRange) }
             return
         }
         // The optional `document` lets callers avoid an extra parse when they already
@@ -387,7 +398,10 @@ extension LinkAwareTextView {
         let reveal = MarkdownPreviewBlockReveal.make(document: parsedDocument, cursorLocation: cursor, isEditable: isEditable)
         previewRevealMemo.noteRevealedBlock(reveal.blockRange)
 
-        guard !reveal.revealedRanges.isEmpty else { return }
+        guard !reveal.revealedRanges.isEmpty else {
+            if let fallbackRedrawRange { requestImmediateRedraw(for: fallbackRedrawRange) }
+            return
+        }
 
         // The hidden delimiters were zeroed to systemFont(0.001); restore a visible
         // body-sized font and dim color. Body font reads cleanly for every delimiter
@@ -407,7 +421,13 @@ extension LinkAwareTextView {
             ], range: safeRange)
         }
         storage.endEditing()
-        requestImmediateRedraw(for: reveal.blockRange ?? NSRange(location: cursor, length: 0))
+        // Union in the caller's deferred scope: that pass re-hid markers outside this
+        // block (e.g. the heading the caret just left) and skipped its own redraw.
+        var redrawRange = reveal.blockRange ?? NSRange(location: cursor, length: 0)
+        if let fallbackRedrawRange {
+            redrawRange = NSUnionRange(redrawRange, fallbackRedrawRange)
+        }
+        requestImmediateRedraw(for: redrawRange)
     }
 
     func applyMarkdownStyling(document: MarkdownDocument? = nil, refreshPlan: MarkdownEditorRefreshPlan = .fullDocument, deferRedraw: Bool = false) {
@@ -762,6 +782,79 @@ extension LinkAwareTextView {
         storage.addAttribute(.foregroundColor, value: MarkdownTheme.dimColor, range: NSRange(location: outerRange.location + outerRange.length - delimLen, length: delimLen))
     }
 
+    /// Matches the leading `#{1,6}` + space of a heading line. Kept local to the typing
+    /// path so it can run before any parse: `MarkdownDocumentParser` is the authority on
+    /// block structure, but the caret's line is a single line and its heading level is
+    /// determined entirely by this prefix.
+    private static let caretLineHeadingRegex = try? NSRegularExpression(pattern: "^(#{1,6})[ \\t]")
+
+    /// Keeps `typingAttributes` in step with the font the caret's own line will be
+    /// styled with, so a character typed on a heading line is laid out at heading size
+    /// on the very first frame.
+    ///
+    /// `typingAttributes` was pinned to the body font for the view's whole lifetime, so
+    /// each keystroke on a heading rendered small and then snapped up to H1 when the
+    /// debounced restyle landed ~80ms later — a two-stage resize per character.
+    ///
+    /// The font is derived from the line's `#` prefix rather than sampled from the text
+    /// storage. On a *newly typed* heading, storage still holds the body font (H1 only
+    /// lands with the debounced `applyMarkdownStyling`), so sampling storage would read
+    /// body, conclude "nothing changed", and leave the next character rendering small —
+    /// exactly the jump this is meant to remove. Deriving from the text is correct
+    /// immediately, before any restyle has run.
+    /// - Parameter pendingInsertion: text about to be inserted at the caret by the
+    ///   in-flight `insertText:`. Spliced in before matching so the keystroke that
+    ///   *completes* a marker (the space in `"# "`) is already accounted for.
+    func syncTypingAttributesToCaretLine(pendingInsertion: String? = nil) {
+        guard isEditable, let storage = textStorage else { return }
+        let selection = selectedRange()
+        // Only a collapsed caret has a meaningful "next character will look like this".
+        guard selection.length == 0 else { return }
+
+        let nsText = storage.string as NSString
+        let caret = min(max(0, selection.location), nsText.length)
+        let lineRange = nsText.lineRange(for: NSRange(location: caret, length: 0))
+        var line = nsText.substring(with: lineRange)
+        if let pendingInsertion, !pendingInsertion.isEmpty {
+            // Splice at the caret's offset within the line, not at its end — the caret
+            // can sit mid-line (e.g. typing the space of "#|text").
+            let offsetInLine = caret - lineRange.location
+            let ns = line as NSString
+            if offsetInLine >= 0, offsetInLine <= ns.length {
+                line = ns.replacingCharacters(in: NSRange(location: offsetInLine, length: 0), with: pendingInsertion)
+            }
+        }
+
+        // Only headings need the override; every other block kind types at body size,
+        // and code fences/quotes are handled by the styling pass without a size change.
+        let level = Self.caretLineHeadingRegex
+            .flatMap { $0.firstMatch(in: line, options: [], range: NSRange(location: 0, length: (line as NSString).length)) }
+            .map { $0.range(at: 1).length }
+
+        let font: NSFont
+        if let level, let settings {
+            switch level {
+            case 1: font = MarkdownTheme.h1Font(for: settings)
+            case 2: font = MarkdownTheme.h2Font(for: settings)
+            case 3: font = MarkdownTheme.h3Font(for: settings)
+            default: font = MarkdownTheme.h4Font(for: settings)
+            }
+        } else if let settings {
+            font = MarkdownTheme.bodyFont(for: settings)
+        } else {
+            font = level == nil ? MarkdownTheme.body : MarkdownTheme.h1
+        }
+
+        let lineHeightMultiple = settings != nil ? MarkdownTheme.lineHeightMultiple(for: settings!) : 1.6
+        let paragraphStyle = MarkdownTheme.paragraphStyle(font: font, lineHeightMultiple: lineHeightMultiple)
+
+        var attributes = typingAttributes
+        guard (attributes[.font] as? NSFont) != font else { return }
+        attributes[.font] = font
+        attributes[.paragraphStyle] = paragraphStyle
+        typingAttributes = attributes
+    }
+
     private func requestImmediateRedraw(for range: NSRange) {
         guard range.length > 0 else { return }
         if let layoutManager, let textContainer {
@@ -787,7 +880,6 @@ extension LinkAwareTextView {
     ) -> Bool {
         guard case let .blockRange(blockRange) = refreshPlan.kind else { return false }
         guard let block = document.blocks.first(where: { NSEqualRanges($0.range, blockRange) }) else { return false }
-        guard case .paragraph = block.kind, block.inlineTokens.isEmpty else { return false }
 
         let nsText = string as NSString
         guard nsText.length > 0 else { return false }
@@ -797,7 +889,31 @@ extension LinkAwareTextView {
         let probeRange = NSRange(location: probeLocation, length: probeLength)
         let probeText = nsText.substring(with: probeRange)
 
-        return !containsMarkdownTrigger(in: probeText)
+        switch block.kind {
+        case .paragraph:
+            guard block.inlineTokens.isEmpty else { return false }
+            return !containsMarkdownTrigger(in: probeText)
+
+        case .heading:
+            // Typing body text into an already-styled heading cannot change how the line
+            // looks: the level is fixed by the leading `#` run, and the whole line is
+            // already carrying the heading font. Restyling anyway forced a synchronous
+            // full-container `ensureLayout` per keystroke — pure jank for zero visual
+            // change. Bail out unless the edit could alter the structure itself.
+            guard block.inlineTokens.isEmpty else { return false }
+            // A `#` in the edit can change the level; whitespace can make or break the
+            // `#{1,6}[ \t]+` marker. Both must fall through to a real restyle.
+            guard !probeText.contains("#"), !containsMarkdownTrigger(in: probeText) else { return false }
+            guard probeText.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { return false }
+            // Only safe once the caret is past the marker — an edit inside or adjacent to
+            // the `# ` prefix shifts the marker range the dim-color pass depends on.
+            let lineStart = nsText.lineRange(for: NSRange(location: probeLocation, length: 0)).location
+            let markerLength = nsText.substring(from: lineStart).prefix { $0 == "#" }.count + 1
+            return probeLocation > lineStart + markerLength
+
+        default:
+            return false
+        }
     }
 
     private func containsMarkdownTrigger(in text: String) -> Bool {

@@ -1002,12 +1002,27 @@ struct RawEditor: NSViewRepresentable {
             }
             tv.applyMarkdownStyling(document: document, refreshPlan: refreshPlan, deferRedraw: needsPreview)
             if needsPreview {
-                tv.applyPreviewStyling(document: document, refreshPlan: refreshPlan, editingSessionOpen: true)
+                // applyPreviewStyling is a pure "hide everything" sweep — it hides the
+                // `###` on the very line being typed on. Re-reveal the caret's block
+                // *here*, in the same pass, instead of leaving it to the separate
+                // selection-change timer: that gap is what made the markers blink out
+                // while typing on a heading. `deferRedraw` keeps the intermediate hidden
+                // state from ever reaching the screen, and the reveal issues the single
+                // redraw for both passes. The memo's gate must be cleared first or the
+                // reveal no-ops, since the caret never left the block.
+                let hideScope = refreshPlan.affectedRange
+                    ?? NSRange(location: 0, length: (tv.string as NSString).length)
+                tv.applyPreviewStyling(document: document, refreshPlan: refreshPlan, editingSessionOpen: true, deferRedraw: true)
+                tv.invalidateRevealedBlock()
+                tv.revealCurrentBlockMarkdownAtCursor(document: document, fallbackRedrawRange: hideScope)
             }
             suppressSync = false
             // The blanket restyle above wipes transient AI diff colors; restore
             // them so they don't flicker between streaming deltas.
             tv.reapplyAIDiffColorsIfActive()
+            // The restyle may have just changed the caret line's font (e.g. `#` + space
+            // turned it into a heading). Re-sync so the next keystroke uses it directly.
+            tv.syncTypingAttributesToCaretLine()
         }
 
         func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
@@ -1069,6 +1084,9 @@ struct RawEditor: NSViewRepresentable {
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let tv = textView else { return }
             tv.refreshAISparkle()
+            // Match typing attributes to the caret's line so the next character is laid
+            // out at its final size immediately instead of snapping after the restyle.
+            tv.syncTypingAttributesToCaretLine()
             guard parent.appState.settings.hideMarkdownWhileEditing else { return }
 
             // Revealing the raw markdown under the caret is the immediate visual
@@ -1092,12 +1110,15 @@ struct RawEditor: NSViewRepresentable {
                 self.selectionStylingWorkItem = nil
                 self.suppressSync = true
                 tv.applyMarkdownStyling(deferRedraw: true)
-                tv.applyPreviewStyling(editingSessionOpen: true)
-                // applyPreviewStyling re-hid the whole document (including the caret's
+                // applyPreviewStyling re-hides the whole document (including the caret's
                 // current block). Reset the gate and re-reveal so the block the caret is
                 // in stays open; the block it *left* remains correctly re-hidden.
+                // deferRedraw + fallbackRedrawRange collapse the hide and the re-reveal
+                // into one paint, so the caret's own markers never blink off-screen.
+                let fullRange = NSRange(location: 0, length: (tv.string as NSString).length)
+                tv.applyPreviewStyling(editingSessionOpen: true, deferRedraw: true)
                 tv.invalidateRevealedBlock()
-                tv.revealCurrentBlockMarkdownAtCursor()
+                tv.revealCurrentBlockMarkdownAtCursor(fallbackRedrawRange: fullRange)
                 self.suppressSync = false
             }
             selectionStylingWorkItem = work

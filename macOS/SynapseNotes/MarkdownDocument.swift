@@ -64,7 +64,11 @@ final class MarkdownDocumentParser {
         let contentStart: Int
     }
 
-    private static let headingRegex = try? NSRegularExpression(pattern: "^(#{1,6})\\s+(.+)$")
+    // Content group is `(.*)`, not `(.+)`: a bare `"# "` must already parse as a
+    // heading. With `(.+)` the line stayed a `.paragraph` until the first content
+    // character arrived, so that keystroke flipped body font -> H1 (2.05x) and grew
+    // the line box ~25px one debounce tick later — the "jumpy heading" typing jank.
+    private static let headingRegex = try? NSRegularExpression(pattern: "^(#{1,6})[ \\t]+(.*)$")
     private static let markdownImageRegex = try? NSRegularExpression(pattern: "!\\[([^\\]]+)\\]\\(([^)]+)\\)")
     private static let markdownLinkRegex = try? NSRegularExpression(pattern: "(?<!!)\\[([^\\]]+)\\]\\(([^)]+)\\)")
     private static let wikiLinkRegex = try? NSRegularExpression(pattern: "(?<!!)\\[\\[([^\\]|]+)(?:\\|([^\\]]+))?\\]\\]")

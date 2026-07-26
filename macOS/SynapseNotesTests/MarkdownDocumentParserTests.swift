@@ -38,6 +38,39 @@ final class MarkdownDocumentParserTests: XCTestCase {
         )
     }
 
+    /// A bare `"# "` must already be a heading. When it parsed as `.paragraph`, typing
+    /// the first content character flipped the block kind, jumping the font from body to
+    /// H1 (2.05x) and growing the line box ~25px a debounce tick after the keystroke.
+    func test_parse_bareHeadingMarker_isHeadingBeforeContentIsTyped() {
+        for (markdown, level) in [("# ", 1), ("## ", 2), ("###### ", 6)] {
+            let document = parser.parse(markdown)
+            XCTAssertEqual(document.blocks.count, 1, "unexpected block count for \(markdown.debugDescription)")
+            XCTAssertEqual(
+                document.blocks.first?.kind,
+                .heading(level: level),
+                "\(markdown.debugDescription) should parse as a level-\(level) heading"
+            )
+        }
+    }
+
+    /// The block kind must not change as the first character arrives — that transition
+    /// is what produced the visible resize.
+    func test_parse_headingKindIsStableAsFirstCharacterIsTyped() {
+        XCTAssertEqual(parser.parse("# ").blocks.first?.kind, parser.parse("# T").blocks.first?.kind)
+    }
+
+    func test_parse_hashWithoutTrailingSpace_isNotAHeading() {
+        XCTAssertEqual(parser.parse("#").blocks.first?.kind, .paragraph)
+        XCTAssertEqual(parser.parse("#tag").blocks.first?.kind, .paragraph)
+        XCTAssertEqual(parser.parse("####### seven").blocks.first?.kind, .paragraph)
+    }
+
+    func test_parse_bareHeadingMarker_hasEmptyContentRange() {
+        let document = parser.parse("# ")
+        XCTAssertEqual(document.blocks.first?.contentRange.length, 0)
+        XCTAssertEqual(document.blocks.first?.range.length, 2)
+    }
+
     func test_parse_frontmatter_createsDedicatedBlockWithInnerContentRange() {
         let markdown = """
         ---

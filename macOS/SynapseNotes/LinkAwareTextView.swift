@@ -770,6 +770,21 @@ class LinkAwareTextView: NSTextView {
         }
     }
 
+    /// AppKit stamps `typingAttributes` onto inserted text *during* this call, and
+    /// `textViewDidChangeSelection` only fires afterwards. Syncing there alone meant the
+    /// first character typed on a freshly created heading line ("# Like this") was
+    /// inserted with the stale body font and only grew to H1 when the debounced restyle
+    /// landed — the visible size jump. Sync immediately before the insertion instead, so
+    /// the glyph is laid out at its final size on the very first frame.
+    override func insertText(_ string: Any, replacementRange: NSRange) {
+        // The space in "# " is itself what promotes the line to a heading, and the caret
+        // line still reads "#" at this point. Pass the pending insertion so the sync can
+        // see the marker the keystroke is about to complete.
+        let inserted = (string as? String) ?? (string as? NSAttributedString)?.string
+        syncTypingAttributesToCaretLine(pendingInsertion: inserted)
+        super.insertText(string, replacementRange: replacementRange)
+    }
+
     override func insertNewline(_ sender: Any?) {
         // Preserve the leading whitespace of the current line on the new line,
         // and continue bullet lists (- or *) automatically.
